@@ -274,6 +274,11 @@ enum BoardTest {
                     DemoDirector.note("card   \(item.text) column=\(item.column) done=\(item.done) agent=\(item.agent != nil)")
                 }
             }
+        case "menubar":
+            let menu = NSMenu()
+            MenuBarStatus.shared.menuNeedsUpdate(menu)
+            let titles = menu.items.map { $0.isSeparatorItem ? "—" : $0.title }
+            DemoDirector.note("menubar \(titles.joined(separator: " | "))")
         case "sketch":
             controller.addSketch()
         case "sketchtool":

@@ -214,6 +214,8 @@ class AppDelegate: NSObject,
 
         // Tellurion: phone access, if the user left it on (it doesn't need a window).
         PhoneServer.shared.startIfEnabled()
+        // Tellurion: agents' status in the menu bar, if it's on.
+        MenuBarStatus.shared.start()
 
         // Check if secure input was enabled when we last quit.
         if UserDefaults.ghostty.bool(forKey: "SecureInput") != SecureInput.shared.enabled {
