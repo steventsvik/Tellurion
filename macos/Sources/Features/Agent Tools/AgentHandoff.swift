@@ -61,7 +61,7 @@ enum AgentHandoff {
     }
 
     /// One-click handoff from a menu: the conversation and the changes, to a new agent beside it.
-    static func handOff(from surface: Ghostty.SurfaceView, in controller: TerminalController,
+    static func handOff(from surface: Ghostty.SurfaceView, in controller: BaseTerminalController,
                         to target: VerticalTabAgentKind, mode: Mode) {
         AgentContext.gather(from: surface, parts: [.conversation, .changes]) { context in
             send(prompt(mode: mode, context: context), from: surface, in: controller, to: .newSplit(target), mode: mode)
@@ -69,7 +69,7 @@ enum AgentHandoff {
     }
 
     /// Starts the new agent with the message, or queues it for a running one.
-    static func send(_ prompt: String, from surface: Ghostty.SurfaceView, in controller: TerminalController,
+    static func send(_ prompt: String, from surface: Ghostty.SurfaceView, in controller: BaseTerminalController,
                      to destination: Destination, mode: Mode) {
         switch destination {
         case .newSplit(let target):
@@ -97,11 +97,11 @@ enum AgentHandoff {
 
     /// Other panes running Claude Code or Codex, in any window.
     static func runningAgents(excluding surface: Ghostty.SurfaceView) -> [(surface: Ghostty.SurfaceView, info: VerticalTabAgentInfo, tab: String)] {
-        TerminalController.all.flatMap { controller in
+        TerminalWindows.all.flatMap { controller in
             controller.surfaceTree.compactMap { other -> (Ghostty.SurfaceView, VerticalTabAgentInfo, String)? in
                 guard other !== surface, let info = VerticalTabsAgents.shared.info(for: other),
                       info.kind == .claude || info.kind == .codex else { return nil }
-                return (other, info, controller.titleOverride ?? other.pwd?.abbreviatedPath ?? "Tab")
+                return (other, info, TerminalWindows.title(of: other, in: controller) ?? other.pwd?.abbreviatedPath ?? "Tab")
             }
         }
     }
@@ -110,7 +110,7 @@ enum AgentHandoff {
     /// same project (repository).
     static func nearestAgent(to surface: Ghostty.SurfaceView) -> (surface: Ghostty.SurfaceView, info: VerticalTabAgentInfo, tab: String)? {
         let agents = runningAgents(excluding: surface)
-        if let controller = surface.window?.windowController as? TerminalController,
+        if let controller = TerminalWindows.controller(of: surface.window),
            let sameTab = agents.first(where: { agent in controller.surfaceTree.contains { $0 === agent.surface } }) {
             return sameTab
         }
@@ -161,7 +161,7 @@ enum AgentHandoff {
 // MARK: - Hand Off window
 
 extension AgentHandoff {
-    static func showWindow(from surface: Ghostty.SurfaceView, in controller: TerminalController,
+    static func showWindow(from surface: Ghostty.SurfaceView, in controller: BaseTerminalController,
                            mode: Mode = .review, target: VerticalTabAgentKind? = nil) {
         // A window still open from another pane would come forward unchanged and hand off
         // that pane's work (#10): start fresh for this one.
@@ -175,7 +175,7 @@ extension AgentHandoff {
 
 private struct HandoffView: View {
     weak var surface: Ghostty.SurfaceView?
-    weak var controller: TerminalController?
+    weak var controller: BaseTerminalController?
     @State private var mode: AgentHandoff.Mode
     @State private var target: VerticalTabAgentKind
     /// Nil: a new agent in a split. Otherwise the running agent's pane.
@@ -188,7 +188,7 @@ private struct HandoffView: View {
     @State private var edited = false
     @State private var loading = false
 
-    init(surface: Ghostty.SurfaceView, controller: TerminalController, mode: AgentHandoff.Mode, target: VerticalTabAgentKind) {
+    init(surface: Ghostty.SurfaceView, controller: BaseTerminalController, mode: AgentHandoff.Mode, target: VerticalTabAgentKind) {
         self.surface = surface
         self.controller = controller
         _mode = State(initialValue: mode)

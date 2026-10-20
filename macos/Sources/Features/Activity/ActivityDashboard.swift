@@ -690,13 +690,13 @@ private struct ActivitySessionRow: View {
 
     private func resume() {
         guard let cwd = session.cwd,
-              let owner = TerminalController.all.first(where: { $0.window?.isVisible == true }) ?? TerminalController.all.first else { return }
+              let owner = TerminalWindows.front ?? TerminalWindows.all.first else { return }
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = cwd
         let id = AgentTools.shellQuote(session.id)
         config.initialInput = (session.agent == "codex" ? "codex resume \(id)" : "claude --resume \(id)") + "\n"
-        if let controller = TerminalController.newTab(owner.ghostty, from: owner.window, withBaseConfig: config) {
-            controller.window?.makeKeyAndOrderFront(nil)
+        if let surface = TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config) {
+            TerminalWindows.controller(for: surface)?.window?.makeKeyAndOrderFront(nil)
         }
     }
 }

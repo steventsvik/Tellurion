@@ -61,15 +61,15 @@ enum DockerSessions {
 
     /// Opens a new tab whose command starts the container. Output (image downloads, errors)
     /// stays visible, and when the container exits the tab drops into a normal shell.
-    static func open(_ kind: DockerSessionKind, from owner: TerminalController) {
+    static func open(_ kind: DockerSessionKind, from owner: BaseTerminalController) {
         guard let script = installSupportFiles() else { return }
         let folder = owner.focusedSurface?.pwd
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = folder
         config.command = "/bin/zsh -lc \(shellQuote("\(shellQuote(script)) \(kind.rawValue) \(sharedArgument(folder))"))"
-        guard let controller = TerminalController.newTab(owner.ghostty, from: owner.window, withBaseConfig: config) else { return }
-        controller.titleOverride = "\(kind.title) · Docker"
-        if let agent = kind.agent, let surface = controller.focusedSurface {
+        guard let surface = TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config,
+                                                        title: "\(kind.title) · Docker") else { return }
+        if let agent = kind.agent {
             VerticalTabsAgents.shared.setStaticAgent(agent, task: "Isolated in Docker", on: surface)
         }
     }
@@ -199,7 +199,7 @@ enum DockerSessions {
 
 /// The "Isolated Session (Docker)" submenu in the sidebar's New menu.
 struct DockerSessionMenu: View {
-    let owner: TerminalController
+    let owner: BaseTerminalController
     @AppStorage(DockerSessions.shareFolderKey) private var shareFolder = true
 
     var body: some View {

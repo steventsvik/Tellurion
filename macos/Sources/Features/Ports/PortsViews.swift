@@ -5,7 +5,7 @@ import SwiftUI
 /// The sidebar's Ports section: dev servers and whatever else of yours is listening, which
 /// project each belongs to, and Stop. Takes no room when nothing is listening.
 struct PortsSidebarSection: View {
-    let owner: TerminalController
+    let owner: BaseTerminalController
     @ObservedObject private var monitor = PortsMonitor.shared
     @ObservedObject private var settings = ExtremeSettings.shared
     @AppStorage("PortsSectionCollapsed") private var collapsed = false
@@ -68,7 +68,7 @@ struct PortsSidebarSection: View {
 
 private struct PortRow: View {
     let entry: PortEntry
-    let owner: TerminalController
+    let owner: BaseTerminalController
     @ObservedObject private var monitor = PortsMonitor.shared
     @ObservedObject private var settings = ExtremeSettings.shared
     @State private var hovering = false
@@ -185,25 +185,26 @@ private struct PortRow: View {
         .accessibilityLabel(help)
     }
 
-    /// The tab working in the server's project: its localhost session, or a tab whose
-    /// folder is inside the project.
-    private var ownerTab: TerminalController? {
+    /// The terminal working in the server's project: its localhost session, or one whose
+    /// folder is inside the project (a tab, or a tile on a board).
+    private var ownerSurface: Ghostty.SurfaceView? {
         if let id = entry.sessionID, let session = LocalhostSessions.shared.sessions.first(where: { $0.id == id }) {
-            return TerminalController.all.first { LocalhostSessions.shared.session(for: $0)?.id == session.id }
+            return LocalhostSessions.shared.surface(for: session)
         }
         guard let root = entry.project?.root else { return nil }
-        return TerminalController.all.first { controller in
-            controller.surfaceTree.contains { surface in
-                guard let pwd = surface.pwd else { return false }
-                return pwd == root || pwd.hasPrefix(root + "/")
-            }
-        }
+        return TerminalWindows.surfaces.first { _, surface in
+            guard let pwd = surface.pwd else { return false }
+            return pwd == root || pwd.hasPrefix(root + "/")
+        }?.surface
+    }
+
+    private var ownerTab: BaseTerminalController? {
+        ownerSurface.flatMap { TerminalWindows.controller(for: $0) }
     }
 
     private func focusOwner() {
-        guard let controller = ownerTab, let window = controller.window else { return }
-        window.tabGroup?.selectedWindow = window
-        window.makeKeyAndOrderFront(nil)
+        guard let surface = ownerSurface else { return }
+        TerminalWindows.show(surface)
     }
 }
 

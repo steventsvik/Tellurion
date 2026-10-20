@@ -1631,7 +1631,12 @@ extension Ghostty {
                 guard let window = surfaceView.window,
                       let controller = window.windowController as? BaseTerminalController
                 else { return false }
-                controller.titleOverride = titleOverride
+                if let board = controller as? BoardController {
+                    // On a board the tab is the whole board: name the tile instead.
+                    board.setTitle(titleOverride, for: surfaceView)
+                } else {
+                    controller.titleOverride = titleOverride
+                }
                 return true
 
             default:

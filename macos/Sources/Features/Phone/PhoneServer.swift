@@ -46,9 +46,9 @@ final class PhoneServer: ObservableObject {
         }
     }
 
-    /// Terminal tabs that are open now.
-    private var openControllers: [TerminalController] {
-        TerminalController.all.filter { controller in
+    /// Classic windows and boards that are open now.
+    private var openControllers: [BaseTerminalController] {
+        TerminalWindows.all.filter { controller in
             guard let window = controller.window else { return false }
             return !closedWindows.contains(window)
         }
@@ -297,13 +297,13 @@ final class PhoneServer: ObservableObject {
 
     private func tabsMessage() -> String {
         var tabs: [[String: Any]] = []
-        let key = NSApp.keyWindow?.windowController as? TerminalController
+        let key = TerminalWindows.controller(of: NSApp.keyWindow)
         for controller in openControllers {
-            let server = LocalhostSessions.shared.session(for: controller)
             for surface in controller.surfaceTree {
+                let server = LocalhostSessions.shared.session(for: surface)
                 var tab: [String: Any] = [
                     "id": surface.id.uuidString,
-                    "title": surface.title,
+                    "title": TerminalWindows.title(of: surface, in: controller as? BoardController) ?? surface.title,
                     "pwd": surface.pwd.map { $0.replacingOccurrences(of: NSHomeDirectory(), with: "~") } ?? "",
                     "focused": controller === key && controller.focusedSurface === surface,
                 ]

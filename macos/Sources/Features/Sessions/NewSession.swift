@@ -43,13 +43,14 @@ enum NewSessionKind: CaseIterable, Identifiable {
         }
     }
 
-    func open(from owner: TerminalController) {
+    /// A new tab beside `owner`, or a new tile when it's a board.
+    func open(from owner: BaseTerminalController) {
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = owner.focusedSurface?.pwd
         if let command { config.initialInput = command + "\n" }
-        guard let controller = TerminalController.newTab(owner.ghostty, from: owner.window, withBaseConfig: config) else { return }
-        if self == .hermes {
-            HermesSessions.shared.adopt(controller)
+        guard let surface = TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config) else { return }
+        if self == .hermes, let controller = TerminalWindows.controller(for: surface) {
+            HermesSessions.shared.adopt(surface, in: controller)
         }
     }
 }
@@ -57,7 +58,7 @@ enum NewSessionKind: CaseIterable, Identifiable {
 /// "+ New" in the sidebar header: a pixel button that opens a menu of session kinds.
 /// (SwiftUI menus drop custom label drawing on macOS, so this pops up an NSMenu instead.)
 struct NewSessionMenu: View {
-    let owner: TerminalController
+    let owner: BaseTerminalController
     let compact: Bool
 
     var body: some View {
@@ -68,7 +69,7 @@ struct NewSessionMenu: View {
 }
 
 enum NewSessionMenuBuilder {
-    static func popUp(for owner: TerminalController) {
+    static func popUp(for owner: BaseTerminalController) {
         let menu = NSMenu()
         for kind in NewSessionKind.allCases {
             if kind == .hermes || kind == .cloudClaude { menu.addItem(.separator()) }
@@ -84,7 +85,7 @@ enum NewSessionMenuBuilder {
         menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
     }
 
-    private static func dockerItem(_ owner: TerminalController) -> NSMenuItem {
+    private static func dockerItem(_ owner: BaseTerminalController) -> NSMenuItem {
         let item = NSMenuItem(title: "Isolated Session (Docker)", action: nil, keyEquivalent: "")
         item.image = NSImage(systemSymbolName: "shippingbox", accessibilityDescription: nil)
         let submenu = NSMenu()

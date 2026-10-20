@@ -92,7 +92,7 @@ struct CommandFailureChip: View {
                 .help("Opens \(kind.displayName) in a split with the command and its output")
             }
             Button {
-                if let controller = surfaceView.window?.windowController as? TerminalController {
+                if let controller = TerminalWindows.controller(of: surfaceView.window) {
                     CommandBlocksPanel.shared.show(controller)
                 }
             } label: {
@@ -123,7 +123,7 @@ struct CommandFailureChip: View {
 
 /// The column with the focused pane's recent commands as blocks.
 struct CommandBlocksColumn: View {
-    let controller: TerminalController
+    let controller: BaseTerminalController
     @ObservedObject private var store = CommandBlocks.shared
     @ObservedObject private var layout = WindowLayout.shared
     @State private var failedOnly = false

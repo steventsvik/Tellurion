@@ -15,12 +15,9 @@ enum MemoryWindow {
         }
     }
 
-    /// For the focused tab of the frontmost terminal window.
+    /// For the focused terminal of the frontmost window (a tab, or a tile on a board).
     static func showForFrontTab() {
-        let controller = (NSApp.keyWindow?.windowController as? TerminalController)
-            ?? (NSApp.mainWindow?.windowController as? TerminalController)
-            ?? TerminalController.all.first
-        show(folder: controller?.focusedSurface?.pwd)
+        show(folder: TerminalWindows.front?.focusedSurface?.pwd)
     }
 }
 

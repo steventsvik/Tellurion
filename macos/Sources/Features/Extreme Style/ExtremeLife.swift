@@ -367,7 +367,7 @@ struct MoodSprite: View {
 /// one finishes. Drawn faintly, so the text always stays readable.
 struct AgentAurora: View {
     static let enabledKey = "ExtremeAurora"
-    let controller: TerminalController
+    let controller: BaseTerminalController
 
     private enum Mode: Equatable { case idle, working, waiting }
     @State private var mode: Mode = .idle

@@ -93,10 +93,12 @@ final class HermesServer {
     }
 }
 
-/// Tracks which tabs are Hermes sessions and owns each one's web view.
+/// Tracks which terminals are Hermes sessions (a classic tab, or a tile on a board) and owns
+/// each one's web view.
 final class HermesSessions: ObservableObject {
     static let shared = HermesSessions()
 
+    /// The terminals showing Hermes, by surface.
     @Published private(set) var tabs: Set<ObjectIdentifier> = []
     private var views: [ObjectIdentifier: HermesWebView] = [:]
     private var cancellables: Set<AnyCancellable> = []
@@ -118,31 +120,51 @@ final class HermesSessions: ObservableObject {
             .store(in: &cancellables)
     }
 
-    func isHermes(_ controller: TerminalController) -> Bool {
-        tabs.contains(ObjectIdentifier(controller))
+    /// Whether a classic tab is a Hermes session, or on a board, whether the tile with the
+    /// cursor is.
+    func isHermes(_ controller: BaseTerminalController) -> Bool {
+        if controller is BoardController {
+            return controller.focusedSurface.map(isHermes(surface:)) ?? false
+        }
+        return controller.surfaceTree.contains { isHermes(surface: $0) }
     }
 
-    /// Turns a freshly created tab into a Hermes session.
-    func adopt(_ controller: TerminalController) {
-        let id = ObjectIdentifier(controller)
+    func isHermes(surface: Ghostty.SurfaceView) -> Bool {
+        tabs.contains(ObjectIdentifier(surface))
+    }
+
+    /// Turns a freshly created terminal into a Hermes session.
+    func adopt(_ surface: Ghostty.SurfaceView, in controller: BaseTerminalController) {
+        let id = ObjectIdentifier(surface)
         tabs.insert(id)
         views[id] = HermesWebView()
-        controller.titleOverride = "Hermes"
-        if let surface = controller.focusedSurface {
-            VerticalTabsAgents.shared.setStaticAgent(.hermes, task: "Hermes", on: surface)
+        TerminalWindows.setTitle("Hermes", of: surface)
+        VerticalTabsAgents.shared.setStaticAgent(.hermes, task: "Hermes", on: surface)
+        // Forget it when it closes, or its window does.
+        let forget: () -> Void = { [weak self] in
+            self?.tabs.remove(id)
+            self?.views.removeValue(forKey: id)
         }
-        // Forget the tab when its window closes.
-        NotificationCenter.default.publisher(for: NSWindow.willCloseNotification, object: controller.window)
-            .sink { [weak self] _ in
-                self?.tabs.remove(id)
-                self?.views.removeValue(forKey: id)
+        if let window = controller.window {
+            NotificationCenter.default.publisher(for: NSWindow.willCloseNotification, object: window)
+                .sink { _ in forget() }
+                .store(in: &cancellables)
+        }
+        controller.$surfaceTree
+            .sink { [weak surface] tree in
+                guard let surface, !tree.contains(surface) else { return }
+                forget()
             }
             .store(in: &cancellables)
         VerticalTabs.setNeedsRefresh()
     }
 
-    func view(for controller: TerminalController) -> HermesWebView? {
-        views[ObjectIdentifier(controller)]
+    func view(for controller: BaseTerminalController) -> HermesWebView? {
+        controller.surfaceTree.lazy.compactMap { self.view(for: $0) }.first
+    }
+
+    func view(for surface: Ghostty.SurfaceView) -> HermesWebView? {
+        views[ObjectIdentifier(surface)]
     }
 }
 
@@ -183,7 +205,8 @@ struct HermesSessionView: View {
     }
 }
 
-private struct HermesSessionContent: View {
+/// Hermes's own UI in place of a terminal (a Hermes tab, or a Hermes tile on a board).
+struct HermesSessionContent: View {
     @ObservedObject var webView: HermesWebView
 
     var body: some View {

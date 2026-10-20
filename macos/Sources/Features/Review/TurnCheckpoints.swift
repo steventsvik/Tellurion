@@ -49,7 +49,7 @@ final class TurnCheckpoints: ObservableObject {
         NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)
             .receive(on: RunLoop.main)
             .sink { [weak self] note in
-                guard let controller = (note.object as? NSWindow)?.windowController as? TerminalController else { return }
+                guard let controller = TerminalWindows.controller(of: note.object as? NSWindow) else { return }
                 for surface in controller.surfaceTree { self?.forget(ObjectIdentifier(surface)) }
             }
             .store(in: &cancellables)

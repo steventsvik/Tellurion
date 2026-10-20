@@ -4,6 +4,30 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Board edition.** Tellurion can now show your terminals as tiles on a board instead of tabs. Pick **Board** when you first open Tellurion, or any time in **Settings → Edition**; Classic stays the default and nothing changes unless you switch.
+  - **Every terminal is a tile.** Each one is a full terminal, so Vim, full-screen apps and every agent work as they do in a tab. Drag a tile by its title bar, resize it from its corner, and arrange them however you like.
+  - **Pan and zoom.** Pinch, or hold ⌘ and scroll, to zoom; drag empty space or scroll with two fingers to move around. Two fingers over a tile move the board too, unless you're working in that tile: then they scroll its terminal. ⌥⌘9 shows everything, ⌥⌘0 goes back to actual size, and double-clicking a tile's title bar zooms in on it. Zooming never resizes a terminal, so agents aren't interrupted.
+  - **See who needs you.** Each tile's edge shows its agent's status: it breathes while the agent works and pulses when it needs you. The list beside the board puts agents that need you first; click one to go to it. Zoomed out, each tile shows its agent and status in large type.
+  - **Launch agents.** Start up to 12 agents and shells at once in one folder, each in its own tile, with an optional first task (sent to Claude Code, Codex, Gemini and Qwen Code). Only agents installed on your Mac are offered.
+  - **Boards are saved as you go.** Tiles, where you were looking and the window are saved on every change, and boards that were open come back when Tellurion starts. Claude Code and Codex pick up their last conversation; other agents start again. Several boards open as tabs of one window, and the list shows your saved boards.
+  - **Every Tellurion tool works on a board.** The code editor, Visual Fix and command history open beside the board and follow the tile you're in; the command palette (⌘P), every ⌃⌘ shortcut, the Tools menu and the sidebar's icons, Ports, Localhost, local models, usage, update and setup sections are all there. Anything that would open a new tab (new sessions, Docker, Hermes, races, hand-offs, review loops, localhost servers, local models, pull requests) opens a tile instead, beside the one it came from.
+  - **Each tile has a menu.** Click its **…** button or right-click its title bar to rename it, hand off, start a review loop or race, open the editor, Visual Fix or command history for it, undo an agent's turn, or close it. The same menu is on its row in the list, which also answers permission prompts, shows its branch (click for the Git panel) and its review.
+  - **Board agents count everywhere.** Mission Control, notifications (clicking one moves the board to the tile), the phone, the palette's "Focus:" and "Answer" entries, hand-off targets and "wait for agents before updating" now include agents on boards.
+  - **Tiles in the same project share a color.** Their borders, title bars and rows in the list take the project's color, and tiles of one project that sit together get a tinted area labelled with its name. A new terminal opens beside the other tiles of its project, so it joins their group, even when you open several at once. Drag the label to move the whole group, double-click it to zoom to it, or right-click it to tidy it. **Arrange by project** in the toolbar puts each project's tiles together (⌘Z puts them back).
+  - **Smoother dragging.** Tiles follow the pointer exactly and lift while dragged. They snap into line with nearby tiles or one gap beside them (hold ⌘ not to snap), and the board scrolls when you drag a tile to its edge. A tile dropped mostly on top of another slides to the nearest free spot. Zoomed out, you can grab a tile anywhere, and clicking it zooms in. Tiles under the title bar can be grabbed too.
+  - **Sketches: draw the backend on the board.** A new scratchpad tile, opened from the toolbar or by right-clicking the board:
+    - **Drawing:** pen and highlighter, boxes, ellipses, decision diamonds, databases, lines, and arrows that stay attached to the boxes they connect when you move them.
+    - **Labels and text:** double-click a shape or arrow to label it, or empty space to write.
+    - **Editing:** select, move, resize, ⌥-drag to copy, undo, copy and paste, and system colors in three line widths. Single-letter keys pick tools (P pen, R box, B database, A arrow, T text).
+    - **Pictures:** drop, paste or insert them to mark them up, or bring in a photo, scan or sketch from your iPhone or iPad with Continuity Camera.
+    - **Sharing:** copy a sketch as a picture, share it, save it as a PNG, or **Send to Agent**. That hands it to an agent on the board, or to a new Claude Code or Codex tile, with what you want built.
+  - **Drop things on the board.** A folder dropped from Finder opens a terminal there, and pictures open in a new sketch.
+  - **Notes, checklists and kanban on the board.** Add them from the toolbar's new **+** menu, or by right-clicking the board. Hand a checklist item or a kanban card to an agent on the board, or to a new Claude Code or Codex tile. The card moves to Doing while the agent works and to Done when it finishes. Drag cards between columns.
+  - **Drag a sketch out.** Drag a sketch's title-bar symbol into Finder, Mail or Messages to drop it as a picture.
+  - Tiles you've scrolled out of view, and boards in hidden windows, stop drawing.
+
 ## 1.7.2
 
 - **Fixed:** the README badges are now rendered by the repo's own hourly workflow and served from GitHub, so a badge service outage can no longer leave them "invalid" or broken.

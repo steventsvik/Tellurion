@@ -218,7 +218,8 @@ final class LocalhostSessions: ObservableObject {
     /// A session that just went live, shown briefly over the terminal.
     @Published var toast: LocalhostSession?
 
-    private var tabs: [String: Weak<TerminalController>] = [:]
+    /// Each session's terminal: a tab of its own, or a tile on a board.
+    private var tabs: [String: Weak<Ghostty.SurfaceView>] = [:]
     private var timer: Timer?
     private var polling = false
     private let queue = DispatchQueue(label: "com.steventsvik.ghostty-extreme.localhost", qos: .utility)
@@ -247,13 +248,25 @@ final class LocalhostSessions: ObservableObject {
 
     var liveCount: Int { sessions.filter { $0.state == .live }.count }
 
-    func session(for controller: TerminalController) -> LocalhostSession? {
-        guard let id = tabs.first(where: { $0.value.value === controller })?.key else { return nil }
+    /// The session a classic tab runs. A board isn't one session; ask about its tiles.
+    func session(for controller: BaseTerminalController) -> LocalhostSession? {
+        guard !(controller is BoardController) else { return nil }
+        return controller.surfaceTree.lazy.compactMap { self.session(for: $0) }.first
+    }
+
+    func session(for surface: Ghostty.SurfaceView) -> LocalhostSession? {
+        guard let id = tabs.first(where: { $0.value.value === surface })?.key else { return nil }
         return sessions.first { $0.id == id }
     }
 
-    func controller(for session: LocalhostSession) -> TerminalController? {
-        tabs[session.id]?.value
+    /// The session's terminal, while it's open.
+    func surface(for session: LocalhostSession) -> Ghostty.SurfaceView? {
+        guard let surface = tabs[session.id]?.value, TerminalWindows.controller(for: surface) != nil else { return nil }
+        return surface
+    }
+
+    func controller(for session: LocalhostSession) -> BaseTerminalController? {
+        surface(for: session).flatMap { TerminalWindows.controller(for: $0) }
     }
 
     /// Sessions end when the app quits, so anything left on disk is stale.
@@ -300,8 +313,8 @@ final class LocalhostSessions: ObservableObject {
                 $0.liveSince = nil
             }
             // Adopt the tab if the session was opened before (e.g. restart after "shell here").
-            if tabs[event.id]?.value == nil, let controller = surface.window?.windowController as? TerminalController {
-                tabs[event.id] = Weak(controller)
+            if tabs[event.id]?.value == nil, TerminalWindows.controller(of: surface.window) != nil {
+                tabs[event.id] = Weak(surface)
             }
             ensureTimer()
             poll()
@@ -347,7 +360,7 @@ final class LocalhostSessions: ObservableObject {
             id: id, cwd: request.cwd, command: request.command,
             log: request.log ?? Self.directory.appendingPathComponent("\(id).log").path,
             agent: kind, created: Date())
-        let owner = surface.window?.windowController as? TerminalController
+        let owner = TerminalWindows.controller(of: surface.window)
         launch(session, from: owner, focus: false)
     }
 
@@ -355,7 +368,7 @@ final class LocalhostSessions: ObservableObject {
 
     /// Starts `command` in `folder` as a new session. Used by the sidebar and manager.
     @discardableResult
-    func start(command: String, in folder: String, from owner: TerminalController?, focus: Bool = true) -> LocalhostSession? {
+    func start(command: String, in folder: String, from owner: BaseTerminalController?, focus: Bool = true) -> LocalhostSession? {
         let id = "lh-\(Int(Date().timeIntervalSince1970))-\(Int.random(in: 1000...99999))"
         let log = Self.directory.appendingPathComponent("\(id).log").path
         let request: [String: Any] = ["id": id, "cwd": folder, "command": command, "log": log, "agent": ""]
@@ -391,7 +404,7 @@ final class LocalhostSessions: ObservableObject {
         let session = LocalhostSession(id: id, cwd: folder, command: command, log: log, agent: nil, created: Date())
         controller.titleOverride = "localhost · \(session.project.name)"
         sessions.append(session)
-        tabs[id] = Weak(controller)
+        tabs[id] = Weak(surface)
         writeStatus(session)
         if let model = surface.surfaceModel {
             ResumeAfterUpdate.run(" \(AgentTools.shellQuote(Self.runner)) \(id)", in: model)
@@ -401,7 +414,8 @@ final class LocalhostSessions: ObservableObject {
         return true
     }
 
-    private func launch(_ session: LocalhostSession, from owner: TerminalController?, focus: Bool) {
+    /// Opens the session's terminal beside `owner`: a tab, or a tile when it's a board.
+    private func launch(_ session: LocalhostSession, from owner: BaseTerminalController?, focus: Bool) {
         guard FileManager.default.isExecutableFile(atPath: Self.runner) else {
             let alert = NSAlert()
             alert.messageText = "Localhost sessions aren't installed"
@@ -409,19 +423,21 @@ final class LocalhostSessions: ObservableObject {
             alert.runModal()
             return
         }
-        guard let owner = owner ?? TerminalController.all.first(where: { $0.window?.isVisible == true }) ?? TerminalController.all.first else { return }
+        guard let owner = owner ?? TerminalWindows.front ?? TerminalWindows.all.first else { return }
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = session.cwd
         // A leading space keeps it out of shell history.
         config.initialInput = " \(AgentTools.shellQuote(Self.runner)) \(session.id)\n"
-        guard let controller = TerminalController.newTab(owner.ghostty, from: owner.window, withBaseConfig: config) else { return }
-        controller.titleOverride = "localhost · \(session.project.name)"
+        let agent = owner.focusedSurface
+        guard let surface = TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config,
+                                                        title: "localhost · \(session.project.name)") else { return }
         sessions.append(session)
-        tabs[session.id] = Weak(controller)
+        tabs[session.id] = Weak(surface)
         writeStatus(session)
         if !focus {
             // Stay with the agent; the sidebar card and toast show the new session.
             owner.window?.makeKeyAndOrderFront(nil)
+            if owner is BoardController, let agent { Ghostty.moveFocus(to: agent) }
         }
         ensureTimer()
         VerticalTabs.setNeedsRefresh()
@@ -445,7 +461,7 @@ final class LocalhostSessions: ObservableObject {
 
     @MainActor
     func restart(_ session: LocalhostSession) {
-        guard let surface = controller(for: session)?.surfaceTree.first else { return }
+        guard let surface = surface(for: session) else { return }
         switch session.state {
         case .stopped:
             // The runner is waiting for a key.
@@ -473,13 +489,13 @@ final class LocalhostSessions: ObservableObject {
             guard alert.runModal() == .alertFirstButtonReturn else { return }
         }
         stop(session)
-        let controller = controller(for: session)
+        let surface = surface(for: session)
         sessions.removeAll { $0.id == session.id }
         tabs.removeValue(forKey: session.id)
         quietPolls.removeValue(forKey: session.id)
         try? FileManager.default.removeItem(at: Self.directory.appendingPathComponent("\(session.id).status.json"))
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            controller?.closeTabImmediately()
+            if let surface { TerminalWindows.close(surface) }
             VerticalTabs.setNeedsRefresh()
         }
     }
@@ -491,9 +507,8 @@ final class LocalhostSessions: ObservableObject {
     }
 
     func focus(_ session: LocalhostSession) {
-        guard let controller = controller(for: session), let window = controller.window else { return }
-        window.tabGroup?.selectedWindow = window
-        window.makeKeyAndOrderFront(nil)
+        guard let surface = surface(for: session) else { return }
+        TerminalWindows.show(surface)
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -527,9 +542,9 @@ final class LocalhostSessions: ObservableObject {
         sessions[index] = session
         writeStatus(session)
         if before.state != .live, session.state == .live, before.liveSince == nil { announce(session) }
-        if let controller = controller(for: session) {
+        if let surface = surface(for: session) {
             let port = session.url?.port.map { ":\($0)" } ?? ""
-            controller.titleOverride = "localhost\(port) · \(session.project.name)"
+            TerminalWindows.setTitle("localhost\(port) · \(session.project.name)", of: surface)
         }
     }
 

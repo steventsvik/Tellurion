@@ -4,7 +4,7 @@ import SwiftUI
 /// The sidebar's "Tools" button: every tool by name, with what it's for and its shortcut,
 /// including the ones that don't fit as icons in the header.
 struct ToolsButton: View {
-    let owner: TerminalController
+    let owner: BaseTerminalController
     @Binding var condensed: Bool
     @State private var open = false
     @State private var hovering = false
@@ -44,7 +44,7 @@ struct ToolsButton: View {
 }
 
 private struct ToolsPanel: View {
-    let owner: TerminalController
+    let owner: BaseTerminalController
     @Binding var condensed: Bool
     let run: (@escaping () -> Void) -> Void
     @ObservedObject private var settings = ExtremeSettings.shared
@@ -116,12 +116,15 @@ private struct ToolsPanel: View {
                  detail: "Move the tabs, terminal and panels around", action: LayoutWindow.show),
             Tool(feature: nil, symbol: PixelIcon.design.symbol, title: "Design",
                  detail: "Templates, your own colors and logo", action: DesignWindow.show),
-            Tool(feature: nil, symbol: (condense ? PixelIcon.expand : .condense).symbol,
-                 title: condense ? "Expand view" : "Condense view",
-                 detail: condense ? "Show agent details on each tab" : "One line per tab") { condensed.toggle() },
-            Tool(feature: nil, symbol: "gearshape", title: "Settings", detail: "Turn tools on or off",
-                 shortcut: "⌃⌘,", action: ExtremeSettingsWindow.show),
         ]
+        // Boards list their tiles their own way.
+        if !(owner is BoardController) {
+            group.append(Tool(feature: nil, symbol: (condense ? PixelIcon.expand : .condense).symbol,
+                              title: condense ? "Expand view" : "Condense view",
+                              detail: condense ? "Show agent details on each tab" : "One line per tab") { condensed.toggle() })
+        }
+        group.append(Tool(feature: nil, symbol: "gearshape", title: "Settings", detail: "Turn tools on or off",
+                          shortcut: "⌃⌘,", action: ExtremeSettingsWindow.show))
         section("View")
         return all
     }

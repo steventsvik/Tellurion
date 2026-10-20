@@ -678,8 +678,8 @@ private struct ReviewOrDiffChip<Diff: View>: View {
 }
 
 /// Opens this tab's code editor; while it's open, the same button closes it.
-private struct EditorHeaderButton: View {
-    let owner: TerminalController
+struct EditorHeaderButton: View {
+    let owner: BaseTerminalController
     @ObservedObject private var panel = EditorPanel.shared
 
     var body: some View {
@@ -694,7 +694,7 @@ private struct EditorHeaderButton: View {
 }
 
 /// Opens Mission Control (⌃⌘M); a dot shows when an agent is waiting.
-private struct MissionControlButton: View {
+struct MissionControlButton: View {
     var body: some View {
         ExtremeIconButton(icon: .grid, help: "Mission Control (⌃⌘M)", action: MissionControl.toggle)
     }

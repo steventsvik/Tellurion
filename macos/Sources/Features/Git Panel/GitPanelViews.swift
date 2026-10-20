@@ -80,7 +80,7 @@ struct AheadBehindLabel: View {
 
 /// The Git panel: opened from a tab's branch in the sidebar.
 struct GitPanelView: View {
-    let controller: TerminalController
+    let controller: BaseTerminalController
     let pwd: String
     let dismiss: () -> Void
     @StateObject private var model: GitPanelModel
@@ -94,7 +94,7 @@ struct GitPanelView: View {
     @State private var armedDrop: String?
     @State private var escapeMonitor: Any?
 
-    init(controller: TerminalController, pwd: String, root: String, dismiss: @escaping () -> Void) {
+    init(controller: BaseTerminalController, pwd: String, root: String, dismiss: @escaping () -> Void) {
         self.controller = controller
         self.pwd = pwd
         self.dismiss = dismiss

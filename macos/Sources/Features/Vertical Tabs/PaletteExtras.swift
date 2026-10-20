@@ -8,11 +8,11 @@ import SwiftUI
 enum PaletteExtras {
     /// Agents waiting for permission or an answer, shown first so they're one Enter away.
     static func waitingOptions() -> [CommandOption] {
-        TerminalController.all.flatMap { controller in
+        TerminalWindows.all.flatMap { controller in
             controller.surfaceTree.compactMap { surface -> CommandOption? in
                 guard let info = VerticalTabsAgents.shared.info(for: surface),
                       AgentAlerts.isWaiting(info.activity) else { return nil }
-                let tab = controller.titleOverride ?? surface.pwd?.abbreviatedPath
+                let tab = TerminalWindows.title(of: surface, in: controller) ?? surface.pwd?.abbreviatedPath
                 return CommandOption(
                     title: "Answer \(info.name): \(info.detail ?? info.activity.label)",
                     subtitle: [tab, info.task].compactMap { $0 }.joined(separator: " · "),
@@ -30,11 +30,11 @@ enum PaletteExtras {
     /// New sessions and Tellurion's own view toggles. Sorted in with Ghostty's commands.
     static func commandOptions(for surfaceView: Ghostty.SurfaceView) -> [CommandOption] {
         var options: [CommandOption] = []
-        if let owner = surfaceView.window?.windowController as? TerminalController {
+        if let owner = TerminalWindows.controller(of: surfaceView.window) {
             for kind in NewSessionKind.allCases {
                 options.append(CommandOption(
                     title: "New Session: \(kind.title)",
-                    description: "Open a new tab running \(kind.title)",
+                    description: owner is BoardController ? "Open a new tile running \(kind.title)" : "Open a new tab running \(kind.title)",
                     leadingIcon: kind == .terminal ? "terminal" : "plus.bubble",
                     leadingColor: kind.agent?.brandColor
                 ) {
@@ -45,7 +45,7 @@ enum PaletteExtras {
                 options.append(CommandOption(
                     title: "New Isolated Session: \(kind.title)",
                     subtitle: "Docker · \(kind.detail)",
-                    description: "Open a new tab in a throwaway Docker container",
+                    description: owner is BoardController ? "Open a new tile in a throwaway Docker container" : "Open a new tab in a throwaway Docker container",
                     leadingIcon: "shippingbox",
                     leadingColor: kind.agent?.brandColor
                 ) {

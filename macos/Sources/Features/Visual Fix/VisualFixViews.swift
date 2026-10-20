@@ -5,7 +5,7 @@ import WebKit
 
 /// A tab's Visual Fix panel as placed in its window: a resize handle and the panel.
 struct VisualFixColumn: View {
-    let controller: TerminalController
+    let controller: BaseTerminalController
     var maxWidth: CGFloat = .infinity
     @AppStorage(VisualFixPanel.widthKey) private var width: Double = VisualFixPanel.defaultWidth
     @ObservedObject private var layout = WindowLayout.shared
@@ -27,7 +27,7 @@ struct VisualFixColumn: View {
 
 struct VisualFixPanelView: View {
     @ObservedObject var session: VisualFixSession
-    let controller: TerminalController
+    let controller: BaseTerminalController
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,7 +56,7 @@ struct VisualFixPanelView: View {
 
 private struct VisualFixToolbar: View {
     @ObservedObject var session: VisualFixSession
-    let controller: TerminalController
+    let controller: BaseTerminalController
     @ObservedObject private var localhost = LocalhostSessions.shared
 
     var body: some View {
@@ -951,7 +951,7 @@ private struct VisualFixWebViewHost: NSViewRepresentable {
 /// "◎ Fix" on a localhost card: opens Visual Fix on that app.
 struct VisualFixLaunchButton: View {
     let url: URL?
-    let controller: TerminalController?
+    let controller: BaseTerminalController?
     var large = false
     @State private var hovering = false
 

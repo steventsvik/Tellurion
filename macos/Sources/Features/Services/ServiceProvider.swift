@@ -55,10 +55,8 @@ class ServiceProvider: NSObject {
                 _ = TerminalController.newWindow(delegate.ghostty, withBaseConfig: config)
 
             case .tab:
-                _ = TerminalController.newTab(
-                    delegate.ghostty,
-                    from: TerminalController.preferredParent?.window,
-                    withBaseConfig: config)
+                // A tile when the front window is a board.
+                TerminalWindows.newTerminal(delegate.ghostty, from: TerminalWindows.front, config: config)
             }
         }
 
