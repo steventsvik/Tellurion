@@ -25,6 +25,7 @@ enum ExtremeFeature: String, CaseIterable, Identifiable {
     case environment
     case phone
     case localModels
+    case menuBar
 
     var id: String { rawValue }
 
@@ -49,6 +50,7 @@ enum ExtremeFeature: String, CaseIterable, Identifiable {
         case .environment: return "Environment"
         case .phone: return "Phone"
         case .localModels: return "Local models"
+        case .menuBar: return "Menu bar"
         }
     }
 
@@ -73,6 +75,7 @@ enum ExtremeFeature: String, CaseIterable, Identifiable {
         case .environment: return "A folder's tool versions and variables (mise, direnv), your containers, and local models"
         case .phone: return "Use your terminal from your phone over your own private Tailscale network"
         case .localModels: return "Chat with a model on this Mac (Ollama), offline: open it from the sidebar, or drag it under a chat"
+        case .menuBar: return "Which agents need you, from the menu bar, with your boards and a new sketch a click away"
         }
     }
 
@@ -91,7 +94,7 @@ enum ExtremeFeature: String, CaseIterable, Identifiable {
         case .memory: return "Y"
         case .skills: return "U"
         case .environment: return "N"
-        case .undo, .usage, .ports, .git, .sharedMemory, .phone, .localModels: return nil
+        case .undo, .usage, .ports, .git, .sharedMemory, .phone, .localModels, .menuBar: return nil
         }
     }
 
@@ -115,7 +118,7 @@ enum ExtremePreset: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .everything: return "Every feature on"
-        case .essentials: return "Editor, Mission Control, review, undo, localhost, ports, git, memory, skills, environment, usage, phone and local models"
+        case .essentials: return "Editor, Mission Control, review, undo, localhost, ports, git, memory, skills, environment, usage, phone, local models and the menu bar"
         case .sidebar: return "Vertical tabs with agent status, nothing else"
         }
     }
@@ -123,7 +126,7 @@ enum ExtremePreset: String, CaseIterable, Identifiable {
     var features: Set<ExtremeFeature> {
         switch self {
         case .everything: return Set(ExtremeFeature.allCases)
-        case .essentials: return [.editor, .missionControl, .localhost, .review, .undo, .usage, .ports, .git, .memory, .sharedMemory, .skills, .environment, .phone, .localModels]
+        case .essentials: return [.editor, .missionControl, .localhost, .review, .undo, .usage, .ports, .git, .memory, .sharedMemory, .skills, .environment, .phone, .localModels, .menuBar]
         case .sidebar: return []
         }
     }
@@ -253,7 +256,7 @@ final class ExtremeSettings: ObservableObject {
             if PhoneServer.shared.running { PhoneServer.shared.turnOff() }
         case .localModels:
             AgentToolWindows.close(id: LocalModelsWindow.windowID)
-        case .races, .undo, .usage, .git, .sharedMemory:
+        case .races, .undo, .usage, .git, .sharedMemory, .menuBar:
             break
         }
     }

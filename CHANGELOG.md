@@ -25,6 +25,8 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
     - **Sharing:** copy a sketch as a picture, share it, save it as a PNG, or **Send to Agent**. That hands it to an agent on the board, or to a new Claude Code or Codex tile, with what you want built.
   - **Drop things on the board.** A folder dropped from Finder opens a terminal there, and pictures open in a new sketch.
   - **Notes, checklists and kanban on the board.** Add them from the toolbar's new **+** menu, or by right-clicking the board. Hand a checklist item or a kanban card to an agent on the board, or to a new Claude Code or Codex tile. The card moves to Doing while the agent works and to Done when it finishes. Drag cards between columns.
+  - **Menu bar.** A menu bar item shows a count when agents need you. Its menu lists every agent (those waiting first), your boards, and New Sketch, Launch Agents and New Board. It can be turned off in Settings (Menu bar).
+  - **Shortcuts, Spotlight and Siri.** New actions: Open Board, New Board (for a folder), Launch Agents on a Board, New Sketch (from pictures, too), Get Sketch as Picture and Arrange Board by Project. "New sketch in Tellurion" and "Launch agents in Tellurion" work from Spotlight and Siri. Focusing a terminal from Shortcuts now moves its board to it.
   - **Drag a sketch out.** Drag a sketch's title-bar symbol into Finder, Mail or Messages to drop it as a picture.
   - Tiles you've scrolled out of view, and boards in hidden windows, stop drawing.
 
