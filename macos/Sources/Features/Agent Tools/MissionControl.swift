@@ -27,7 +27,7 @@ enum MissionControl {
 private struct MissionCard: Identifiable {
     let id: ObjectIdentifier
     let surface: Weak<Ghostty.SurfaceView>
-    weak var controller: TerminalController?
+    weak var controller: BaseTerminalController?
     let tabTitle: String
     let folder: String?
     let tabColor: Color?
@@ -96,7 +96,7 @@ private struct MissionControlView: View {
             }
             .pickerStyle(.segmented)
             .frame(width: 170)
-            if ExtremeSettings.isOn(.races), let owner = TerminalController.all.first(where: { $0.window?.isVisible == true }) {
+            if ExtremeSettings.isOn(.races), let owner = TerminalWindows.front ?? TerminalWindows.all.first(where: { $0.window?.isVisible == true }) {
                 Button {
                     AgentRaces.showSetup(from: owner)
                 } label: { Label("Race agents…", systemImage: "flag.checkered.2.crossed") }
@@ -142,7 +142,7 @@ private struct MissionControlView: View {
             Text("RACES").font(Extreme.font(10.5)).kerning(0.4).foregroundColor(Extreme.muted)
             ForEach(races.races) { race in
                 Button {
-                    AgentRaces.show(race, from: TerminalController.all.first)
+                    AgentRaces.show(race, from: TerminalWindows.front)
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "flag.checkered.2.crossed").foregroundColor(.purple)
@@ -164,7 +164,7 @@ private struct MissionControlView: View {
 
     private func reload() {
         var result: [MissionCard] = []
-        for controller in TerminalController.all {
+        for controller in TerminalWindows.all {
             guard let window = controller.window else { continue }
             let color = (window as? TerminalWindow)?.tabColor
             for surface in controller.surfaceTree {
@@ -172,7 +172,9 @@ private struct MissionControlView: View {
                 guard showAllPanes || agent != nil else { continue }
                 // Hermes tabs show a web app, not the terminal underneath.
                 let preview = agent?.kind == .hermes ? "" : Self.tail(surface.cachedVisibleContents.get(), lines: 9)
-                let title = controller.titleOverride ?? (surface.title.isEmpty ? window.title : surface.title)
+                let own = TerminalWindows.title(of: surface, in: controller) ?? (surface.title.isEmpty ? window.title : surface.title)
+                // A tile also says which board it's on.
+                let title = (controller as? BoardController).map { "\($0.workspace.name) · \(own)" } ?? own
                 result.append(MissionCard(
                     id: ObjectIdentifier(surface),
                     surface: Weak(surface),

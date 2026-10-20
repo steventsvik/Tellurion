@@ -1,0 +1,545 @@
+#if os(macOS)
+import AppKit
+import GhosttyKit
+
+/// Test-only: `GHOSTTY_EXTREME_TEST_BOARD=<file>` plays a timed script against the boards, like
+/// `DemoDirector` does for tabs. Each line is `<seconds since launch> <action> [args]`; `#`
+/// starts a comment. Actions go to the key board (or the first one). Tiles are 1-based, in
+/// the order they were added. Mouse and key actions are real events sent to the window, so
+/// they go through hit-testing, gestures and key equivalents as a person's would.
+///
+///     tile                       a new terminal tile
+///     shells <n> [folder]        launch n shells as a block, as the composer does
+///     agents <bin>:<n>,… <folder> [task]  launch agents as the composer does (claude:1,codex:1)
+///     type <n> <text>            type text plus Enter into tile n
+///     act <n> <action>           run a Ghostty keybinding action in tile n (new_split:right…)
+///     zoom <factor> | fit | actual | focus <n> | move <n> <dx> <dy> | close <n>
+///     dragtile <n> <dx> <dy>     drag tile n's title bar by screen points
+///     resizetile <n> <dx> <dy>   drag tile n's corner
+///     pan <dx> <dy>              drag empty board
+///     clicktile <n> header|body [clicks]
+///     scrollzoom <dy>            ⌘-scroll over empty board
+///     keys <combo>               e.g. cmd+opt+9, cmd+t, cmd+z
+///     camera <x> <y>             put the view's top-left corner at a board point
+///     composer | sidebar | rename <name> | newboard | closeboard | undo
+///     edition classic|board | newwindow | settings | welcome
+///     snapwindow <title prefix> <file.png>   draw any window into a PNG
+///     state                      log the boards, tiles and windows to GHOSTTY_EXTREME_TEST_LOG
+///     tool <name> [n]            open a tool for tile n (editor, visualfix, history, palette,
+///                                mission, race, handoff, loop, localhost, review, activity, memory)
+///     tilemenu <n>               log tile n's menu
+///     tiletitle <n> <name>       name tile n
+///     session <kind>             a new session from the New menu (claude, codex, terminal, hermes)
+///     tools                      log which tools are open and what they see
+///     snapshot <file.png>        draw the window (or its sheet) into a PNG, frames in <file>.txt
+@MainActor
+enum BoardTest {
+    private static var started = false
+
+    static func startIfRequested(_ controller: BoardController) {
+        guard !started, let path = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_BOARD"],
+              let script = try? String(contentsOfFile: path, encoding: .utf8) else { return }
+        started = true
+        for raw in script.split(separator: "\n") {
+            let line = raw.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0]
+                .trimmingCharacters(in: .whitespaces)
+            let parts = line.split(separator: " ", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let time = Double(parts[0]) else { continue }
+            let command = parts[1]
+            DispatchQueue.main.asyncAfter(deadline: .now() + time) {
+                MainActor.assumeIsolated {
+                    DemoDirector.note("board \(command)")
+                    run(command)
+                }
+            }
+        }
+    }
+
+    private static var board: BoardController? {
+        BoardController.all.first { $0.window?.isKeyWindow == true } ?? BoardController.all.first
+    }
+
+    private static func tile(_ n: String, of controller: BoardController) -> Ghostty.SurfaceView? {
+        guard let index = Int(n), index >= 1, index <= controller.model.surfaces.count else { return nil }
+        return controller.model.surfaces[index - 1]
+    }
+
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
+    private static func run(_ command: String) {
+        let parts = command.split(separator: " ").map(String.init)
+        guard let action = parts.first else { return }
+        let args = Array(parts.dropFirst())
+        let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty
+
+        // Actions that don't need a board.
+        switch action {
+        case "edition":
+            ExtremeEdition.set(args.first == "board" ? .board : .classic)
+            return
+        case "newwindow":
+            (NSApp.delegate as? AppDelegate)?.newWindow(nil)
+            return
+        case "newboard":
+            if let ghostty { Board.newBoard(ghostty) }
+            return
+        case "state":
+            state()
+            return
+        case "keys":
+            keys(args.first ?? "")
+            return
+        case "settings":
+            ExtremeSettingsWindow.show()
+            return
+        case "welcome":
+            WelcomeWindow.show()
+            return
+        case "snapwindow":
+            // snapwindow <title prefix> <file.png>
+            guard args.count >= 2, let window = NSApp.windows.first(where: { $0.isVisible && $0.title.hasPrefix(args[0]) }),
+                  let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: args[1]))
+            return
+        default:
+            break
+        }
+
+        guard let controller = board else {
+            DemoDirector.note("board: no board for \(action)")
+            return
+        }
+        switch action {
+        case "tile":
+            controller.addTile()
+        case "shells":
+            let n = Int(args.first ?? "") ?? 1
+            controller.launch(Array(repeating: (agent: nil, command: ""), count: n), folder: args.count > 1 ? args[1] : nil)
+        case "agents":
+            let folder = args.count > 1 ? args[1] : nil
+            let task = args.dropFirst(2).joined(separator: " ")
+            var lines: [(agent: BoardAgent?, command: String)] = []
+            for spec in (args.first ?? "").split(separator: ",") {
+                let pair = spec.split(separator: ":").map(String.init)
+                guard let agent = BoardAgent.catalog.first(where: { $0.binary == pair.first }) else { continue }
+                for _ in 0..<(Int(pair.last ?? "") ?? 1) {
+                    lines.append((agent, agent.command(prompt: task.isEmpty ? nil : task)))
+                }
+            }
+            controller.launch(lines, folder: folder)
+        case "type":
+            guard args.count >= 2, let surface = tile(args[0], of: controller) else { return }
+            surface.surfaceModel?.sendText(args.dropFirst().joined(separator: " "))
+            surface.surfaceModel?.sendKeyEvent(.init(key: .enter, action: .press, text: "\r"))
+            surface.surfaceModel?.sendKeyEvent(.init(key: .enter, action: .release))
+        case "act":
+            guard args.count == 2, let surface = tile(args[0], of: controller) else { return }
+            let ok = surface.surfaceModel?.perform(action: args[1]) ?? false
+            DemoDirector.note("board act \(args[1]) -> \(ok)")
+        case "zoom":
+            controller.zoom(by: CGFloat(Double(args.first ?? "") ?? 1))
+        case "fit":
+            controller.fitAll()
+        case "actual":
+            controller.zoomToActualSize()
+        case "focus":
+            if let surface = tile(args.first ?? "", of: controller) { controller.focusTile(surface) }
+        case "close":
+            if let surface = tile(args.first ?? "", of: controller) { controller.close(surface) }
+        case "move":
+            guard args.count == 3, let surface = tile(args[0], of: controller),
+                  let frame = controller.model.frames[surface.id],
+                  let dx = Double(args[1]), let dy = Double(args[2]) else { return }
+            controller.move(surface, to: frame.offsetBy(dx: dx, dy: dy))
+            controller.tileDidSettle()
+        case "dragtile", "resizetile":
+            guard args.count == 3, let surface = tile(args[0], of: controller),
+                  let dx = Double(args[1]), let dy = Double(args[2]),
+                  let rect = windowRect(of: surface, in: controller) else { return }
+            let start = action == "dragtile" ? CGPoint(x: rect.midX, y: rect.minY + 15 * zoom(controller))
+                : CGPoint(x: rect.maxX - 12 * zoom(controller), y: rect.maxY - 12 * zoom(controller))
+            drag(from: start, by: CGSize(width: dx, height: dy), in: controller)
+        case "pan":
+            guard args.count == 2, let dx = Double(args[0]), let dy = Double(args[1]),
+                  let start = emptyPoint(in: controller) else { return }
+            drag(from: start, by: CGSize(width: dx, height: dy), in: controller)
+        case "clicktile":
+            guard args.count >= 2, let surface = tile(args[0], of: controller),
+                  let rect = windowRect(of: surface, in: controller), let window = controller.window else { return }
+            let z = zoom(controller)
+            let point: CGPoint
+            switch args[1] {
+            case "header": point = CGPoint(x: rect.minX + rect.width * 0.4, y: rect.minY + 15 * z)
+            case "close": point = CGPoint(x: rect.maxX - 19 * z, y: rect.minY + 15 * z)
+            default: point = CGPoint(x: rect.midX, y: rect.midY)
+            }
+            let clicks = Int(args.count > 2 ? args[2] : "1") ?? 1
+            for count in 1...clicks {
+                mouse(.leftMouseDown, point, in: window, clicks: count)
+                mouse(.leftMouseUp, point, in: window, clicks: count)
+            }
+        case "scrolltile":
+            // scrolltile <tile> <dy>: two fingers over the middle of a tile.
+            guard args.count == 2, let surface = tile(args[0], of: controller), let dy = Double(args[1]),
+                  let window = controller.window else { return }
+            let height = window.contentView?.bounds.height ?? 0
+            let center = surface.convert(CGPoint(x: surface.bounds.midX, y: surface.bounds.midY), to: nil)
+            scroll(dy, at: CGPoint(x: center.x, y: height - center.y), in: window, command: false)
+        case "showtile":
+            guard let surface = tile(args.first ?? "", of: controller), let frame = controller.model.frames[surface.id] else { return }
+            controller.zoom(toFit: frame.insetBy(dx: -200, dy: -200), animated: false)
+        case "focusproject":
+            // focusproject <folder name>: the first tile in that project gets the keyboard.
+            guard let surface = controller.model.surfaces.first(where: {
+                controller.model.projects[$0.id].map(BoardProjects.name) == args.first
+            }) else { return }
+            controller.focusSurface(surface)
+        case "unfocus":
+            controller.window?.makeFirstResponder(nil)
+        case "spam":
+            // spam <n>: new terminals as fast as the button can be pressed.
+            for _ in 0..<(Int(args.first ?? "") ?? 3) { controller.addTile() }
+        case "scrollzoom":
+            guard let dy = Double(args.first ?? ""), let point = emptyPoint(in: controller), let window = controller.window else { return }
+            scroll(dy, at: point, in: window, command: true)
+        case "camera":
+            guard args.count == 2, let x = Double(args[0]), let y = Double(args[1]), let canvas = controller.canvas else { return }
+            canvas.contentView.scroll(to: CGPoint(x: x, y: y))
+            canvas.reflectScrolledClipView(canvas.contentView)
+        case "composer":
+            controller.model.showComposer = true
+        case "sidebar":
+            controller.model.showSidebar.toggle()
+        case "rename":
+            controller.rename(args.joined(separator: " "))
+        case "closeboard":
+            controller.window?.performClose(nil)
+        case "undo":
+            controller.undoManager?.undo()
+        case "snapshot":
+            guard let path = args.first else { return }
+            snapshot(controller, to: path)
+        case "tool":
+            guard let name = args.first else { return }
+            if args.count > 1, let surface = tile(args[1], of: controller) { controller.focusTile(surface) }
+            openTool(name, on: controller)
+        case "tilemenu":
+            guard let surface = tile(args.first ?? "", of: controller) else { return }
+            let titles = BoardTileMenu.actions(for: surface, in: controller)
+                .map { $0.map { $0.enabled ? $0.title : "(\($0.title))" } ?? "—" }
+            DemoDirector.note("tilemenu " + titles.joined(separator: " | "))
+        case "tiletitle":
+            guard args.count >= 2, let surface = tile(args[0], of: controller) else { return }
+            controller.setTitle(args.dropFirst().joined(separator: " "), for: surface)
+        case "session":
+            guard let kind = NewSessionKind.allCases.first(where: { "\($0)" == args.first }) else { return }
+            kind.open(from: controller)
+        case "tools":
+            tools(controller)
+        case "arrange":
+            controller.arrangeByProject()
+        case "card":
+            guard let kind = BoardCard.Kind(rawValue: args.first ?? "") else { return }
+            controller.addCard(kind)
+        case "carditem":
+            // carditem <text…>: adds to the last card (column 0 on a kanban).
+            guard let card = controller.model.cards.last else { return }
+            controller.updateCard(card.id) { $0.items.append(CardItem(text: args.joined(separator: " "))) }
+        case "cardhand":
+            // cardhand <item number> <tile number>: hands an item of the last kanban to a tile.
+            guard let card = controller.model.cards.last(where: { $0.kind == .kanban }), let n = Int(args.first ?? ""), n >= 1, n <= card.items.count,
+                  args.count > 1, let surface = tile(args[1], of: controller) else { return }
+            controller.hand(card.items[n - 1].id, in: card.id, to: surface)
+        case "kanbandrag":
+            // kanbandrag <item number> <column 0-2>: drags a card of the last kanban there.
+            guard let card = controller.model.cards.last(where: { $0.kind == .kanban }), let n = Int(args.first ?? ""),
+                  n >= 1, n <= card.items.count, let column = Int(args.count > 1 ? args[1] : ""),
+                  let view = controller.cardView(card.id), let window = controller.window else { return }
+            let id = card.items[n - 1].id
+            guard let cardView = view.descendants.compactMap({ $0 as? KanbanCard }).first(where: { $0.itemID == id }),
+                  let content = cardView.superview else { return }
+            let height = window.contentView?.bounds.height ?? 0
+            let from = cardView.convert(CGPoint(x: cardView.bounds.midX, y: cardView.bounds.midY), to: nil)
+            let columnX = content.bounds.width * (CGFloat(column) * 2 + 1) / 6
+            let to = content.convert(CGPoint(x: columnX, y: content.bounds.height - 40), to: nil)
+            drag(from: CGPoint(x: from.x, y: height - from.y), by: CGSize(width: to.x - from.x, height: from.y - to.y), in: controller)
+        case "showcard":
+            guard let card = controller.model.cards.first(where: { $0.kind.rawValue == args.first }),
+                  let frame = controller.model.frames[card.id] else { return }
+            controller.zoom(toFit: frame.insetBy(dx: -30, dy: -30), animated: false)
+        case "cardstate":
+            for card in controller.model.cards {
+                DemoDirector.note("card \(card.kind.rawValue) \(card.title) text=\(card.text.prefix(40)) items=\(card.items.count)")
+                for item in card.items {
+                    DemoDirector.note("card   \(item.text) column=\(item.column) done=\(item.done) agent=\(item.agent != nil)")
+                }
+            }
+        case "sketch":
+            controller.addSketch()
+        case "sketchtool":
+            guard let view = sketch(controller), let tool = SketchCanvasView.Tool(rawValue: args.first ?? "") else { return }
+            view.canvas.tool = tool
+        case "sketchdrag", "sketchclick":
+            // Points in the drawing's own coordinates.
+            guard let view = sketch(controller), let window = controller.window else { return }
+            let numbers = args.compactMap { Double($0) }.map { CGFloat($0) }
+            guard numbers.count >= 2 else { return }
+            let height = window.contentView?.bounds.height ?? 0
+            func onWindow(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+                let p = view.canvas.convert(CGPoint(x: x, y: y), to: nil)
+                return CGPoint(x: p.x, y: height - p.y)
+            }
+            let start = onWindow(numbers[0], numbers[1])
+            if action == "sketchclick" {
+                let clicks = numbers.count > 2 ? Int(numbers[2]) : 1
+                for count in 1...max(clicks, 1) {
+                    mouse(.leftMouseDown, start, in: window, clicks: count)
+                    mouse(.leftMouseUp, start, in: window, clicks: count)
+                }
+            } else if numbers.count >= 4 {
+                let end = onWindow(numbers[2], numbers[3])
+                drag(from: start, by: CGSize(width: end.x - start.x, height: end.y - start.y), in: controller)
+            }
+        case "sketchtype":
+            guard let responder = controller.window?.firstResponder as? NSTextView else {
+                DemoDirector.note("sketch: no label being edited")
+                return
+            }
+            responder.insertText(args.joined(separator: " "), replacementRange: responder.selectedRange())
+            if let view = sketch(controller) { controller.window?.makeFirstResponder(view.canvas) }
+        case "sketchstate":
+            for sketch in controller.model.sketches {
+                DemoDirector.note("sketch \(sketch.title) frame=\(controller.model.frames[sketch.id] ?? .zero) items=\(sketch.elements.count)")
+                for element in sketch.elements {
+                    let ends = element.kind.isConnector ? " ends=\(element.connectorEnds(in: sketch.elements))" : ""
+                    let attached = element.kind.isConnector ? " attached=\(element.start != nil)/\(element.end != nil)" : ""
+                    DemoDirector.note("sketch   \(element.kind.rawValue) frame=\(element.frame) text=\(element.text ?? "-")\(attached)\(ends)")
+                }
+            }
+        case "sketchexport":
+            guard let id = controller.model.sketches.first?.id else { return }
+            DemoDirector.note("sketch export -> \(controller.exportSketch(id)?.lastPathComponent ?? "failed")")
+        case "sketchundo":
+            sketch(controller)?.canvas.undoManager?.undo()
+        case "groups":
+            let model = controller.model
+            for (index, surface) in model.surfaces.enumerated() {
+                let project = model.projects[surface.id].map(BoardProjects.name) ?? "-"
+                DemoDirector.note("groups tile \(index + 1) project=\(project) color=\(model.color(of: surface.id).map(String.init) ?? "-") frame=\(model.frames[surface.id] ?? .zero)")
+            }
+            for group in BoardTiles.groups(model) {
+                DemoDirector.note("groups group \(BoardProjects.name(group.project)) color=\(group.color) tiles=\(group.tiles.count) frame=\(group.frame)")
+            }
+        default:
+            DemoDirector.note("board: unknown action \(action)")
+        }
+    }
+
+    // MARK: Events
+
+    private static func zoom(_ controller: BoardController) -> CGFloat { controller.canvas?.magnification ?? 1 }
+
+    /// A tile's rect in window points, from the top-left of the window.
+    private static func windowRect(of surface: Ghostty.SurfaceView, in controller: BoardController) -> CGRect? {
+        guard let frame = controller.model.frames[surface.id], let document = controller.canvas?.documentView,
+              let window = controller.window, let height = window.contentView?.bounds.height else { return nil }
+        let rect = document.convert(frame, to: nil)
+        return CGRect(x: rect.minX, y: height - rect.maxY, width: rect.width, height: rect.height)
+    }
+
+    /// A point over empty board, in window points from the top-left.
+    private static func emptyPoint(in controller: BoardController) -> CGPoint? {
+        guard let canvas = controller.canvas, let window = controller.window,
+              let height = window.contentView?.bounds.height else { return nil }
+        let visible = canvas.convert(canvas.bounds, to: nil)
+        let tiles = controller.model.surfaces.compactMap { windowRect(of: $0, in: controller) }
+        let candidates = stride(from: 0.2, through: 0.8, by: 0.1).flatMap { fx in
+            stride(from: 0.3, through: 0.9, by: 0.1).map { fy in
+                CGPoint(x: visible.minX + visible.width * fx, y: height - visible.maxY + visible.height * fy)
+            }
+        }
+        return candidates.first { point in !tiles.contains { $0.insetBy(dx: -4, dy: -4).contains(point) } }
+    }
+
+    private static func sketch(_ controller: BoardController) -> BoardSketchView? {
+        guard let id = controller.model.sketches.last?.id else { return nil }
+        return controller.sketchView(id)
+    }
+
+    private static func mouse(_ type: NSEvent.EventType, _ point: CGPoint, in window: NSWindow, clicks: Int = 1) {
+        let height = window.contentView?.bounds.height ?? window.frame.height
+        if type == .leftMouseDown, let hit = window.contentView?.hitTest(NSPoint(x: point.x, y: height - point.y)) {
+            DemoDirector.note("board mouse down at \(point) hits \(Swift.type(of: hit))")
+        }
+        guard let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: point.x, y: height - point.y),
+                                             modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                             windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                             clickCount: clicks, pressure: type == .leftMouseUp ? 0 : 1) else { return }
+        // Through the app's queue, as a real click arrives (it sets `NSApp.currentEvent`).
+        NSApp.postEvent(event, atStart: false)
+    }
+
+    /// Press, move in steps over about a third of a second, release.
+    private static func drag(from start: CGPoint, by delta: CGSize, in controller: BoardController) {
+        guard let window = controller.window else { return }
+        mouse(.leftMouseDown, start, in: window)
+        let steps = 20
+        for step in 1...steps {
+            let t = CGFloat(step) / CGFloat(steps)
+            let point = CGPoint(x: start.x + delta.width * t, y: start.y + delta.height * t)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.016 * Double(step)) {
+                mouse(.leftMouseDragged, point, in: window)
+                if step == steps {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { mouse(.leftMouseUp, point, in: window) }
+                }
+            }
+        }
+    }
+
+    private static func scroll(_ dy: Double, at point: CGPoint, in window: NSWindow, command: Bool) {
+        let height = window.contentView?.bounds.height ?? window.frame.height
+        let inWindow = NSPoint(x: point.x, y: height - point.y)
+        let onScreen = window.convertPoint(toScreen: inWindow)
+        let screenHeight = NSScreen.screens.first?.frame.height ?? 0
+        guard let cg = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: Int32(dy), wheel2: 0, wheel3: 0)
+        else { return }
+        cg.location = CGPoint(x: onScreen.x, y: screenHeight - onScreen.y)
+        if command { cg.flags = .maskCommand }
+        guard let event = NSEvent(cgEvent: cg) else { return }
+        NSApp.postEvent(event, atStart: false)
+    }
+
+    private static let keyCodes: [String: UInt16] = [
+        "0": 29, "1": 18, "2": 19, "3": 20, "4": 21, "5": 23, "6": 22, "7": 26, "8": 28, "9": 25,
+        "=": 24, "-": 27, "t": 17, "w": 13, "n": 45, "d": 2, "z": 6, "\\": 42,
+        "e": 14, "p": 35, "s": 1, "b": 11, "v": 9, "m": 46, "a": 0, "escape": 53,
+    ]
+
+    /// A key with modifiers, sent through the app as a real key press.
+    private static func keys(_ combo: String) {
+        let parts = combo.lowercased().split(separator: "+").map(String.init)
+        guard let key = parts.last, let code = keyCodes[key], let window = NSApp.keyWindow else {
+            DemoDirector.note("board: can't press \(combo)")
+            return
+        }
+        let text = key == "escape" ? "\u{1b}" : key
+        var flags: NSEvent.ModifierFlags = []
+        for mod in parts.dropLast() {
+            switch mod {
+            case "cmd": flags.insert(.command)
+            case "opt": flags.insert(.option)
+            case "ctrl": flags.insert(.control)
+            case "shift": flags.insert(.shift)
+            default: break
+            }
+        }
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+            guard let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags,
+                                               timestamp: ProcessInfo.processInfo.systemUptime,
+                                               windowNumber: window.windowNumber, context: nil,
+                                               characters: text, charactersIgnoringModifiers: text,
+                                               isARepeat: false, keyCode: code) else { continue }
+            NSApp.postEvent(event, atStart: false)
+        }
+    }
+
+    private static func openTool(_ name: String, on controller: BoardController) {
+        let surface = controller.focusedSurface
+        switch name {
+        case "editor": EditorPanel.shared.toggle(from: controller)
+        case "visualfix": VisualFixPanel.shared.toggle(controller)
+        case "history": CommandBlocksPanel.shared.toggle(controller)
+        case "palette": controller.toggleCommandPalette(nil)
+        case "mission": MissionControl.toggle()
+        case "race": AgentRaces.showSetup(from: controller)
+        case "handoff": if let surface { AgentHandoff.showWindow(from: surface, in: controller) }
+        case "loop": if let surface { PipelineSetup.show(writer: surface, in: controller) }
+        case "localhost": LocalhostManager.toggle()
+        case "review": ReviewInbox.toggle()
+        case "activity": ActivityDashboard.toggle()
+        case "memory": MemoryWindow.showForFrontTab()
+        default: DemoDirector.note("board: unknown tool \(name)")
+        }
+    }
+
+    private static func tools(_ controller: BoardController) {
+        let tiles = controller.model.surfaces
+        let agents = tiles.filter { VerticalTabsAgents.shared.info(for: $0) != nil }
+        let found = tiles.allSatisfy { (NSApp.delegate as? AppDelegate)?.findSurface(forUUID: $0.id) === $0 }
+        let jumps = TerminalWindows.surfaces.filter { $0.controller === controller }.count
+        let others = agents.first.map { AgentHandoff.runningAgents(excluding: $0).count } ?? 0
+        let titles = tiles.map { TerminalWindows.title(of: $0, in: controller) ?? "-" }
+        let windows = NSApp.windows.filter(\.isVisible).map { "\"\($0.title)\"" }
+        let hermes = tiles.filter { HermesSessions.shared.isHermes(surface: $0) }.count
+        let panels: [String] = [
+            "editor=\(EditorPanel.shared.isVisible(controller))",
+            "visualfix=\(VisualFixPanel.shared.isVisible(controller))",
+            "history=\(CommandBlocksPanel.shared.isVisible(controller))",
+            "palette=\(controller.commandPaletteIsShowing)",
+        ]
+        let reach: [String] = [
+            "front=\(TerminalWindows.front === controller)",
+            "findSurface=\(found)",
+            "surfaces=\(jumps)/\(tiles.count)",
+            "handoffTargets=\(others)",
+            "waiting=\(PaletteExtras.waitingOptions().count)",
+            "hermes=\(hermes)",
+            "localhost=\(LocalhostSessions.shared.sessions.count)",
+            "busy=\(ExtremeUpdates.workingAgents())",
+        ]
+        DemoDirector.note("tools " + (panels + reach).joined(separator: " "))
+        DemoDirector.note("tools titles=\(titles) windows=\(windows)")
+    }
+
+    // MARK: Reports
+
+    private static func state() {
+        var lines: [String] = []
+        for window in NSApp.windows where window.isVisible {
+            lines.append("window \(type(of: window)) controller=\(window.windowController.map { "\(type(of: $0))" } ?? "-") "
+                         + "title=\"\(window.title)\" frame=\(window.frame) key=\(window.isKeyWindow) "
+                         + "tabs=\(window.tabGroup?.windows.count ?? 1)")
+        }
+        for controller in TerminalController.all {
+            let grids = controller.surfaceTree.map { $0.surfaceSize.map { "\($0.columns)x\($0.rows)" } ?? "-" }
+            lines.append("classic \"\(controller.window?.title ?? "")\" frame=\(controller.window?.frame ?? .zero) grids=\(grids)")
+        }
+        lines.append("edition \(ExtremeEdition.current.rawValue) boards=\(BoardController.all.count) "
+                     + "classic=\(TerminalController.all.count) saved=\(BoardStore.all().count)")
+        for controller in BoardController.all {
+            lines.append("board \"\(controller.workspace.name)\" zoom=\(String(format: "%.3f", zoom(controller))) "
+                         + "origin=\(controller.cameraOrigin) tiles=\(controller.model.surfaces.count) "
+                         + "focused=\(controller.focusedSurface.flatMap { f in controller.model.surfaces.firstIndex { $0 === f }.map { $0 + 1 } } ?? 0) "
+                         + "sidebar=\(controller.model.showSidebar)")
+            for (index, surface) in controller.model.surfaces.enumerated() {
+                let info = VerticalTabsAgents.shared.info(for: surface)
+                let frame = controller.model.frames[surface.id] ?? .zero
+                lines.append("  tile \(index + 1) frame=\(frame) visible=\(controller.visible[surface.id].map { "\($0)" } ?? "-") "
+                             + "grid=\(surface.surfaceSize.map { "\($0.columns)x\($0.rows)" } ?? "-") "
+                             + "agent=\(info.map { "\($0.kind.rawValue)/\($0.activity.label)" } ?? "-") "
+                             + "session=\(info.flatMap(ResumeAfterUpdate.session(for:)) ?? "-") title=\"\(surface.title)\"")
+            }
+        }
+        for line in lines { DemoDirector.note(line) }
+    }
+
+    private static func snapshot(_ controller: BoardController, to path: String) {
+        // An open sheet (the composer) instead of the board under it.
+        guard let window = controller.window.map({ $0.attachedSheet ?? $0 }), let view = window.contentView,
+              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+        var lines: [String] = ["zoom \(zoom(controller)) origin \(controller.cameraOrigin)"]
+        for (index, surface) in controller.model.surfaces.enumerated() {
+            lines.append("tile \(index + 1) \(controller.model.frames[surface.id].map { "\($0)" } ?? "-") pwd \(surface.pwd ?? "-")")
+        }
+        func walk(_ view: NSView, _ depth: Int) {
+            guard depth < 9 else { return }
+            lines.append(String(repeating: "  ", count: depth) + "\(type(of: view)) \(view.frame) hidden=\(view.isHidden)")
+            for sub in view.subviews { walk(sub, depth + 1) }
+        }
+        walk(view, 0)
+        try? lines.joined(separator: "\n").write(toFile: path + ".txt", atomically: true, encoding: .utf8)
+    }
+}
+#endif

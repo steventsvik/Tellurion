@@ -41,24 +41,28 @@ enum ResumeAfterUpdate {
                 continue
             }
             for surface in controller.surfaceTree {
-                guard let info = VerticalTabsAgents.shared.info(for: surface) else { continue }
-                let cwd = surface.pwd
-                switch info.kind {
-                case .claude:
-                    // Claude Code names its transcript after the session: <id>.jsonl.
-                    guard let path = info.transcriptPath else { continue }
-                    let id = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
-                    guard UUID(uuidString: id) != nil else { continue }
-                    result.append(Entry(kind: .claude, surface: surface.id.uuidString, cwd: cwd, value: id))
-                case .codex:
-                    guard let id = info.codexSessionID, UUID(uuidString: id) != nil else { continue }
-                    result.append(Entry(kind: .codex, surface: surface.id.uuidString, cwd: cwd, value: id))
-                default:
-                    continue
-                }
+                guard let info = VerticalTabsAgents.shared.info(for: surface), let id = session(for: info) else { continue }
+                let kind: Entry.Kind = info.kind == .claude ? .claude : .codex
+                result.append(Entry(kind: kind, surface: surface.id.uuidString, cwd: surface.pwd, value: id))
             }
         }
         return result
+    }
+
+    /// The session id a Claude Code or Codex pane can be resumed with.
+    static func session(for info: VerticalTabAgentInfo) -> String? {
+        switch info.kind {
+        case .claude:
+            // Claude Code names its transcript after the session: <id>.jsonl.
+            guard let path = info.transcriptPath else { return nil }
+            let id = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
+            return UUID(uuidString: id) != nil ? id : nil
+        case .codex:
+            guard let id = info.codexSessionID, UUID(uuidString: id) != nil else { return nil }
+            return id
+        default:
+            return nil
+        }
     }
 
     /// Called right before the app quits to relaunch into the update.

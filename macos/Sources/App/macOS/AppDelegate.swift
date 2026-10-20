@@ -373,7 +373,14 @@ class AppDelegate: NSObject,
             // is possible to have other windows in a few scenarios:
             //   - if we're opening a URL since `application(_:openFile:)` is called before this.
             //   - if we're restoring from persisted state
-            if TerminalController.all.isEmpty && derivedConfig.initialWindow {
+            if ExtremeEdition.current == .board {
+                // Boards reopen themselves; restored classic windows stay as they were.
+                if BoardController.all.isEmpty && derivedConfig.initialWindow {
+                    undoManager.disableUndoRegistration()
+                    Board.openAtLaunch(ghostty)
+                    undoManager.enableUndoRegistration()
+                }
+            } else if TerminalController.all.isEmpty && derivedConfig.initialWindow {
                 undoManager.disableUndoRegistration()
                 _ = TerminalController.newWindow(ghostty)
                 undoManager.enableUndoRegistration()
@@ -463,7 +470,7 @@ class AppDelegate: NSObject,
         // This is possible with flag set to false if there a race where the
         // window is still initializing and is not visible but the user clicked
         // the dock icon.
-        guard TerminalController.all.isEmpty else { return true }
+        guard TerminalController.all.isEmpty && BoardController.all.isEmpty else { return true }
 
         // If the application isn't active yet then we don't want to process
         // this because we're not ready. This happens sometimes in Xcode runs
@@ -471,7 +478,11 @@ class AppDelegate: NSObject,
         guard applicationHasBecomeActive else { return true }
 
         // No visible windows, open a new one.
-        _ = TerminalController.newWindow(ghostty)
+        if ExtremeEdition.current == .board {
+            Board.openAtLaunch(ghostty)
+        } else {
+            _ = TerminalController.newWindow(ghostty)
+        }
         return false
     }
 
@@ -539,11 +550,8 @@ class AppDelegate: NSObject,
 
         switch ghostty.config.macosDockDropBehavior {
         case .new_tab:
-            _ = TerminalController.newTab(
-                ghostty,
-                from: TerminalController.preferredParent?.window,
-                withBaseConfig: config
-            )
+            // A tile when the front window is a board.
+            TerminalWindows.newTerminal(ghostty, from: TerminalWindows.front, config: config)
         case .new_window: _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
         }
 
@@ -745,6 +753,10 @@ class AppDelegate: NSObject,
     @objc private func ghosttyNewWindow(_ notification: Notification) {
         let configAny = notification.userInfo?[Ghostty.Notification.NewSurfaceConfigKey]
         let config = configAny as? Ghostty.SurfaceConfiguration
+        if ExtremeEdition.current == .board {
+            Board.newBoard(ghostty, folder: config?.workingDirectory)
+            return
+        }
         _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
     }
 
@@ -957,7 +969,7 @@ class AppDelegate: NSObject,
     // MARK: - GhosttyAppDelegate
 
     func findSurface(forUUID uuid: UUID) -> Ghostty.SurfaceView? {
-        for c in TerminalController.all {
+        for c in TerminalWindows.all {
             for view in c.surfaceTree where view.id == uuid {
                 return view
             }
@@ -1006,6 +1018,10 @@ class AppDelegate: NSObject,
     }
 
     @IBAction func newWindow(_ sender: Any?) {
+        if ExtremeEdition.current == .board {
+            Board.newBoard(ghostty)
+            return
+        }
         _ = TerminalController.newWindow(ghostty)
     }
 
@@ -1018,6 +1034,7 @@ class AppDelegate: NSObject,
 
     @IBAction func closeAllWindows(_ sender: Any?) {
         TerminalController.closeAllWindows()
+        for board in BoardController.all { board.window?.performClose(nil) }
         AboutController.shared.hide()
     }
 

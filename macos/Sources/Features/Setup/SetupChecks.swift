@@ -499,13 +499,12 @@ final class SetupChecks: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
-    /// Opens a new tab (or window) that runs `command` in the user's shell.
+    /// Opens a new tab (or window, or a tile on a board) that runs `command` in the user's shell.
     static func openTab(running command: String) {
         guard let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty else { return }
         var config = Ghostty.SurfaceConfiguration()
         config.initialInput = command + "\n"
-        let parent = (EditorPanel.frontController ?? TerminalController.all.first)?.window
-        _ = TerminalController.newTab(ghostty, from: parent, withBaseConfig: config)
+        TerminalWindows.newTerminal(ghostty, from: TerminalWindows.front, config: config)
     }
 }
 #endif

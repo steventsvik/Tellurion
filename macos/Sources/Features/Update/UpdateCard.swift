@@ -40,7 +40,7 @@ final class ExtremeUpdates: ObservableObject {
 
     /// Agents in the middle of a turn: quitting would cut it off.
     static func workingAgents() -> Int {
-        TerminalController.all.flatMap { Array($0.surfaceTree) }.filter { surface in
+        TerminalWindows.all.flatMap { Array($0.surfaceTree) }.filter { surface in
             guard let activity = VerticalTabsAgents.shared.info(for: surface)?.activity else { return false }
             return activity == .working || activity == .needsPermission
         }.count

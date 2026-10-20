@@ -115,7 +115,7 @@ func localhostUptime(since date: Date?, now: Date) -> String {
 /// The "LOCALHOST" block at the end of the sidebar: one card per session tab.
 struct LocalhostSidebarSection: View {
     let entries: [VerticalTabEntry]
-    let owner: TerminalController
+    let owner: BaseTerminalController
     @ObservedObject private var store = LocalhostSessions.shared
     /// Folded down to its header, so the cards don't take the sidebar's space.
     @AppStorage("LocalhostSectionCollapsed") private var collapsed = false
@@ -188,9 +188,9 @@ struct LocalhostSidebarSection: View {
 struct LocalhostTabCard: View {
     let session: LocalhostSession
     /// The server's own tab.
-    let controller: TerminalController
+    let controller: BaseTerminalController
     /// The tab whose sidebar shows the card: where Visual Fix opens.
-    let owner: TerminalController
+    let owner: BaseTerminalController
     let isSelected: Bool
     @State private var hovering = false
     @Environment(\.extremeMotion) private var motion
@@ -360,7 +360,7 @@ struct LocalhostHeaderButton: View {
 /// "Your app is live" pop-up shown over the terminal when a session starts listening.
 struct LocalhostToastView: View {
     let session: LocalhostSession
-    var controller: TerminalController?
+    var controller: BaseTerminalController?
     let dismiss: () -> Void
 
     var body: some View {
@@ -403,7 +403,7 @@ struct LocalhostToastView: View {
 
 /// Places the toast at the top of the terminal area.
 struct LocalhostToastLayer: View {
-    var controller: TerminalController?
+    var controller: BaseTerminalController?
     @ObservedObject private var store = LocalhostSessions.shared
 
     var body: some View {

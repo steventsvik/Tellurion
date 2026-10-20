@@ -390,15 +390,13 @@ final class ReviewInbox: ObservableObject {
 
     /// Pushes the branch and opens GitHub's pull request page, in a tab where it can be seen.
     func openPullRequest(_ item: ReviewItem) {
-        let owner = surface(for: item).flatMap { $0.window?.windowController as? TerminalController }
-            ?? TerminalController.all.first
+        let owner = surface(for: item).flatMap { TerminalWindows.controller(of: $0.window) }
+            ?? TerminalWindows.front
         guard let owner else { return }
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = item.repoRoot
         config.initialInput = "git push -u origin HEAD && gh pr create --fill --web\n"
-        if let controller = TerminalController.newTab(owner.ghostty, from: owner.window, withBaseConfig: config) {
-            controller.titleOverride = "Pull request · \(item.repoName)"
-        }
+        TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config, title: "Pull request · \(item.repoName)")
     }
 
     func focusAgent(_ item: ReviewItem) {

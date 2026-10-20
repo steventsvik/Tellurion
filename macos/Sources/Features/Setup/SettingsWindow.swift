@@ -32,6 +32,12 @@ private struct ExtremeSettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     VStack(alignment: .leading, spacing: 10) {
+                        ExtremeSectionLabel("Edition")
+                        EditionPicker()
+                        Text("Decides what a new window is. Switching to Board opens a board; your open windows stay.")
+                            .font(Extreme.font(11)).foregroundColor(Extreme.muted)
+                    }
+                    VStack(alignment: .leading, spacing: 10) {
                         ExtremeSectionLabel("Features")
                         FeaturePresetPicker()
                         FeatureToggleList()

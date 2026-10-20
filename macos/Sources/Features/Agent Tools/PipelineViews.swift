@@ -118,7 +118,7 @@ struct AgentMessagesLine: View {
 // MARK: - Pairing window
 
 enum PipelineSetup {
-    static func show(writer: Ghostty.SurfaceView, in controller: TerminalController) {
+    static func show(writer: Ghostty.SurfaceView, in controller: BaseTerminalController) {
         // Fresh for this writer, never one left open for another pane.
         AgentToolWindows.close(id: "pipeline")
         AgentToolWindows.show(id: "pipeline", title: "Review Loop", size: NSSize(width: 560, height: 560)) {
@@ -129,14 +129,14 @@ enum PipelineSetup {
 
 private struct PipelineSetupView: View {
     weak var writer: Ghostty.SurfaceView?
-    weak var controller: TerminalController?
+    weak var controller: BaseTerminalController?
     @State private var newReviewer: VerticalTabAgentKind
     @State private var existing: ObjectIdentifier?
     @State private var autoSend = false
     @State private var rounds = 3
     @State private var reviewNow: Bool
 
-    init(writer: Ghostty.SurfaceView, controller: TerminalController) {
+    init(writer: Ghostty.SurfaceView, controller: BaseTerminalController) {
         self.writer = writer
         self.controller = controller
         let kind = VerticalTabsAgents.shared.info(for: writer)?.kind

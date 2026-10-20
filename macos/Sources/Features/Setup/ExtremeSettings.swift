@@ -219,15 +219,15 @@ final class ExtremeSettings: ObservableObject {
     private static func close(_ feature: ExtremeFeature) {
         switch feature {
         case .editor:
-            for controller in TerminalController.all where EditorPanel.shared.isVisible(controller) {
+            for controller in TerminalWindows.all where EditorPanel.shared.isVisible(controller) {
                 EditorPanel.shared.toggle(from: controller)
             }
         case .visualFix:
-            for controller in TerminalController.all where VisualFixPanel.shared.isVisible(controller) {
+            for controller in TerminalWindows.all where VisualFixPanel.shared.isVisible(controller) {
                 VisualFixPanel.shared.toggle(controller)
             }
         case .commandHistory:
-            for controller in TerminalController.all where CommandBlocksPanel.shared.isVisible(controller) {
+            for controller in TerminalWindows.all where CommandBlocksPanel.shared.isVisible(controller) {
                 CommandBlocksPanel.shared.toggle(controller)
             }
         case .missionControl:

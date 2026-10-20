@@ -109,7 +109,7 @@ final class VisualFixSession: NSObject, ObservableObject {
         let rect: CGRect
     }
 
-    weak var controller: TerminalController?
+    weak var controller: BaseTerminalController?
     let webView: WKWebView
 
     @Published private(set) var url: URL?
@@ -148,7 +148,7 @@ final class VisualFixSession: NSObject, ObservableObject {
         }
     }
 
-    init(controller: TerminalController) {
+    init(controller: BaseTerminalController) {
         self.controller = controller
         let configuration = WKWebViewConfiguration()
         let proxy = MessageProxy()
@@ -263,7 +263,7 @@ final class VisualFixSession: NSObject, ObservableObject {
             return kind == .claude || kind == .codex
         }
         let here = [controller.focusedSurface].compactMap { $0 } + Array(controller.surfaceTree)
-        let elsewhere = TerminalController.all.filter { $0 !== controller }.flatMap { Array($0.surfaceTree) }
+        let elsewhere = TerminalWindows.all.filter { $0 !== controller }.flatMap { Array($0.surfaceTree) }
         let agents = (here + elsewhere).filter(hasAgent)
         // Without a known project (an app started outside Tellurion), use this tab's agent.
         guard let root = projectRoot.map(Self.canonical) else { return here.first(where: hasAgent) }
@@ -525,9 +525,9 @@ final class VisualFixPanel: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     private var widened: [ObjectIdentifier: CGFloat] = [:]
 
-    func isVisible(_ controller: TerminalController) -> Bool { visibleTabs.contains(ObjectIdentifier(controller)) }
+    func isVisible(_ controller: BaseTerminalController) -> Bool { visibleTabs.contains(ObjectIdentifier(controller)) }
 
-    func session(for controller: TerminalController) -> VisualFixSession {
+    func session(for controller: BaseTerminalController) -> VisualFixSession {
         let id = ObjectIdentifier(controller)
         if let session = sessions[id] { return session }
         let session = VisualFixSession(controller: controller)
@@ -542,7 +542,7 @@ final class VisualFixPanel: ObservableObject {
     }
 
     /// Opens the panel in `controller`'s tab, on `url` or the best running app.
-    func show(from controller: TerminalController?, url: URL? = nil) {
+    func show(from controller: BaseTerminalController?, url: URL? = nil) {
         guard ExtremeSettings.isOn(.visualFix) else { return }
         guard let picked = controller ?? Self.frontController else { return }
         let controller = Self.panelTab(for: picked)
@@ -560,14 +560,14 @@ final class VisualFixPanel: ObservableObject {
         }
     }
 
-    func hide(_ controller: TerminalController) {
+    func hide(_ controller: BaseTerminalController) {
         let id = ObjectIdentifier(controller)
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { _ = visibleTabs.remove(id) }
         if let window = controller.window { narrow(window, id: id) }
         if let surface = controller.focusedSurface { Ghostty.moveFocus(to: surface) }
     }
 
-    func toggle(_ controller: TerminalController?) {
+    func toggle(_ controller: BaseTerminalController?) {
         guard ExtremeSettings.isOn(.visualFix) || controller.map(isVisible) == true else { return }
         guard let controller = controller ?? Self.frontController else { return }
         if isVisible(controller) { hide(controller) } else { show(from: controller) }
@@ -576,11 +576,11 @@ final class VisualFixPanel: ObservableObject {
     /// The terminal tab in front: the key window's, or else the frontmost tab on screen
     /// (from a tool window like the Localhost manager). A server's own tab is skipped, since
     /// the agent lives elsewhere.
-    static var frontController: TerminalController? {
+    static var frontController: BaseTerminalController? {
         if let key = EditorPanel.frontController, LocalhostSessions.shared.session(for: key) == nil { return key }
-        let onScreen = NSApp.orderedWindows.compactMap { window -> TerminalController? in
+        let onScreen = NSApp.orderedWindows.compactMap { window -> BaseTerminalController? in
             guard window.isVisible, window.tabGroup.map({ $0.selectedWindow === window }) ?? true else { return nil }
-            return window.windowController as? TerminalController
+            return TerminalWindows.controller(of: window)
         }
         return onScreen.first { LocalhostSessions.shared.session(for: $0) == nil } ?? onScreen.first
             ?? EditorPanel.frontController
@@ -590,7 +590,7 @@ final class VisualFixPanel: ObservableObject {
     /// tab (Fix on its card, or ⌃⌘V while looking at its output). Then it's the tab of an
     /// agent working on the server's project, else that project's tab, else another tab in
     /// front; requests go to the agent, and a new one would otherwise start in the server's tab.
-    static func panelTab(for controller: TerminalController) -> TerminalController {
+    static func panelTab(for controller: BaseTerminalController) -> BaseTerminalController {
         guard let server = LocalhostSessions.shared.session(for: controller) else { return controller }
         let root = ProjectPath.canonical(server.project.root)
         func inProject(_ surface: Ghostty.SurfaceView) -> Bool {
@@ -599,8 +599,8 @@ final class VisualFixPanel: ObservableObject {
         }
         func hasAgent(_ surface: Ghostty.SurfaceView) -> Bool { VerticalTabsAgents.shared.info(for: surface) != nil }
         // Tabs in the server tab's own window first, so the panel stays where the user is.
-        let group = controller.window?.tabGroup?.windows.compactMap { $0.windowController as? TerminalController } ?? []
-        let tabs = (group + TerminalController.all.filter { tab in !group.contains { $0 === tab } })
+        let group = controller.window?.tabGroup?.windows.compactMap { TerminalWindows.controller(of: $0) } ?? []
+        let tabs = (group + TerminalWindows.all.filter { tab in !group.contains { $0 === tab } })
             .filter { LocalhostSessions.shared.session(for: $0) == nil }
         return tabs.first { $0.surfaceTree.contains { inProject($0) && hasAgent($0) } }
             ?? tabs.first { $0.surfaceTree.contains(where: inProject) }
@@ -610,7 +610,7 @@ final class VisualFixPanel: ObservableObject {
     }
 
     /// The live localhost app for this tab's project, or else the most recent one.
-    static func bestURL(for controller: TerminalController) -> URL? {
+    static func bestURL(for controller: BaseTerminalController) -> URL? {
         let live = LocalhostSessions.shared.sessions.filter { $0.state == .live && $0.url != nil }
         if let pwd = controller.focusedSurface?.pwd {
             let root = LocalhostProject(folder: pwd).root

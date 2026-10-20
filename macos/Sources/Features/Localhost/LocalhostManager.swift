@@ -21,7 +21,7 @@ enum LocalhostManager {
     }
 
     /// The "New server" sheet, as its own small window.
-    static func showNewServer(folder: String?, from owner: TerminalController?) {
+    static func showNewServer(folder: String?, from owner: BaseTerminalController?) {
         guard ExtremeSettings.isOn(.localhost) else { return }
         AgentToolWindows.show(id: "localhost-new", title: "New Localhost Server", size: NSSize(width: 520, height: 420)) {
             LocalhostNewServerView(folder: folder ?? NSHomeDirectory(), owner: owner)
@@ -81,7 +81,7 @@ private struct LocalhostManagerView: View {
                 Button(role: .destructive) { store.stopAll() } label: { Label("Stop all", systemImage: "stop.fill") }
             }
             Button {
-                let owner = TerminalController.all.first { $0.window?.isKeyWindow == true } ?? TerminalController.all.first
+                let owner = TerminalWindows.front
                 LocalhostManager.showNewServer(folder: owner?.focusedSurface?.pwd, from: owner)
             } label: { Label("New server", systemImage: "plus") }
                 .buttonStyle(.borderedProminent)
@@ -308,7 +308,7 @@ private struct LocalhostOtherRow: View {
 
 private struct LocalhostNewServerView: View {
     @State var folder: String
-    let owner: TerminalController?
+    let owner: BaseTerminalController?
     @State private var command = ""
 
     private var scripts: [(name: String, body: String)] { LocalhostFramework.serverScripts(in: folder) }

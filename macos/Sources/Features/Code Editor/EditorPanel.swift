@@ -34,7 +34,7 @@ final class EditorPanel: ObservableObject {
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)
             .sink { [weak self] note in
-                guard let controller = (note.object as? NSWindow)?.windowController as? TerminalController else { return }
+                guard let controller = TerminalWindows.controller(of: note.object as? NSWindow) else { return }
                 self?.sessions[ObjectIdentifier(controller)]?.follow()
             }
             .store(in: &cancellables)
@@ -47,11 +47,11 @@ final class EditorPanel: ObservableObject {
             .store(in: &cancellables)
     }
 
-    func isVisible(_ controller: TerminalController) -> Bool {
+    func isVisible(_ controller: BaseTerminalController) -> Bool {
         visibleTabs.contains(ObjectIdentifier(controller))
     }
 
-    func session(for controller: TerminalController) -> EditorSession {
+    func session(for controller: BaseTerminalController) -> EditorSession {
         let id = ObjectIdentifier(controller)
         if let session = sessions[id] { return session }
         let session = EditorSession(controller: controller)
@@ -67,7 +67,7 @@ final class EditorPanel: ObservableObject {
     }
 
     /// Opens this tab's editor, optionally on a specific folder.
-    func show(from controller: TerminalController?, folder: String? = nil) {
+    func show(from controller: BaseTerminalController?, folder: String? = nil) {
         guard ExtremeSettings.isOn(.editor) else { return }
         guard let controller, !HermesSessions.shared.isHermes(controller) else { return }
         let session = session(for: controller)
@@ -79,7 +79,7 @@ final class EditorPanel: ObservableObject {
         DispatchQueue.main.async { session.webView.focusEditor() }
     }
 
-    func hide(returningFocusTo controller: TerminalController?) {
+    func hide(returningFocusTo controller: BaseTerminalController?) {
         guard let controller else { return }
         let id = ObjectIdentifier(controller)
         sessions[id]?.hide()
@@ -90,7 +90,7 @@ final class EditorPanel: ObservableObject {
     /// An agent's state changed in a pane: an editor that's been opened keeps following it
     /// while closed. Tabs whose editor was never opened get no web view at all.
     private func trackAgent(in surface: Ghostty.SurfaceView) {
-        guard let controller = surface.window?.windowController as? TerminalController,
+        guard let controller = TerminalWindows.controller(of: surface.window),
               let session = sessions[ObjectIdentifier(controller)] else { return }
         guard let info = VerticalTabsAgents.shared.info(for: surface), info.kind != .hermes else {
             session.agentMayHaveLeft()
@@ -101,7 +101,7 @@ final class EditorPanel: ObservableObject {
         startFollowing()
     }
 
-    func toggle(from controller: TerminalController?) {
+    func toggle(from controller: BaseTerminalController?) {
         // Off in Settings: it can still close, never open.
         guard ExtremeSettings.isOn(.editor) || controller.map(isVisible) == true else { return }
         guard let controller else { return }
@@ -140,15 +140,15 @@ final class EditorPanel: ObservableObject {
         }
     }
 
-    /// The terminal controller of the frontmost window, if any.
-    static var frontController: TerminalController? {
-        (NSApp.keyWindow ?? NSApp.mainWindow)?.windowController as? TerminalController
+    /// The classic window or board in front, if any.
+    static var frontController: BaseTerminalController? {
+        TerminalWindows.controller(of: NSApp.keyWindow ?? NSApp.mainWindow)
     }
 }
 
 /// One tab's editor: a web view following that tab's terminal pane and its agent.
 final class EditorSession {
-    private weak var controller: TerminalController?
+    private weak var controller: BaseTerminalController?
     private var loadedWebView: EditorWebView?
     /// The editor page, created on first use.
     var webView: EditorWebView {
@@ -177,7 +177,7 @@ final class EditorSession {
     /// How much the window was widened for this editor, so hiding can undo it.
     private var widenedBy: CGFloat = 0
 
-    init(controller: TerminalController) {
+    init(controller: BaseTerminalController) {
         self.controller = controller
         // Following only runs while there's a web view (see `follow`), but never make one here.
         feed.onItems = { [weak self] items, reset in
@@ -292,13 +292,19 @@ final class EditorSession {
         follow()
     }
 
-    /// The tab's agent panes in split order, at most four (Hermes shows its own app).
+    /// The tab's agent panes in split order, at most four (Hermes shows its own app). On a
+    /// board, the tile with the cursor comes first, so the editor follows the agent you're in.
     private var agentSurfaces: [Ghostty.SurfaceView] {
         guard let controller else { return [] }
-        return Array(controller.surfaceTree.filter {
+        var agents = controller.surfaceTree.filter {
             guard let info = VerticalTabsAgents.shared.info(for: $0) else { return false }
             return info.kind != .hermes
-        }.prefix(4))
+        }
+        if let board = controller as? BoardController, let focused = board.focusedSurface ?? board.model.focused?.value,
+           let index = agents.firstIndex(where: { $0 === focused }) {
+            agents.insert(agents.remove(at: index), at: 0)
+        }
+        return Array(agents.prefix(4))
     }
 
     /// The main pane to follow: the first agent pane, so focusing another one doesn't
@@ -482,7 +488,7 @@ final class EditorSession {
 
 /// A tab's editor as placed in its window's layout: a resize handle and its web view.
 struct EditorPanelColumn: View {
-    let controller: TerminalController
+    let controller: BaseTerminalController
     /// The most room the window has for the editor right now.
     var maxWidth: CGFloat = .infinity
     @AppStorage(EditorPanel.widthKey) private var width: Double = EditorPanel.defaultWidth

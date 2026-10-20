@@ -18,8 +18,8 @@ enum LocalModelSessions {
         return " clear; \(AgentTools.shellQuote(cli)) local\(provider) \(AgentTools.shellQuote(model.name))"
     }
 
-    /// Opens it below the chat in front, or in a tab of its own when there's no chat there.
-    static func open(_ model: LocalModel, from owner: TerminalController) {
+    /// Opens it below the chat in front, or in a tab (or tile) of its own when there's no chat there.
+    static func open(_ model: LocalModel, from owner: BaseTerminalController) {
         if let surface = owner.focusedSurface, VerticalTabsAgents.shared.info(for: surface) != nil {
             open(model, below: surface, in: owner)
         } else {
@@ -36,12 +36,12 @@ enum LocalModelSessions {
         controller.newSplit(at: surface, direction: .down, baseConfig: config)
     }
 
-    static func openTab(_ model: LocalModel, from owner: TerminalController) {
+    static func openTab(_ model: LocalModel, from owner: BaseTerminalController) {
         guard prepare(model) else { return }
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = owner.focusedSurface?.pwd
         config.initialInput = command(model) + "\n"
-        _ = TerminalController.newTab(owner.ghostty, from: owner.window, withBaseConfig: config)
+        TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config)
     }
 
     /// The `tellurion` command has to be installed (and current) to launch it.

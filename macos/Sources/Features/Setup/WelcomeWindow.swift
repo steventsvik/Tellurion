@@ -29,7 +29,8 @@ enum WelcomeWindow {
         }
         store.refresh {
             let needsSetup = store.checks.contains { $0.section == .agentStatus && $0.status == .problem }
-            if needsSetup || forced {
+            // A fresh install also picks between classic windows and boards.
+            if needsSetup || forced || !ExtremeEdition.chosen {
                 show()
             } else {
                 UserDefaults.standard.set(true, forKey: doneKey)
@@ -38,6 +39,7 @@ enum WelcomeWindow {
     }
 
     static func finish() {
+        if !ExtremeEdition.chosen { ExtremeEdition.set(ExtremeEdition.current) }
         UserDefaults.standard.set(true, forKey: doneKey)
         AgentToolWindows.close(id: windowID)
     }
@@ -134,6 +136,11 @@ private struct WelcomeView: View {
             """)
             .font(Extreme.font(12.5, weight: .regular)).foregroundColor(Extreme.text)
             .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 8) {
+                ExtremeSectionLabel("How you see your terminals")
+                EditionPicker()
+                Text("You can switch any time in Settings.").font(Extreme.font(11)).foregroundColor(Extreme.dim)
+            }
             VStack(alignment: .leading, spacing: 8) {
                 ExtremeSectionLabel("Found on this Mac")
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {

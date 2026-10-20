@@ -148,7 +148,7 @@ struct TerminalCommandPaletteView: View {
 
     /// Commands for jumping to other terminal surfaces.
     private var jumpOptions: [CommandOption] {
-        TerminalController.all.flatMap { controller -> [CommandOption] in
+        TerminalWindows.all.flatMap { controller -> [CommandOption] in
             guard let window = controller.window else { return [] }
 
             let color = (window as? TerminalWindow)?.tabColor
@@ -157,7 +157,7 @@ struct TerminalCommandPaletteView: View {
             return controller.surfaceTree.map { surface in
                 let terminalTitle = surface.title.isEmpty ? window.title : surface.title
                 let displayTitle: String
-                if let override = controller.titleOverride, !override.isEmpty {
+                if let override = TerminalWindows.title(of: surface, in: controller) {
                     displayTitle = override
                 } else if !terminalTitle.isEmpty {
                     displayTitle = terminalTitle

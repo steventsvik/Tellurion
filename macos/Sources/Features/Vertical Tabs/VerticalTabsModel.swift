@@ -313,11 +313,16 @@ final class VerticalTabsMenu: NSObject {
     }
 
     @objc func raceAgents(_ sender: Any?) {
-        guard let owner = EditorPanel.frontController ?? TerminalController.all.first else { return }
+        guard let owner = EditorPanel.frontController ?? TerminalWindows.all.first else { return }
         AgentRaces.showSetup(from: owner)
     }
 
     @objc func toggle(_ sender: Any?) {
+        // On a board, ⌃⌘S shows or hides the board's list.
+        if let board = NSApp.keyWindow?.windowController as? BoardController {
+            board.model.showSidebar.toggle()
+            return
+        }
         let defaults = UserDefaults.standard
         let show = !defaults.verticalTabsVisible
         let delta = show ? VerticalTabs.occupiedWidth : -VerticalTabs.occupiedWidth
@@ -345,7 +350,7 @@ extension VerticalTabsMenu: NSMenuItemValidation {
             menuItem.state = ShortcutSheet.shared.isVisible ? .on : .off
             return true
         }
-        if menuItem.action == #selector(raceAgents(_:)) { return !TerminalController.all.isEmpty }
+        if menuItem.action == #selector(raceAgents(_:)) { return !TerminalWindows.all.isEmpty }
         if menuItem.action == #selector(showLocalhost(_:)) || menuItem.action == #selector(showReview(_:))
             || menuItem.action == #selector(showActivity(_:)) { return true }
         if menuItem.action == #selector(toggleVisualFix(_:)) {
@@ -355,6 +360,10 @@ extension VerticalTabsMenu: NSMenuItemValidation {
         if menuItem.action == #selector(toggleCommandBlocks(_:)) {
             menuItem.state = EditorPanel.frontController.map { CommandBlocksPanel.shared.isVisible($0) } == true ? .on : .off
             return EditorPanel.frontController != nil
+        }
+        if let board = NSApp.keyWindow?.windowController as? BoardController {
+            menuItem.state = board.model.showSidebar ? .on : .off
+            return true
         }
         menuItem.state = UserDefaults.standard.verticalTabsVisible ? .on : .off
         return true

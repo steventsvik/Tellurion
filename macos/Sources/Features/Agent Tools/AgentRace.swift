@@ -52,8 +52,9 @@ final class AgentRaces: ObservableObject {
     static let shared = AgentRaces()
 
     @Published private(set) var races: [AgentRace] = []
-    /// Contestant tabs opened in this run of the app, by race id + contestant id.
-    private var tabs: [String: Weak<TerminalController>] = [:]
+    /// Contestant terminals (tabs, or tiles on a board) opened in this run of the app, by race
+    /// id + contestant id.
+    private var tabs: [String: Weak<Ghostty.SurfaceView>] = [:]
     private let queue = DispatchQueue(label: "com.steventsvik.ghostty-extreme.races", qos: .userInitiated)
 
     static var directory: URL { AgentTools.root.appendingPathComponent("races", isDirectory: true) }
@@ -73,20 +74,29 @@ final class AgentRaces: ObservableObject {
         }.sorted { $0.created > $1.created }
     }
 
-    func controller(for race: AgentRace, _ contestant: AgentRace.Contestant) -> TerminalController? {
-        tabs["\(race.id)/\(contestant.id)"]?.value
+    /// The contestant's terminal, while it's open.
+    func surface(for race: AgentRace, _ contestant: AgentRace.Contestant) -> Ghostty.SurfaceView? {
+        guard let surface = tabs["\(race.id)/\(contestant.id)"]?.value,
+              TerminalWindows.controller(for: surface) != nil else { return nil }
+        return surface
     }
 
     func activity(for race: AgentRace, _ contestant: AgentRace.Contestant) -> VerticalTabAgentInfo? {
-        guard let controller = controller(for: race, contestant) else { return nil }
-        return controller.surfaceTree.lazy.compactMap { VerticalTabsAgents.shared.info(for: $0) }.first
+        surface(for: race, contestant).flatMap { VerticalTabsAgents.shared.info(for: $0) }
+    }
+
+    /// A race terminal: a purple tab, or a tile when the race was started from a board.
+    private func open(_ config: Ghostty.SurfaceConfiguration, title: String, from owner: BaseTerminalController) -> Ghostty.SurfaceView? {
+        guard let surface = TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config, title: title) else { return nil }
+        (TerminalWindows.controller(for: surface)?.window as? TerminalWindow)?.tabColor = .purple
+        return surface
     }
 
     // MARK: Starting
 
     /// Creates a worktree per contestant, then opens a tab for each running its agent on the task.
     func start(task: String, folder: String, counts: [VerticalTabAgentKind: Int], includeChanges: Bool,
-               from owner: TerminalController, completion: @escaping (Result<AgentRace, RaceError>) -> Void) {
+               from owner: BaseTerminalController, completion: @escaping (Result<AgentRace, RaceError>) -> Void) {
         queue.async {
             let result = Self.prepare(task: task, folder: folder, counts: counts, includeChanges: includeChanges)
             DispatchQueue.main.async {
@@ -171,16 +181,14 @@ final class AgentRaces: ObservableObject {
         return .success(race)
     }
 
-    private func openTabs(for race: AgentRace, from owner: TerminalController) {
+    private func openTabs(for race: AgentRace, from owner: BaseTerminalController) {
         let promptFile = URL(fileURLWithPath: race.directory).appendingPathComponent("task.md")
         for contestant in race.contestants {
             var config = Ghostty.SurfaceConfiguration()
             config.workingDirectory = contestant.worktree
             config.initialInput = AgentTools.agentCommand(contestant.kind, promptFile: promptFile)
-            guard let controller = TerminalController.newTab(owner.ghostty, from: owner.window, withBaseConfig: config) else { continue }
-            controller.titleOverride = "Race · \(contestant.name)"
-            (controller.window as? TerminalWindow)?.tabColor = .purple
-            tabs["\(race.id)/\(contestant.id)"] = Weak(controller)
+            guard let surface = open(config, title: "Race · \(contestant.name)", from: owner) else { continue }
+            tabs["\(race.id)/\(contestant.id)"] = Weak(surface)
         }
         // Stay on the tab the race was started from; the compare window shows progress.
         owner.window?.makeKeyAndOrderFront(nil)
@@ -246,7 +254,7 @@ final class AgentRaces: ObservableObject {
     }
 
     /// Opens Claude Code in the project with a prompt to compare every contestant's work.
-    func judge(_ race: AgentRace, from owner: TerminalController) {
+    func judge(_ race: AgentRace, from owner: BaseTerminalController) {
         let entries = race.contestants.map {
             "- \($0.name): folder \($0.worktree), compare with `git -C \(AgentTools.shellQuote($0.worktree)) diff \($0.baseline)` plus any new untracked files"
         }.joined(separator: "\n")
@@ -267,16 +275,13 @@ final class AgentRaces: ObservableObject {
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = race.repoRoot
         config.initialInput = AgentTools.agentCommand(.claude, promptFile: file)
-        if let controller = TerminalController.newTab(owner.ghostty, from: owner.window, withBaseConfig: config) {
-            controller.titleOverride = "Race · Judge"
-            (controller.window as? TerminalWindow)?.tabColor = .purple
-        }
+        _ = open(config, title: "Race · Judge", from: owner)
     }
 
     /// Closes the race's tabs, deletes its worktrees and branches, and forgets it.
     func cleanUp(_ race: AgentRace) {
         for contestant in race.contestants {
-            controller(for: race, contestant)?.closeTab(nil)
+            if let surface = surface(for: race, contestant) { TerminalWindows.close(surface) }
             tabs.removeValue(forKey: "\(race.id)/\(contestant.id)")
         }
         races.removeAll { $0.id == race.id }
@@ -353,14 +358,14 @@ enum AgentToolWindows {
 }
 
 extension AgentRaces {
-    static func showSetup(from owner: TerminalController) {
+    static func showSetup(from owner: BaseTerminalController) {
         guard ExtremeSettings.isOn(.races) else { return }
         AgentToolWindows.show(id: "race-setup", title: "Race Agents", size: NSSize(width: 520, height: 430)) {
             AgentRaceSetupView(owner: owner, folder: owner.focusedSurface?.pwd)
         }
     }
 
-    static func show(_ race: AgentRace, from owner: TerminalController?) {
+    static func show(_ race: AgentRace, from owner: BaseTerminalController?) {
         AgentToolWindows.show(id: "race-\(race.id)", title: "Race · \(race.repoName)", size: NSSize(width: 1180, height: 760)) {
             AgentRaceView(race: race, owner: owner)
         }
@@ -370,7 +375,7 @@ extension AgentRaces {
 // MARK: - Setup
 
 private struct AgentRaceSetupView: View {
-    let owner: TerminalController
+    let owner: BaseTerminalController
     let folder: String?
 
     @State private var task = ""
@@ -457,7 +462,7 @@ private struct AgentRaceSetupView: View {
 
 private struct AgentRaceView: View {
     let race: AgentRace
-    let owner: TerminalController?
+    let owner: BaseTerminalController?
 
     @ObservedObject private var races = AgentRaces.shared
     @State private var diffs: [String: AgentRaceDiff] = [:]
@@ -518,7 +523,7 @@ private struct AgentRaceView: View {
                     AgentBadge(kind: contestant.kind, size: 22)
                     Text(contestant.name).font(Extreme.font(13))
                     Spacer()
-                    AgentStatusPill(activity: info?.activity, closed: races.controller(for: race, contestant) == nil)
+                    AgentStatusPill(activity: info?.activity, closed: races.surface(for: race, contestant) == nil)
                 }
                 if let diff {
                     Text(diff.files.isEmpty ? "No changes yet" :
@@ -528,9 +533,9 @@ private struct AgentRaceView: View {
                 HStack(spacing: 8) {
                     Button("Keep this one") { keep(contestant) }
                         .disabled(diff?.files.isEmpty ?? true)
-                    if let controller = races.controller(for: race, contestant) {
-                        Button("Open tab") {
-                            VerticalTabsActions.select(controller)
+                    if let surface = races.surface(for: race, contestant) {
+                        Button(TerminalWindows.controller(for: surface) is BoardController ? "Show tile" : "Open tab") {
+                            TerminalWindows.show(surface)
                         }
                     }
                 }

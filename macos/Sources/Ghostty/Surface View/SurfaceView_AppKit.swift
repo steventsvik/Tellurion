@@ -475,12 +475,20 @@ extension Ghostty {
             }
         }
 
+        /// Points to pixels. In a window this is the window's scale and nothing else: a board
+        /// tile sits in a magnified scroll view, and `convertToBacking` would include that zoom
+        /// (the compositor scales the layer instead).
+        private func backingSize(_ size: CGSize) -> CGSize {
+            guard let scale = window?.backingScaleFactor else { return convertToBacking(size) }
+            return CGSize(width: size.width * scale, height: size.height * scale)
+        }
+
         func sizeDidChange(_ size: CGSize) {
             // Ghostty wants to know the actual framebuffer size... It is very important
             // here that we use "size" and NOT the view frame. If we're in the middle of
             // an animation (i.e. a fullscreen animation), the frame will not yet be updated.
             // The size represents our final size we're going for.
-            let scaledSize = self.convertToBacking(size)
+            let scaledSize = backingSize(size)
             setSurfaceSize(width: UInt32(scaledSize.width), height: UInt32(scaledSize.height))
             // Store this size so we can reuse it when backing properties change
             contentSize = size
@@ -866,13 +874,13 @@ extension Ghostty {
             guard let surface = self.surface else { return }
 
             // Detect our X/Y scale factor so we can update our surface
-            let fbFrame = self.convertToBacking(self.frame)
-            let xScale = fbFrame.size.width / self.frame.size.width
-            let yScale = fbFrame.size.height / self.frame.size.height
+            let fbFrame = backingSize(self.frame.size)
+            let xScale = fbFrame.width / self.frame.size.width
+            let yScale = fbFrame.height / self.frame.size.height
             ghostty_surface_set_content_scale(surface, xScale, yScale)
 
             // When our scale factor changes, so does our fb size so we send that too
-            let scaledSize = self.convertToBacking(contentSize)
+            let scaledSize = backingSize(contentSize)
             setSurfaceSize(width: UInt32(scaledSize.width), height: UInt32(scaledSize.height))
         }
 

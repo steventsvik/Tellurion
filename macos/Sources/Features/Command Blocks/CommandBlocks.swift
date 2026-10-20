@@ -152,7 +152,7 @@ final class CommandBlocks: ObservableObject {
     /// Opens an agent in a split beside the pane with the command and its output, asking it to
     /// fix the failure (or explain the output when it succeeded).
     func askAgent(_ agent: VerticalTabAgentKind, about block: CommandBlock, from surface: Ghostty.SurfaceView) {
-        guard let controller = surface.window?.windowController as? TerminalController else { return }
+        guard let controller = TerminalWindows.controller(of: surface.window) else { return }
         let lines = block.output.split(separator: "\n", omittingEmptySubsequences: false)
         let tail = lines.suffix(200).joined(separator: "\n")
         let folder = block.cwd ?? surface.pwd ?? NSHomeDirectory()
@@ -227,17 +227,17 @@ final class CommandBlocksPanel: ObservableObject {
     static let shared = CommandBlocksPanel()
     @Published private(set) var visibleTabs: Set<ObjectIdentifier> = []
 
-    func isVisible(_ controller: TerminalController) -> Bool {
+    func isVisible(_ controller: BaseTerminalController) -> Bool {
         visibleTabs.contains(ObjectIdentifier(controller))
     }
 
-    func toggle(_ controller: TerminalController) {
+    func toggle(_ controller: BaseTerminalController) {
         guard ExtremeSettings.isOn(.commandHistory) || isVisible(controller) else { return }
         let id = ObjectIdentifier(controller)
         if visibleTabs.contains(id) { visibleTabs.remove(id) } else { visibleTabs.insert(id) }
     }
 
-    func show(_ controller: TerminalController) {
+    func show(_ controller: BaseTerminalController) {
         guard ExtremeSettings.isOn(.commandHistory) else { return }
         visibleTabs.insert(ObjectIdentifier(controller))
     }

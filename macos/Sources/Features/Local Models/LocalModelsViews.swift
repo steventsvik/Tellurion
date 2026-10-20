@@ -15,10 +15,10 @@ enum LocalModelsWindow {
         }
     }
 
-    /// The terminal window in front of the others, to open a model in.
-    static var frontTerminal: TerminalController? {
-        NSApp.orderedWindows.lazy.compactMap { $0.windowController as? TerminalController }.first
-            ?? TerminalController.all.first
+    /// The terminal window or board in front of the others, to open a model in.
+    static var frontTerminal: BaseTerminalController? {
+        NSApp.orderedWindows.lazy.compactMap { TerminalWindows.controller(of: $0) }.first
+            ?? TerminalWindows.all.first
     }
 }
 
@@ -123,7 +123,7 @@ private struct LocalModelWindowRow: View {
 /// The sidebar's Local models section: Ollama's models, to click open or drag under a chat.
 /// Takes no room when Ollama has none.
 struct LocalModelsSidebarSection: View {
-    let owner: TerminalController
+    let owner: BaseTerminalController
     @ObservedObject private var models = LocalModelsModel.shared
     @AppStorage("LocalModelsSectionCollapsed") private var collapsed = false
 
@@ -175,7 +175,7 @@ struct LocalModelsSidebarSection: View {
 
 private struct LocalModelSidebarRow: View {
     let item: LocalModel
-    let owner: TerminalController
+    let owner: BaseTerminalController
     @State private var hovering = false
 
     var body: some View {
