@@ -432,10 +432,10 @@ extension BoardController {
         orchestratorBrain(id).agentsChanged(updates.reversed())
     }
 
-    /// The agent's last answer, from its transcript.
+    /// The agent's last answer, from the transcript it reported. Never guessed from its
+    /// folder: that could be another session there (yours, or another agent's).
     func lastAnswer(_ surface: Ghostty.SurfaceView) -> String? {
-        guard let info = VerticalTabsAgents.shared.info(for: surface) else { return nil }
-        let transcript = info.transcriptPath ?? AgentTranscripts.find(kind: info.kind, folder: surface.pwd ?? "", recent: 24 * 3600)
+        guard let transcript = VerticalTabsAgents.shared.info(for: surface)?.transcriptPath else { return nil }
         return AgentTools.lastAssistantMessage(transcript: transcript)?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

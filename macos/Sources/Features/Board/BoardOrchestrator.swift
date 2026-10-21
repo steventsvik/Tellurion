@@ -81,6 +81,8 @@ struct OrchestratorSnapshot: Equatable {
     var groups = 0
     var done = 0
     var working = 0
+    /// Agents with a message waiting to go in.
+    var queued = 0
     var wiring = false
     var color = BoardTeams.color
     var groupChoices: [OrchestratorChoice] = []
@@ -112,6 +114,9 @@ struct OrchestratorSnapshot: Equatable {
         groups = team.groups.count
         done = sections.reduce(0) { $0 + $1.done }
         working = sections.reduce(0) { $0 + $1.rows.filter { $0.activity == .working }.count }
+        queued = agents.filter { agent in
+            VerticalTabsAgents.shared.info(for: agent.surface)?.activity != .working && !AgentInbox.shared.waiting(for: agent.surface).isEmpty
+        }.count
         guard wiring else { return }
         let projects = Set(board.model.surfaces.compactMap { board.model.projects[$0.id] }).union(team.groups).sorted()
         groupChoices = projects.map { project in
@@ -152,7 +157,6 @@ private struct OrchestratorPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             topRow
-            Rectangle().fill(Extreme.line).frame(height: 1)
             Group {
                 if snapshot.wiring {
                     connectList
@@ -163,8 +167,11 @@ private struct OrchestratorPanel: View {
                 }
             }
             .frame(maxHeight: .infinity)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Extreme.raised.opacity(0.35)))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .padding(.horizontal, 10)
             activity
-            inputBar.padding(10)
+            inputBar.padding(.horizontal, 10).padding(.bottom, 10).padding(.top, 8)
         }
         .background(Extreme.panel)
     }
@@ -191,8 +198,8 @@ private struct OrchestratorPanel: View {
             .buttonStyle(.plain)
             .help(snapshot.wiring ? "Stop wiring" : "Wire terminals and groups: click them on the board")
         }
-        .padding(.horizontal, 12)
-        .frame(height: 42)
+        .padding(.horizontal, 14)
+        .frame(height: 40)
     }
 
     private var summary: String {
@@ -339,7 +346,7 @@ private struct OrchestratorPanel: View {
                 if brain.running {
                     HStack(spacing: 6) {
                         Text(brain.busy ? "Thinking · turn \(brain.turn) of \(brain.limit)"
-                             : "Waiting for \(snapshot.working) agent\(snapshot.working == 1 ? "" : "s") · turn \(brain.turn) of \(brain.limit)")
+                             : waitingLine)
                             .font(Extreme.font(10.5, weight: .medium)).foregroundColor(accent)
                         Spacer()
                         Button("Stop") { brain.stop() }
@@ -350,8 +357,15 @@ private struct OrchestratorPanel: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Extreme.raised.opacity(0.5))
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Extreme.raised.opacity(0.5)))
+            .padding(.horizontal, 10).padding(.top, 8)
         }
+    }
+
+    private var waitingLine: String {
+        let count = snapshot.working + snapshot.queued
+        let who = count == 0 ? "Waiting" : "Waiting for \(count) agent\(count == 1 ? "" : "s")"
+        return who + " · turn \(brain.turn) of \(brain.limit)"
     }
 
     private static func symbol(_ kind: OrchestratorBrain.Entry.Kind) -> String {

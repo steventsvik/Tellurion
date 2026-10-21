@@ -51,6 +51,10 @@ final class OrchestratorBrain: ObservableObject {
     private var goal: String?
     /// Updates that came while it was thinking: the next turn carries them.
     private var waiting: [Update] = []
+    /// Checks for agents that haven't taken their message (see `watch`).
+    private var watchdog: DispatchWorkItem?
+    /// Agents already pointed out as stuck, so each is mentioned once.
+    private var flagged: Set<UUID> = []
     /// Tests: replies to use instead of running the engine, in order.
     var canned: [OrchestratorReply] = []
 
@@ -103,6 +107,7 @@ final class OrchestratorBrain: ObservableObject {
         }
         turn = 0
         running = true
+        flagged = []
         think(command: text, updates: [])
     }
 
@@ -111,6 +116,8 @@ final class OrchestratorBrain: ObservableObject {
         process = nil
         busy = false
         waiting = []
+        watchdog?.cancel()
+        watchdog = nil
         if running, !quietly { add(.event, "Stopped. Send a command to carry on.") }
         running = false
     }
@@ -181,7 +188,11 @@ final class OrchestratorBrain: ObservableObject {
             body += "\n\nSince your last turn:\n" + updates.map { update in
                 var line = "- \(context.handle(update.tile) ?? "?") \(update.name): \(Self.describe(update).dropFirst(update.name.count + 1))"
                 if let detail = update.detail, update.activity == .needsPermission { line += " (\(detail))" }
-                if let answer = update.answer { line += ". Its answer:\n" + BoardTeams.clip(answer, 2500) }
+                if let answer = update.answer {
+                    line += ". Its answer:\n" + BoardTeams.clip(answer, 2500)
+                } else if update.activity == .done || update.activity == .ready || update.activity == .needsInput {
+                    line += " (its answer couldn't be read; ask it if you need it)"
+                }
                 return line
             }.joined(separator: "\n")
         }
@@ -241,6 +252,7 @@ final class OrchestratorBrain: ObservableObject {
             running = false
             return
         }
+        watch()
         let pending = waiting
         waiting = []
         guard running, let team = controller.orchestrator(id) else { return }
@@ -253,10 +265,30 @@ final class OrchestratorBrain: ObservableObject {
         if !pending.isEmpty { followUp(pending) }
     }
 
+    /// While it waits on its agents: an agent whose message hasn't gone in after a while has
+    /// something else on screen (a trust or sign-in prompt, a menu): say so, once.
+    private func watch() {
+        watchdog?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.running, !self.busy, let controller = self.controller,
+                  let team = controller.orchestrator(self.id) else { return }
+            for agent in controller.wiredAgents(team) where !self.flagged.contains(agent.surface.id) {
+                let stuck = AgentInbox.shared.waiting(for: agent.surface).contains { Date().timeIntervalSince($0.created) > 40 }
+                guard stuck, AgentInbox.readiness(of: agent.surface) != .working else { continue }
+                self.flagged.insert(agent.surface.id)
+                self.add(.error, "\(controller.tileLabel(agent.surface)) hasn't taken its message: something is waiting in its "
+                         + "terminal (a prompt or sign-in). Answer it there and the message goes in.")
+            }
+            self.watch()
+        }
+        watchdog = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
+    }
+
     private func add(_ kind: Entry.Kind, _ text: String) {
         log.append(Entry(kind: kind, text: text))
         if log.count > 80 { log.removeFirst(log.count - 80) }
-        DemoDirector.note("orchestrator \(kind): \(text.replacingOccurrences(of: "\n", with: " / "))")
+        DemoDirector.note("orchestrator[\(controller?.orchestratorName(id) ?? "")] \(kind): \(text.replacingOccurrences(of: "\n", with: " / "))")
     }
 }
 

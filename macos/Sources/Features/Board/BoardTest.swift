@@ -175,6 +175,11 @@ enum BoardTest {
             surface.surfaceModel?.sendText(args.dropFirst().joined(separator: " "))
             surface.surfaceModel?.sendKeyEvent(.init(key: .enter, action: .press, text: "\r"))
             surface.surfaceModel?.sendKeyEvent(.init(key: .enter, action: .release))
+        case "enter":
+            // enter <n>: presses Return in tile n (answers a prompt's default).
+            guard let surface = tile(args.first ?? "", of: controller) else { return }
+            surface.surfaceModel?.sendKeyEvent(.init(key: .enter, action: .press, text: "\r"))
+            surface.surfaceModel?.sendKeyEvent(.init(key: .enter, action: .release))
         case "act":
             guard args.count == 2, let surface = tile(args[0], of: controller) else { return }
             let ok = surface.surfaceModel?.perform(action: args[1]) ?? false
@@ -386,6 +391,9 @@ enum BoardTest {
                 return
             }
             controller.orchestratorBrain(team.id).canned.append(reply)
+        case "orchturns":
+            guard let team = controller.model.teams.first, let turns = Int(args.first ?? "") else { return }
+            controller.setTurns(turns, for: team.id)
         case "orchcmd":
             guard let team = controller.model.teams.first else { return }
             controller.orchestratorBrain(team.id).command(args.joined(separator: " "))

@@ -11,6 +11,8 @@ final class BoardCardView: BoardNodeView {
     private var headerView: NSView!
     private var overview: NSView!
     private let content: CardContent
+    /// An orchestrator's resting shadow, under it (the lift shadow is the view's own).
+    private var widgetShadow: CALayer?
 
     init(controller: BoardController, card: BoardCard) {
         self.card = card
@@ -29,6 +31,18 @@ final class BoardCardView: BoardNodeView {
         clip.layer?.borderWidth = 1.25
         clip.layer?.backgroundColor = Extreme.chrome.panel.nsColor.cgColor
         addSubview(clip)
+        // An orchestrator is a widget: rounder, one thin border in its color, and a soft shadow.
+        if card.kind == .orchestrator {
+            clip.layer?.cornerRadius = 14
+            clip.layer?.borderWidth = 1
+            let shadow = CALayer()
+            shadow.shadowColor = NSColor.black.cgColor
+            shadow.shadowOpacity = 0.45
+            shadow.shadowRadius = 18
+            shadow.shadowOffset = CGSize(width: 0, height: -8)
+            layer?.insertSublayer(shadow, at: 0)
+            widgetShadow = shadow
+        }
         let header = PassiveHostingView(rootView: BoardCardHeader(state: state))
         let overview = PassiveHostingView(rootView: BoardCardOverview(state: state))
         header.sizingOptions = []
@@ -51,6 +65,13 @@ final class BoardCardView: BoardNodeView {
         headerView.frame = CGRect(x: 0, y: 0, width: bounds.width, height: Self.header)
         content.frame = CGRect(x: 0, y: Self.header, width: bounds.width, height: max(0, bounds.height - Self.header))
         overview.frame = clip.bounds
+        if let widgetShadow {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            widgetShadow.frame = bounds
+            widgetShadow.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 14, cornerHeight: 14, transform: nil)
+            CATransaction.commit()
+        }
     }
 
     func update(card: BoardCard, zoom: CGFloat) {
@@ -68,6 +89,13 @@ final class BoardCardView: BoardNodeView {
         let tint = card.kind == .note ? SketchStyle.color(card.color)
             : card.folder.flatMap { controller?.model.colors[$0] }.map(BoardProjects.nsColor)
         clip.layer?.borderColor = (tint?.withAlphaComponent(0.6) ?? Extreme.chrome.lineStrong.nsColor).cgColor
+        if card.kind == .orchestrator, let team = controller?.orchestrator(card.id) {
+            let accent = BoardProjects.nsColor(team.color)
+            let wiring = controller?.model.wiring == card.id
+            clip.layer?.borderColor = accent.withAlphaComponent(wiring ? 0.9 : 0.35).cgColor
+            clip.layer?.borderWidth = wiring ? 1.5 : 1
+            if state.tint != accent { state.tint = accent }
+        }
     }
 
     /// What an Agent Map shows, for tests.
@@ -236,10 +264,11 @@ private struct BoardCardHeader: View {
                     .frame(width: 18, height: 18)
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, state.kind == .orchestrator ? 14 : 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Extreme.panel)
-        .overlay(Rectangle().fill(Extreme.line).frame(height: 1), alignment: .bottom)
+        // A widget's header is part of it; other cards have a title bar.
+        .overlay(Rectangle().fill(state.kind == .orchestrator ? .clear : Extreme.line).frame(height: 1), alignment: .bottom)
     }
 }
 
