@@ -14,6 +14,7 @@ final class BoardModel: ObservableObject {
     /// The zoom once a pinch or zoom animation has settled (not every step of it).
     @Published var zoom: CGFloat = 1
     @Published var showComposer = false
+    @Published var showTeamComposer = false
     @Published var showSidebar = true
     @Published var name = ""
     /// Bumped when an agent on this board changes, so the list and tiles refresh.
@@ -33,6 +34,8 @@ final class BoardModel: ObservableObject {
     @Published var focusedSketch: UUID?
     /// Tiles whose processes are stopped (see BoardPause).
     @Published var paused: Set<UUID> = []
+    /// Leads and the tiles they run (see BoardTeams).
+    @Published var teams: [BoardTeam] = []
     /// The next change to `frames` slides the tiles there instead of jumping.
     var animateNextLayout = false
 
@@ -102,6 +105,8 @@ final class BoardController: BaseTerminalController {
     private(set) lazy var assistant = BoardAssistant(controller: self)
     /// The bar's text field, for ⌘L.
     weak var assistantField: NSTextField?
+    /// What teams' leads have yet to hear (see BoardTeams).
+    let teamRelay = BoardTeamRelay()
 
     // MARK: Opening
 
@@ -150,6 +155,7 @@ final class BoardController: BaseTerminalController {
             model.frames[card.id] = card.frame
             model.order.append(card.id)
         }
+        model.teams = workspace.teams ?? []
         model.name = workspace.name
         model.colors = workspace.colors ?? [:]
         self.model = model
@@ -165,6 +171,7 @@ final class BoardController: BaseTerminalController {
             if VerticalTabsAgents.shared.info(for: surface) != nil { self.agentSeen.insert(surface.id) }
             self.model.agentTick &+= 1
             self.cardsAgentChanged(surface)
+            self.teamMemberChanged(surface)
             self.scheduleSave()
         })
         observers.append(center.addObserver(forName: Ghostty.Notification.ghosttyNewTab, object: nil, queue: .main) { [weak self] note in
@@ -296,6 +303,8 @@ final class BoardController: BaseTerminalController {
         }
         for view in surfaces where !model.order.contains(view.id) { model.order.append(view.id) }
         model.surfaces = surfaces
+        // Closed tiles leave their teams.
+        if !model.teams.isEmpty { pruneTeams() }
         watchProjects()
         updateVisibility()
         scheduleSave()
@@ -356,9 +365,10 @@ final class BoardController: BaseTerminalController {
 
     /// A new terminal tile beside the other tiles of its project, next to `near` or in the
     /// middle of the view.
+    /// `focus` false leaves the keyboard where it is (tiles a team's lead opens).
     @discardableResult
     func addTile(config: Ghostty.SurfaceConfiguration? = nil, command: String? = nil,
-                 near: Ghostty.SurfaceView? = nil, frame: CGRect? = nil) -> Ghostty.SurfaceView? {
+                 near: Ghostty.SurfaceView? = nil, frame: CGRect? = nil, focus: Bool = true) -> Ghostty.SurfaceView? {
         guard let app = ghostty.app else { return nil }
         var config = config ?? Ghostty.SurfaceConfiguration()
         // A tile opened a moment ago may not know its folder yet; the one it was opened in counts.
@@ -371,8 +381,8 @@ final class BoardController: BaseTerminalController {
         let anchor = (near ?? focusedSurface).flatMap { model.frames[$0.id] }
         model.frames[view.id] = frame ?? freeSpot(size: Self.tileSize, project: BoardProjects.project(of: config.workingDirectory), near: anchor)
         if let command { commands[view.id] = command }
-        insert([view], undoAction: "New Terminal")
-        reveal(view)
+        insert([view], undoAction: "New Terminal", focus: focus)
+        if focus { reveal(view) }
         return view
     }
 
@@ -385,7 +395,7 @@ final class BoardController: BaseTerminalController {
         return addTile(config: config, near: oldView)
     }
 
-    private func insert(_ views: [Ghostty.SurfaceView], undoAction: String) {
+    func insert(_ views: [Ghostty.SurfaceView], undoAction: String, focus: Bool = true) {
         var tree = surfaceTree
         for view in views {
             if let last = tree.root?.leftmostLeaf(), let next = try? tree.inserting(view: view, at: last, direction: .right) {
@@ -394,7 +404,7 @@ final class BoardController: BaseTerminalController {
                 tree = SplitTree(view: view)
             }
         }
-        replaceSurfaceTree(tree, moveFocusTo: views.first, moveFocusFrom: focusedSurface, undoAction: undoAction)
+        replaceSurfaceTree(tree, moveFocusTo: focus ? views.first : nil, moveFocusFrom: focus ? focusedSurface : nil, undoAction: undoAction)
     }
 
     /// Starts agents and shells from the composer as a block of tiles, then shows them all.
@@ -428,6 +438,12 @@ final class BoardController: BaseTerminalController {
         insert(views, undoAction: n == 1 ? "Launch Agent" : "Launch Agents")
         zoom(toFit: area, animated: true)
     }
+
+    /// The folder new tiles start in, from now on.
+    func setFolder(_ folder: String) { workspace.folder = folder }
+
+    /// The line a tile is started with again after a relaunch.
+    func setCommand(_ line: String, for id: UUID) { commands[id] = line }
 
     func close(_ view: Ghostty.SurfaceView) {
         closeSurface(view, withConfirmation: view.needsConfirmQuit)
@@ -636,7 +652,8 @@ final class BoardController: BaseTerminalController {
     }
 
     /// A sheet with one field to rename a tile, sketch or card.
-    func promptRename(_ title: String, info: String? = nil, current: String, done: @escaping (String) -> Void) {
+    func promptRename(_ title: String, info: String? = nil, current: String, button: String = "Rename",
+                      done: @escaping (String) -> Void) {
         guard let window else { return }
         let alert = NSAlert()
         alert.messageText = title
@@ -644,7 +661,7 @@ final class BoardController: BaseTerminalController {
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
         field.stringValue = current
         alert.accessoryView = field
-        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: button)
         alert.addButton(withTitle: "Cancel")
         alert.window.initialFirstResponder = field
         alert.beginSheetModal(for: window) { response in
@@ -909,6 +926,7 @@ final class BoardController: BaseTerminalController {
                              title: model.titles[view.id])
         }
         workspace.colors = model.colors.isEmpty ? nil : model.colors
+        workspace.teams = model.teams.isEmpty ? nil : model.teams
         workspace.cards = model.cards.isEmpty ? nil : model.cards.map { card in
             var card = card
             card.frame = model.frames[card.id] ?? card.frame

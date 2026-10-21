@@ -77,8 +77,9 @@ struct BoardGroup: Equatable {
     let frame: CGRect
 }
 
-/// Behind the tiles: each group's tinted area and label, and the lines a dragged tile snaps
-/// to. Layers only, sized to what they show; the view itself draws nothing.
+/// Behind the tiles: each group's tinted area and label, the lines from teams' leads to their
+/// members, and the lines a dragged tile snaps to. Layers only, sized to what they show; the
+/// view itself draws nothing.
 final class BoardGroupsView: NSView {
     weak var controller: BoardController?
     static let pad: CGFloat = 16
@@ -86,6 +87,13 @@ final class BoardGroupsView: NSView {
 
     private var areas: [CALayer] = []
     private let guideLayer = CAShapeLayer()
+    /// One per lead→member link, each with its role label.
+    private var linkLayers: [(line: CAShapeLayer, label: CATextLayer)] = []
+    private var links: [BoardTeamLink] = []
+    private var linkZoom: CGFloat = 1
+    /// The link being dragged out of a tile, and the tile it would join.
+    private let pendingLink = CAShapeLayer()
+    private let pendingTarget = CAShapeLayer()
     private(set) var groups: [BoardGroup] = []
     private var labelRects: [CGRect] = []
     private var zoom: CGFloat = 1
@@ -101,6 +109,11 @@ final class BoardGroupsView: NSView {
         guideLayer.lineDashPattern = [6, 4]
         guideLayer.zPosition = 10
         layer?.addSublayer(guideLayer)
+        for pending in [pendingLink, pendingTarget] {
+            pending.fillColor = nil
+            pending.zPosition = 9
+            layer?.addSublayer(pending)
+        }
     }
 
     @available(*, unavailable)
@@ -153,6 +166,102 @@ final class BoardGroupsView: NSView {
         }
         CATransaction.commit()
         window?.invalidateCursorRects(for: self)
+    }
+
+    /// The lines from each team's lead to its members, edge to edge, with the member's role.
+    func update(links: [BoardTeamLink], zoom: CGFloat) {
+        guard links != self.links || abs(zoom - linkZoom) > 0.001 else { return }
+        self.links = links
+        linkZoom = zoom
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        while linkLayers.count > links.count {
+            let last = linkLayers.removeLast()
+            last.line.removeFromSuperlayer()
+            last.label.removeFromSuperlayer()
+        }
+        while linkLayers.count < links.count {
+            let line = CAShapeLayer()
+            line.lineCap = .round
+            line.zPosition = 5
+            let label = CATextLayer()
+            label.alignmentMode = .center
+            label.zPosition = 6
+            label.cornerRadius = 4
+            layer?.insertSublayer(line, below: guideLayer)
+            layer?.insertSublayer(label, below: guideLayer)
+            linkLayers.append((line, label))
+        }
+        let scale = min(1 / max(zoom, 0.08), 5)
+        let font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        for (link, layers) in zip(links, linkLayers) {
+            let color = BoardProjects.nsColor(link.color)
+            let a = Self.edge(of: link.from, toward: CGPoint(x: link.to.midX, y: link.to.midY))
+            let b = Self.edge(of: link.to, toward: CGPoint(x: link.from.midX, y: link.from.midY))
+            let path = CGMutablePath()
+            path.move(to: a)
+            path.addLine(to: b)
+            // A dot where the line meets each tile.
+            let dot = 4 * min(scale, 3)
+            for point in [a, b] { path.addEllipse(in: CGRect(x: point.x - dot, y: point.y - dot, width: dot * 2, height: dot * 2)) }
+            layers.line.path = path
+            layers.line.strokeColor = color.withAlphaComponent(0.85).cgColor
+            layers.line.fillColor = color.cgColor
+            layers.line.lineWidth = 2 * min(scale, 3)
+            let size = (link.label as NSString).size(withAttributes: [.font: font])
+            layers.label.string = NSAttributedString(string: link.label, attributes: [.font: font, .foregroundColor: color])
+            layers.label.backgroundColor = Extreme.chrome.panel.nsColor.withAlphaComponent(0.95).cgColor
+            layers.label.bounds = CGRect(x: 0, y: 0, width: size.width + 12, height: 18)
+            layers.label.transform = CATransform3DMakeScale(scale, scale, 1)
+            layers.label.position = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+            // Tiles close together leave no room for it (the member's badge names the role too).
+            let room = hypot(b.x - a.x, b.y - a.y)
+            let needs = (abs(b.x - a.x) > abs(b.y - a.y) ? size.width + 20 : 26) * scale
+            layers.label.isHidden = room < needs
+            layers.label.contentsScale = (window?.backingScaleFactor ?? 2) * max(scale * zoom, 1)
+        }
+        CATransaction.commit()
+    }
+
+    /// While a tile's link is dragged: the line to the pointer, and the tile it would join.
+    func showPendingLink(from: CGRect?, to point: CGPoint, target: CGRect?) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let width = 2 / max(zoom, 0.08)
+        let color = Extreme.chrome.core.nsColor
+        if let from {
+            let path = CGMutablePath()
+            path.move(to: Self.edge(of: from, toward: point))
+            path.addLine(to: point)
+            pendingLink.path = path
+        } else {
+            pendingLink.path = nil
+        }
+        pendingLink.strokeColor = color.cgColor
+        pendingLink.lineWidth = width
+        pendingLink.lineDashPattern = [NSNumber(value: 6 / max(zoom, 0.08)), NSNumber(value: 4 / max(zoom, 0.08))]
+        pendingTarget.path = target.map { CGPath(roundedRect: $0.insetBy(dx: -5 / max(zoom, 0.08), dy: -5 / max(zoom, 0.08)),
+                                                 cornerWidth: 12, cornerHeight: 12, transform: nil) }
+        pendingTarget.strokeColor = color.cgColor
+        pendingTarget.lineWidth = width * 1.5
+        CATransaction.commit()
+    }
+
+    func hidePendingLink() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        pendingLink.path = nil
+        pendingTarget.path = nil
+        CATransaction.commit()
+    }
+
+    /// Where a line from the middle of `rect` toward `point` leaves it.
+    static func edge(of rect: CGRect, toward point: CGPoint) -> CGPoint {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let dx = point.x - center.x, dy = point.y - center.y
+        guard dx != 0 || dy != 0 else { return center }
+        let t = 1 / max(abs(dx) / max(rect.width / 2, 1), abs(dy) / max(rect.height / 2, 1))
+        return t >= 1 ? point : CGPoint(x: center.x + dx * t, y: center.y + dy * t)
     }
 
     /// The lines the dragged tile lines up with.

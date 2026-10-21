@@ -117,6 +117,10 @@ final class VerticalTabsAgents {
             LocalhostSessions.shared.handle(body: body, from: surface)
             return true
         }
+        if title == BoardTeams.eventTitle {
+            BoardTeams.handle(body: body, from: surface)
+            return true
+        }
         guard title == Self.agentTitle,
               let data = body.data(using: .utf8),
               let event = try? JSONDecoder().decode(Event.self, from: data) else {

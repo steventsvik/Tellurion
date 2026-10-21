@@ -163,6 +163,7 @@ struct BoardAssistantBar: View {
         HStack(spacing: 7) {
             chip("New terminal", 0) { controller.addTile() }
             chip("Launch agents", 1) { model.showComposer = true }
+            chip("Team", 6) { model.showTeamComposer = true }
             if full { chip("Sketch", 2) { controller.addSketch() } }
             if model.surfaces.count > 1 { chip("Group", 3) { controller.arrangeByProject() } }
             if !model.surfaces.isEmpty {

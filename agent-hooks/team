@@ -1,0 +1,117 @@
+#!/bin/bash
+# Tellurion teams: run in a team lead's terminal (usually by the lead agent itself) to run
+# its team on the board.
+#
+#   team status                              the members, and what each is doing
+#   team send <member> <message…>            give a member work or an answer ("-" reads stdin)
+#   team broadcast <message…>                message every member
+#   team result <member>                     a member's last full answer
+#   team add <agent> --role <role> [--task <task…>]
+#                                            start a new member (claude, codex, gemini, shell…)
+#   team remove <member>                     take a member off the team (its tile stays)
+#
+# Members are named by role, by number, or by their tile's name. The app does the work; this
+# only asks it to, through a request file and an OSC 777 notification written to the
+# terminal it runs in, signed with this launch's secret.
+
+dir="$HOME/.ghostty-extreme/teams"
+
+usage() {
+  sed -n '5,11p' "$0" | sed 's/^# \{0,1\}//'
+  exit "${1:-2}"
+}
+
+# A JSON string.
+json() {
+  local s="$1"
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\t'/\\t}
+  printf '"%s"' "$s"
+}
+
+# The message: the arguments, or stdin for "-".
+message() {
+  if [ "$*" = "-" ]; then cat; else printf '%s' "$*"; fi
+}
+
+# The terminal to talk to: ours, or (for agents that run commands without one) the
+# first ancestor's.
+term() {
+  if { : > /dev/tty; } 2>/dev/null; then echo /dev/tty; return; fi
+  local pid=$PPID t
+  while [ "${pid:-1}" -gt 1 ]; do
+    t=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
+    case "$t" in ""|"??") ;; *) echo "/dev/$t"; return ;; esac
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+  done
+  return 1
+}
+
+command="${1:-}"
+[ $# -gt 0 ] && shift
+case "$command" in
+  status)
+    request='"command":"status"' ;;
+  send)
+    [ $# -ge 2 ] || usage
+    member="$1"; shift
+    request="\"command\":\"send\",\"member\":$(json "$member"),\"text\":$(json "$(message "$@")")" ;;
+  broadcast)
+    [ $# -ge 1 ] || usage
+    request="\"command\":\"broadcast\",\"text\":$(json "$(message "$@")")" ;;
+  result)
+    [ $# -eq 1 ] || usage
+    request="\"command\":\"result\",\"member\":$(json "$1")" ;;
+  remove)
+    [ $# -eq 1 ] || usage
+    request="\"command\":\"remove\",\"member\":$(json "$1")" ;;
+  add)
+    [ $# -ge 1 ] || usage
+    agent="$1"; shift
+    role="" task=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --role) role="$2"; shift 2 ;;
+        --task) shift; task="$*"; break ;;
+        *) usage ;;
+      esac
+    done
+    [ -n "$role" ] || usage
+    request="\"command\":\"add\",\"agent\":$(json "$agent"),\"role\":$(json "$role"),\"text\":$(json "$task")" ;;
+  help|-h|--help)
+    usage 0 ;;
+  *)
+    usage ;;
+esac
+
+if [ -z "${GHOSTTY_EXTREME_EVENT_TOKEN:-}" ]; then
+  echo "team: run this in a Tellurion terminal that leads a team on a board." >&2
+  exit 1
+fi
+mkdir -p "$dir" || exit 1
+id="tm-$(date +%s)-$RANDOM$RANDOM"
+printf '{"id":"%s",%s}\n' "$id" "$request" > "$dir/$id.json"
+if ! tty=$(term); then
+  rm -f "$dir/$id.json"
+  echo "team: no terminal to reach Tellurion through." >&2
+  exit 1
+fi
+printf '\e]777;notify;ghostty-extreme://team;{"t":"%s","id":"%s"}\a' "$GHOSTTY_EXTREME_EVENT_TOKEN" "$id" > "$tty" 2>/dev/null
+
+# The app answers in <id>.reply: OK or ERR, then the text.
+for _ in $(seq 1 60); do
+  [ -f "$dir/$id.reply" ] && break
+  sleep 0.1
+done
+rm -f "$dir/$id.json"
+if [ ! -f "$dir/$id.reply" ]; then
+  echo "team: Tellurion didn't answer. This works in the terminal of a team's lead, on a board." >&2
+  exit 1
+fi
+status=$(head -n 1 "$dir/$id.reply")
+tail -n +2 "$dir/$id.reply"
+rm -f "$dir/$id.reply"
+[ "$status" = OK ]

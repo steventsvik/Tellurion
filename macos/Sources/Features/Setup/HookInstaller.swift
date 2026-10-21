@@ -39,11 +39,12 @@ enum HookInstaller {
             ("localhost", binFolder),
             ("localhost-run", binFolder),
             ("tellurion", binFolder),
+            ("team", binFolder),
             ("ghostty-extreme", binFolder),
         ]
     }
 
-    private static let executables: Set<String> = ["agent-hook.sh", "agent-event.py", "local-chat.py", "localhost", "localhost-run", "tellurion", "ghostty-extreme"]
+    private static let executables: Set<String> = ["agent-hook.sh", "agent-event.py", "local-chat.py", "localhost", "localhost-run", "tellurion", "team", "ghostty-extreme"]
 
     // MARK: Hook files
 

@@ -31,7 +31,7 @@ final class BoardTiles {
                           model.$zoom.map { _ in () }, model.$agentTick.map { _ in () }, model.$focused.map { _ in () })
             .merge(with: model.$titles.map { _ in () }, model.$projects.map { _ in () }, model.$colors.map { _ in () })
             .merge(with: model.$sketches.map { _ in () }, model.$focusedSketch.map { _ in () }, model.$cards.map { _ in () })
-            .merge(with: model.$paused.map { _ in () })
+            .merge(with: model.$paused.map { _ in () }, model.$teams.map { _ in () })
             .sink { [weak self] in self?.needsSync() }
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: ExtremeSettings.featuresDidChange)
@@ -94,6 +94,7 @@ final class BoardTiles {
                         color: model.color(of: surface.id).map(BoardProjects.nsColor),
                         focused: model.focused, zoom: model.zoom, motion: motion)
             view.paused = model.paused.contains(surface.id)
+            view.team = Self.badge(for: surface.id, in: model)
         }
         for sketch in model.sketches {
             guard let frame = model.frames[sketch.id] else { continue }
@@ -130,6 +131,7 @@ final class BoardTiles {
             }
         }
         groups.update(groups: Self.groups(model), zoom: model.zoom)
+        groups.update(links: controller.teamLinks(), zoom: model.zoom)
         // Back to front, without removing anything (that would take a terminal's focus).
         let order = Dictionary(model.order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         let nodes: [(UUID, NSView)] = views.map { ($0, $1) } + sketchViews.map { ($0, $1) } + cardViews.map { ($0, $1) }
@@ -149,6 +151,18 @@ final class BoardTiles {
     }
 
     /// Each project's tiles that sit together.
+    static func badge(for id: UUID, in model: BoardModel) -> BoardTileTeam? {
+        if let team = model.teams.first(where: { $0.lead == id }) {
+            return BoardTileTeam(lead: true, text: "Lead · \(team.name)", color: team.color)
+        }
+        for team in model.teams {
+            if let member = team.members.first(where: { $0.tile == id }) {
+                return BoardTileTeam(lead: false, text: member.role, color: team.color)
+            }
+        }
+        return nil
+    }
+
     static func groups(_ model: BoardModel) -> [BoardGroup] {
         var byProject: [String: [(id: UUID, frame: CGRect)]] = [:]
         for surface in model.surfaces {
@@ -265,6 +279,14 @@ final class BoardTileView: BoardNodeView {
         lights.rebuild()
     }
 
+    /// "Lead · Team" or the member's role, in its team's color.
+    var team: BoardTileTeam? {
+        get { state.team }
+        set { if state.team != newValue { state.team = newValue } }
+    }
+
+    override var linkable: Bool { true }
+
     /// Its processes are stopped (see BoardPause).
     var paused: Bool {
         get { state.paused }
@@ -297,6 +319,14 @@ final class BoardTileState: ObservableObject {
     @Published var focused = false
     @Published var zoom: CGFloat = 1
     @Published var paused = false
+    @Published var team: BoardTileTeam?
+}
+
+/// A tile's place in a team, for its title bar.
+struct BoardTileTeam: Equatable {
+    let lead: Bool
+    let text: String
+    let color: Int
 }
 
 /// The title bar's picture. Its buttons sit where `BoardTileView` expects clicks.
@@ -313,6 +343,7 @@ private struct BoardTileHeader: View {
             }
             Text(BoardTileTitle.title(surface, state.info, name: state.name)).font(Extreme.font(12, weight: .semibold))
                 .foregroundColor(Extreme.text).lineLimit(1)
+            if let team = state.team { BoardTeamBadge(team: team) }
             if let folder = BoardTileTitle.folder(surface) {
                 Text(folder).font(Extreme.font(11, weight: state.color == nil ? .medium : .semibold))
                     .foregroundColor(state.color.map(Color.init(nsColor:)) ?? Extreme.dim).lineLimit(1)
@@ -323,6 +354,7 @@ private struct BoardTileHeader: View {
             } else if let info = state.info {
                 AgentStatusPill(activity: info.activity)
             }
+            glyph("link")
             glyph("ellipsis")
             glyph("arrow.up.left.and.arrow.down.right")
             glyph("xmark")
@@ -395,6 +427,22 @@ private struct BoardTileOverview: View {
             .scaleEffect(min(1 / max(state.zoom, 0.08), geo.size.width / 220))
             .frame(width: geo.size.width, height: geo.size.height)
         }
+    }
+}
+
+/// "Lead · Team 2" with a crown, or a member's role, in the team's color.
+struct BoardTeamBadge: View {
+    let team: BoardTileTeam
+
+    var body: some View {
+        let color = BoardProjects.color(team.color)
+        Label(team.text, systemImage: team.lead ? "crown.fill" : "person.fill")
+            .font(Extreme.font(10.5, weight: .semibold))
+            .foregroundColor(color)
+            .lineLimit(1)
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(Capsule().fill(color.opacity(0.15)))
+            .fixedSize()
     }
 }
 

@@ -38,6 +38,8 @@ struct BoardWorkspace: Codable, Identifiable, Equatable {
     var colors: [String: Int]?
     var sketches: [BoardSketch]?
     var cards: [BoardCard]?
+    /// Leads and the tiles they run (see BoardTeams).
+    var teams: [BoardTeam]?
     /// Open when Tellurion last quit; reopened at launch.
     var open = true
     var updated = Date()

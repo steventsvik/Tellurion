@@ -28,6 +28,11 @@ struct BoardAssistantAction: Codable, Equatable {
         var label: String?
     }
 
+    struct TeamMember: Codable, Equatable {
+        var agent: String
+        var role: String
+    }
+
     var type: String
     var tile: String?
     var tiles: [String]?
@@ -46,11 +51,13 @@ struct BoardAssistantAction: Codable, Equatable {
     var nodes: [Node]?
     var edges: [Edge]?
     var target: String?
+    var role: String?
+    var members: [TeamMember]?
 
     /// Closing, removing and typing into an agent that's already running wait for you.
     var needsConfirmation: Bool {
         switch type {
-        case "close_tile", "remove_card", "message_agent": return true
+        case "close_tile", "remove_card", "message_agent", "add_to_team": return true
         case "hand_item": return tile != nil
         default: return false
         }
@@ -107,6 +114,13 @@ enum BoardAssistantPrompt {
     - arrange {}: group the tiles by project.
     - show {target?}: zoom to a tile, card or sketch; no target shows everything.
     - rename_board {title}
+    - create_team {agent, members: [{agent, role}], folder?, task?}: start a team: a lead \
+    agent (agent, usually claude) that runs the members with its `team` command, and the \
+    members, each with a role (Coder, Reviewer, Tester…; up to 8). task is the team's goal; \
+    the lead starts on it. The user talks to the lead.
+    - add_to_team {tile, target, role}: put tile T# on the team led by target (T#), or make \
+    target the lead of a new team.
+    - remove_from_team {tile}
 
     Folders may start with ~. Without one, tiles start in the board's folder. Several actions \
     run in order. Closing, removing and messaging running agents ask the user first, so \
@@ -122,12 +136,14 @@ enum BoardAssistantPrompt {
                 "type": ["type": "string", "enum": ["launch_agents", "new_terminal", "message_agent", "hand_item", "close_tile",
                                                     "rename_tile", "pause", "resume", "add_note", "add_checklist", "add_kanban",
                                                     "add_items", "add_sketch", "agent_map", "remove_card", "arrange", "show",
-                                                    "rename_board"]],
+                                                    "rename_board", "create_team", "add_to_team", "remove_from_team"]],
                 "tile": ["type": "string"], "tiles": strings, "card": ["type": "string"], "item": ["type": "integer"],
                 "agent": ["type": "string"], "count": ["type": "integer"], "folder": ["type": "string"],
                 "task": ["type": "string"], "command": ["type": "string"], "text": ["type": "string"],
                 "title": ["type": "string"], "items": strings, "doing": strings, "done": strings,
-                "target": ["type": "string"],
+                "target": ["type": "string"], "role": ["type": "string"],
+                "members": ["type": "array", "items": ["type": "object", "properties": [
+                    "agent": ["type": "string"], "role": ["type": "string"]], "required": ["agent", "role"]]],
                 "nodes": ["type": "array", "items": ["type": "object", "properties": [
                     "id": ["type": "string"], "label": ["type": "string"], "shape": ["type": "string"]],
                     "required": ["id", "label"]]],
@@ -168,7 +184,16 @@ extension BoardController {
             }
             if let folder = folder(of: surface) { parts.append("in \(Self.tilde(folder))") }
             if model.paused.contains(surface.id) { parts.append("paused") }
+            if team(ledBy: surface.id) != nil { parts.append("leads a team") }
+            if let role = role(of: surface.id) { parts.append("team role: \(role)") }
             lines.append("- " + parts.joined(separator: "; "))
+        }
+        if !model.teams.isEmpty { lines.append("Teams:") }
+        for team in model.teams {
+            let handle = { (id: UUID) in self.model.surfaces.firstIndex { $0.id == id }.map { "T\($0 + 1)" } ?? "?" }
+            let members = team.members.map { "\(handle($0.tile)) (\($0.role))" }.joined(separator: ", ")
+            lines.append("- \(team.name): lead \(handle(team.lead)); members " + (members.isEmpty ? "none" : members)
+                         + (team.goal.map { "; goal: \(Self.clip($0, 160))" } ?? ""))
         }
         if !model.cards.isEmpty { lines.append("Cards:") }
         for (index, card) in model.cards.enumerated() {
@@ -294,6 +319,9 @@ extension BoardController {
         case "hand_item":
             guard let surface = surface(action.tile, handles), let item = item(action, handles) else { return nil }
             return "Give \(tileLabel(surface)): “\(Self.clip(item.item.text, 80))”"
+        case "add_to_team":
+            guard let tile = surface(action.tile, handles), let lead = surface(action.target, handles), tile !== lead else { return nil }
+            return "Put \(tileName(tile)) on \(tileName(lead))'s team as \(action.role ?? "a member") (they're told)"
         default:
             return nil
         }
@@ -447,6 +475,27 @@ extension BoardController {
             guard let title = action.title, !title.isEmpty else { return nil }
             rename(title)
             return "Renamed the board “\(title)”"
+        case "create_team":
+            if let path = action.folder, folder(path) == nil { return "No folder \(path)" }
+            let find = { (name: String) in BoardAgent.catalog.first { $0.binary == name || $0.kind.rawValue == name } }
+            guard let lead = find(action.agent ?? "claude") else { return "\(action.agent ?? "That agent") can't lead a team" }
+            let members = (action.members ?? []).prefix(8).map { (agent: find($0.agent), role: $0.role.isEmpty ? "Member" : $0.role) }
+            let goal = (action.task ?? action.text)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            launchTeam(lead: lead, members: Array(members), folder: folder(action.folder), goal: goal?.isEmpty == false ? goal : nil)
+            return "Started a team: \(lead.kind.displayName) leading \(members.count) member" + (members.count == 1 ? "" : "s")
+        case "add_to_team":
+            guard let tile = surface(action.tile, handles), let lead = surface(action.target, handles), tile !== lead else { return nil }
+            let role = action.role?.isEmpty == false ? action.role ?? "Member" : "Member"
+            if let team = team(of: lead.id), team.lead != tile.id {
+                addToTeam(team.id, tile: tile.id, role: role)
+            } else {
+                createTeam(lead: lead.id, members: [(tile.id, role)], goal: nil, brief: true)
+            }
+            return "Put \(tileLabel(tile)) on the team as \(role)"
+        case "remove_from_team":
+            guard let tile = surface(action.tile, handles), role(of: tile.id) != nil else { return nil }
+            removeFromTeam(tile: tile.id)
+            return "Took \(tileLabel(tile)) off its team"
         default:
             return nil
         }

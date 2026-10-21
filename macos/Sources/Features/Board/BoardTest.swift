@@ -35,6 +35,7 @@ import GhosttyKit
 ///     ask <text> | agentdo <reply JSON> | agentconfirm | agentcancel | agentlog | agentcontext
 ///                                the board's agent (see BoardAssistant)
 ///     pause|resume [n…] | procs <n>  pause tiles; log tile n's process states
+///     teamnew <lead> <n>:<role>… | teamstate | teamlink <from> [<to>]   teams (see BoardTeams)
 ///     minsize                    log the window's minimum and fitting sizes
 @MainActor
 enum BoardTest {
@@ -325,6 +326,37 @@ enum BoardTest {
         case "minsize":
             guard let window = controller.window else { return }
             DemoDirector.note("minsize window=\(window.minSize) content=\(window.contentMinSize) fitting=\(window.contentView?.fittingSize ?? .zero)")
+        case "teamnew":
+            // teamnew <lead n> <member n>:<role>…: a team on existing tiles.
+            guard let lead = tile(args.first ?? "", of: controller) else { return }
+            let members = args.dropFirst().compactMap { arg -> (tile: UUID, role: String)? in
+                let parts = arg.split(separator: ":", maxSplits: 1).map(String.init)
+                guard let member = tile(parts[0], of: controller) else { return nil }
+                return (member.id, parts.count > 1 ? parts[1] : "Member")
+            }
+            controller.createTeam(lead: lead.id, members: members, goal: "Test goal", brief: true)
+        case "teamstate":
+            let number = { (id: UUID) in (controller.model.surfaces.firstIndex { $0.id == id }).map { "\($0 + 1)" } ?? "?" }
+            for team in controller.model.teams {
+                DemoDirector.note("team \(team.name) lead=\(number(team.lead)) color=\(team.color) members="
+                                  + team.members.map { "\(number($0.tile)):\($0.role)" }.joined(separator: ","))
+            }
+            DemoDirector.note("team links=\(controller.teamLinks().count) teams=\(controller.model.teams.count)")
+        case "teamlink":
+            // teamlink <from n> <to n|empty>: drags tile n's link button onto another tile (or empty board).
+            guard let from = tile(args.first ?? "", of: controller), let window = controller.window,
+                  let view = window.contentView?.descendants.compactMap({ $0 as? BoardTileView }).first(where: { $0.surface === from }),
+                  let document = view.superview else { return }
+            let height = window.contentView?.bounds.height ?? 0
+            let start = view.convert(CGPoint(x: view.linkRect.midX, y: view.linkRect.midY), to: nil)
+            let end: CGPoint
+            if let to = tile(args.count > 1 ? args[1] : "", of: controller), let frame = controller.model.frames[to.id] {
+                end = document.convert(CGPoint(x: frame.midX, y: frame.midY), to: nil)
+            } else {
+                let frame = controller.model.frames[from.id] ?? .zero
+                end = document.convert(CGPoint(x: frame.maxX + 300, y: frame.minY - 300), to: nil)
+            }
+            drag(from: CGPoint(x: start.x, y: height - start.y), by: CGSize(width: end.x - start.x, height: start.y - end.y), in: controller)
         case "agentconfirm":
             controller.assistant.confirm()
         case "agentcancel":

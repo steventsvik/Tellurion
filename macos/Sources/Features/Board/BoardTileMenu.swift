@@ -73,6 +73,8 @@ enum BoardTileMenu {
                 list.append(Action(title: "Project Memory…", enabled: pwd != nil) { MemoryWindow.show(folder: pwd) })
             }
         }
+        list.append(nil)
+        list.append(contentsOf: BoardTeamMenu.actions(for: surface.id, in: board))
         list.append(contentsOf: undoActions(for: surface))
         list.append(nil)
         list.append(Action(title: "Copy Working Directory", enabled: pwd != nil) { VerticalTabsActions.copy(pwd ?? "") })

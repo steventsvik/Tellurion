@@ -80,6 +80,9 @@ struct BoardWindowView: View {
         .sheet(isPresented: $model.showComposer) {
             BoardComposer(controller: controller, isPresented: $model.showComposer)
         }
+        .sheet(isPresented: $model.showTeamComposer) {
+            BoardTeamComposer(controller: controller, isPresented: $model.showTeamComposer)
+        }
     }
 
     /// Which side panels are open on this board, and how wide they can be.
@@ -168,6 +171,7 @@ private struct BoardToolbar: View {
                     Button { controller.addCard(.kanban) } label: { Label("Kanban", systemImage: "rectangle.split.3x1") }
                     Divider()
                     Button { controller.showAgentMap() } label: { Label("Agent Map", systemImage: "map") }
+                    Button { model.showTeamComposer = true } label: { Label("Team…", systemImage: "person.3") }
                 } label: {
                     Image(systemName: "rectangle.stack.badge.plus").font(.system(size: 12, weight: .medium))
                         .foregroundColor(Extreme.text.opacity(0.85))
@@ -176,7 +180,7 @@ private struct BoardToolbar: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .frame(width: 26, height: 22)
-                .help("Add a sketch, note, checklist, kanban board or Agent Map")
+                .help("Add a sketch, note, checklist, kanban board, Agent Map or team")
                 button("rectangle.3.group", "Arrange by project") { controller.arrangeByProject() }
                 divider
                 button("minus.magnifyingglass", "Zoom out (⌥⌘-)") { controller.zoom(by: 1 / 1.4) }
@@ -230,6 +234,8 @@ private struct BoardEmptyState: View {
             HStack(spacing: 8) {
                 Button("New terminal") { controller.addTile() }
                     .buttonStyle(ExtremeButtonStyle())
+                Button("New team…") { controller.model.showTeamComposer = true }
+                    .buttonStyle(ExtremeButtonStyle())
                 Button("Launch agents…") { controller.model.showComposer = true }
                     .buttonStyle(ExtremeButtonStyle(prominent: true))
             }
@@ -256,6 +262,8 @@ private struct BoardSidebar: View {
     private struct Row: Identifiable {
         let surface: Ghostty.SurfaceView
         let info: VerticalTabAgentInfo?
+        /// On a team, listed under its lead.
+        var member = false
         var id: UUID { surface.id }
     }
 
@@ -326,6 +334,12 @@ private struct BoardSidebar: View {
                     ForEach(rows) { row in
                         BoardSidebarRow(board: controller, surface: row.surface, info: row.info, name: model.titles[row.surface.id],
                                         color: model.color(of: row.surface.id).map(BoardProjects.color))
+                            .padding(.leading, row.member ? 16 : 0)
+                            .overlay(alignment: .leading) {
+                                if row.member, let team = controller.team(of: row.id) {
+                                    Rectangle().fill(BoardProjects.color(team.color).opacity(0.7)).frame(width: 2).padding(.leading, 6)
+                                }
+                            }
                             .onTapGesture { controller.focusTile(row.surface) }
                             .contextMenu { BoardTileContextMenu(surface: row.surface, board: controller) }
                     }
@@ -402,8 +416,23 @@ private struct BoardSidebar: View {
         func key(_ row: Row) -> (Int, Int, Int) {
             (rank(row.info), model.color(of: row.id) ?? .max, index[row.id] ?? 0)
         }
-        return model.surfaces.map { Row(surface: $0, info: VerticalTabsAgents.shared.info(for: $0)) }
+        let sorted = model.surfaces.map { Row(surface: $0, info: VerticalTabsAgents.shared.info(for: $0)) }
             .sorted { key($0) < key($1) }
+        guard !model.teams.isEmpty else { return sorted }
+        // A team's members follow its lead, in the team's order.
+        let byID = Dictionary(sorted.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let members = Set(model.teams.flatMap { $0.members.map(\.tile) })
+        var rows: [Row] = []
+        for row in sorted where !members.contains(row.id) {
+            rows.append(row)
+            guard let team = model.teams.first(where: { $0.lead == row.id }) else { continue }
+            for member in team.members {
+                guard var memberRow = byID[member.tile] else { continue }
+                memberRow.member = true
+                rows.append(memberRow)
+            }
+        }
+        return rows
     }
 
     private func rank(_ info: VerticalTabAgentInfo?) -> Int {
