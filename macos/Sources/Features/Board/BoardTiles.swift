@@ -31,7 +31,7 @@ final class BoardTiles {
                           model.$zoom.map { _ in () }, model.$agentTick.map { _ in () }, model.$focused.map { _ in () })
             .merge(with: model.$titles.map { _ in () }, model.$projects.map { _ in () }, model.$colors.map { _ in () })
             .merge(with: model.$sketches.map { _ in () }, model.$focusedSketch.map { _ in () }, model.$cards.map { _ in () })
-            .merge(with: model.$paused.map { _ in () }, model.$teams.map { _ in () })
+            .merge(with: model.$paused.map { _ in () }, model.$teams.map { _ in () }, model.$wiring.map { _ in () })
             .sink { [weak self] in self?.needsSync() }
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: ExtremeSettings.featuresDidChange)
@@ -77,6 +77,9 @@ final class BoardTiles {
         let animate = model.animateNextLayout && motion
         model.animateNextLayout = false
         var moves: [(NSView, CGRect)] = []
+        // While an orchestrator is connecting: what's wired to it, in its color.
+        let wiringTeam = model.wiring.flatMap { controller.orchestrator($0) }
+        let wired = Set(wiringTeam.map { controller.wiredAgents($0).map(\.surface.id) } ?? [])
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for surface in model.surfaces {
@@ -94,7 +97,7 @@ final class BoardTiles {
                         color: model.color(of: surface.id).map(BoardProjects.nsColor),
                         focused: model.focused, zoom: model.zoom, motion: motion)
             view.paused = model.paused.contains(surface.id)
-            view.team = Self.badge(for: surface.id, in: model)
+            view.wire = wiringTeam.map { (BoardProjects.nsColor($0.color), wired.contains(surface.id)) }
         }
         for sketch in model.sketches {
             guard let frame = model.frames[sketch.id] else { continue }
@@ -130,8 +133,9 @@ final class BoardTiles {
                 for (view, frame) in moves { view.animator().frame = frame }
             }
         }
-        groups.update(groups: Self.groups(model), zoom: model.zoom)
-        groups.update(links: controller.teamLinks(), zoom: model.zoom)
+        groups.update(groups: Self.groups(model), zoom: model.zoom,
+                      wiring: wiringTeam.map { (BoardProjects.nsColor($0.color), Set($0.groups)) })
+        groups.update(links: controller.teamLinks(), zoom: model.zoom, motion: motion)
         // Back to front, without removing anything (that would take a terminal's focus).
         let order = Dictionary(model.order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         let nodes: [(UUID, NSView)] = views.map { ($0, $1) } + sketchViews.map { ($0, $1) } + cardViews.map { ($0, $1) }
@@ -151,18 +155,6 @@ final class BoardTiles {
     }
 
     /// Each project's tiles that sit together.
-    static func badge(for id: UUID, in model: BoardModel) -> BoardTileTeam? {
-        if let team = model.teams.first(where: { $0.lead == id }) {
-            return BoardTileTeam(lead: true, text: "Lead · \(team.name)", color: team.color)
-        }
-        for team in model.teams {
-            if let member = team.members.first(where: { $0.tile == id }) {
-                return BoardTileTeam(lead: false, text: member.role, color: team.color)
-            }
-        }
-        return nil
-    }
-
     static func groups(_ model: BoardModel) -> [BoardGroup] {
         var byProject: [String: [(id: UUID, frame: CGRect)]] = [:]
         for surface in model.surfaces {
@@ -199,6 +191,8 @@ final class BoardTileView: BoardNodeView {
     private let focus = BoardTileFocus()
     private let clip = FlippedView()
     private let lights = FrameLights.View(frame: .zero)
+    /// Around it while an orchestrator is connecting: solid when wired, faint when not.
+    private let wireRing = CALayer()
     private var headerView: NSView!
     private var bodyView: NSView!
     private var overview: NSView!
@@ -230,6 +224,10 @@ final class BoardTileView: BoardNodeView {
         overview.isHidden = true
         addSubview(lights)
         lights.isHidden = true
+        wireRing.isHidden = true
+        wireRing.cornerRadius = 13
+        wireRing.cornerCurve = .continuous
+        layer?.addSublayer(wireRing)
     }
 
     override func layout() {
@@ -239,6 +237,10 @@ final class BoardTileView: BoardNodeView {
         bodyView.frame = CGRect(x: 0, y: Self.header, width: bounds.width, height: max(0, bounds.height - Self.header))
         overview.frame = clip.bounds
         lights.frame = bounds.insetBy(dx: -3, dy: -3)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        wireRing.frame = bounds.insetBy(dx: -5, dy: -5)
+        CATransaction.commit()
     }
 
     /// `focused` is the board's focused terminal (this one or another).
@@ -279,13 +281,24 @@ final class BoardTileView: BoardNodeView {
         lights.rebuild()
     }
 
-    /// "Lead · Team" or the member's role, in its team's color.
-    var team: BoardTileTeam? {
-        get { state.team }
-        set { if state.team != newValue { state.team = newValue } }
+    /// The connecting orchestrator's color, and whether this tile is wired to it.
+    var wire: (color: NSColor, on: Bool)? {
+        didSet {
+            guard wire?.color != oldValue?.color || wire?.on != oldValue?.on else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            wireRing.isHidden = wire == nil
+            if let wire {
+                wireRing.borderColor = wire.color.withAlphaComponent(wire.on ? 0.95 : 0.3).cgColor
+                wireRing.borderWidth = (wire.on ? 3 : 1.5) / max(zoom, 0.25)
+                wireRing.backgroundColor = wire.color.withAlphaComponent(wire.on ? 0.08 : 0).cgColor
+            }
+            CATransaction.commit()
+            window?.invalidateCursorRects(for: self)
+        }
     }
 
-    override var linkable: Bool { true }
+    override var wirable: Bool { true }
 
     /// Its processes are stopped (see BoardPause).
     var paused: Bool {
@@ -319,14 +332,6 @@ final class BoardTileState: ObservableObject {
     @Published var focused = false
     @Published var zoom: CGFloat = 1
     @Published var paused = false
-    @Published var team: BoardTileTeam?
-}
-
-/// A tile's place in a team, for its title bar.
-struct BoardTileTeam: Equatable {
-    let lead: Bool
-    let text: String
-    let color: Int
 }
 
 /// The title bar's picture. Its buttons sit where `BoardTileView` expects clicks.
@@ -343,7 +348,6 @@ private struct BoardTileHeader: View {
             }
             Text(BoardTileTitle.title(surface, state.info, name: state.name)).font(Extreme.font(12, weight: .semibold))
                 .foregroundColor(Extreme.text).lineLimit(1)
-            if let team = state.team { BoardTeamBadge(team: team) }
             if let folder = BoardTileTitle.folder(surface) {
                 Text(folder).font(Extreme.font(11, weight: state.color == nil ? .medium : .semibold))
                     .foregroundColor(state.color.map(Color.init(nsColor:)) ?? Extreme.dim).lineLimit(1)
@@ -354,7 +358,6 @@ private struct BoardTileHeader: View {
             } else if let info = state.info {
                 AgentStatusPill(activity: info.activity)
             }
-            glyph("link")
             glyph("ellipsis")
             glyph("arrow.up.left.and.arrow.down.right")
             glyph("xmark")
@@ -427,22 +430,6 @@ private struct BoardTileOverview: View {
             .scaleEffect(min(1 / max(state.zoom, 0.08), geo.size.width / 220))
             .frame(width: geo.size.width, height: geo.size.height)
         }
-    }
-}
-
-/// "Lead · Team 2" with a crown, or a member's role, in the team's color.
-struct BoardTeamBadge: View {
-    let team: BoardTileTeam
-
-    var body: some View {
-        let color = BoardProjects.color(team.color)
-        Label(team.text, systemImage: team.lead ? "crown.fill" : "person.fill")
-            .font(Extreme.font(10.5, weight: .semibold))
-            .foregroundColor(color)
-            .lineLimit(1)
-            .padding(.horizontal, 7).padding(.vertical, 2)
-            .background(Capsule().fill(color.opacity(0.15)))
-            .fixedSize()
     }
 }
 

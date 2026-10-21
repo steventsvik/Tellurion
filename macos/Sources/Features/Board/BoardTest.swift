@@ -35,7 +35,8 @@ import GhosttyKit
 ///     ask <text> | agentdo <reply JSON> | agentconfirm | agentcancel | agentlog | agentcontext
 ///                                the board's agent (see BoardAssistant)
 ///     pause|resume [n…] | procs <n>  pause tiles; log tile n's process states
-///     teamnew <lead> <n>:<role>… | teamstate | teamlink <from> [<to>]   teams (see BoardTeams)
+///     orchnew [n…] | orchconnect | orchdone | orchclick <n> | orchgroup <n> | orchstate
+///     orchcanned <reply JSON> | orchcmd <text> | orchclose    orchestrators (see BoardTeams)
 ///     minsize                    log the window's minimum and fitting sizes
 @MainActor
 enum BoardTest {
@@ -55,6 +56,12 @@ enum BoardTest {
                 MainActor.assumeIsolated {
                     DemoDirector.note("board \(command)")
                     run(command)
+                    // An event after each command, so it's its own step to undo as a real
+                    // click's would be (the undo manager closes its group after an event).
+                    if let wake = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0,
+                                                     windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0) {
+                        NSApp.postEvent(wake, atStart: false)
+                    }
                 }
             }
         }
@@ -260,6 +267,9 @@ enum BoardTest {
         case "closeboard":
             controller.window?.performClose(nil)
         case "undo":
+            if let undo = controller.undoManager {
+                DemoDirector.note("undo can=\(undo.canUndo) name=\(undo.undoActionName) level=\(undo.groupingLevel)")
+            }
             controller.undoManager?.undo()
         case "snapshot":
             guard let path = args.first else { return }
@@ -326,37 +336,62 @@ enum BoardTest {
         case "minsize":
             guard let window = controller.window else { return }
             DemoDirector.note("minsize window=\(window.minSize) content=\(window.contentMinSize) fitting=\(window.contentView?.fittingSize ?? .zero)")
-        case "teamnew":
-            // teamnew <lead n> <member n>:<role>…: a team on existing tiles.
-            guard let lead = tile(args.first ?? "", of: controller) else { return }
-            let members = args.dropFirst().compactMap { arg -> (tile: UUID, role: String)? in
-                let parts = arg.split(separator: ":", maxSplits: 1).map(String.init)
-                guard let member = tile(parts[0], of: controller) else { return nil }
-                return (member.id, parts.count > 1 ? parts[1] : "Member")
+        case "orchnew":
+            // orchnew [tile n…]: an orchestrator wired to those tiles.
+            let tiles = args.compactMap { tile($0, of: controller)?.id }
+            controller.newOrchestrator(wiring: tiles)
+        case "orchconnect":
+            guard let team = controller.model.teams.first else { return }
+            controller.startWiring(team.id)
+        case "orchbutton":
+            // orchbutton: a real click on the first orchestrator's Connect / Done button.
+            guard let team = controller.model.teams.first, let frame = controller.model.frames[team.id] else { return }
+            let point = CGPoint(x: frame.maxX - 45, y: frame.minY + BoardNodeView.header + 21)
+            if let view = controller.cardView(team.id), let document = controller.groupsView?.superview {
+                let local = view.convert(document.convert(point, to: nil), from: nil)
+                DemoDirector.note("orch button local=\(local) bounds=\(view.bounds) frame=\(frame) zoom=\(controller.model.zoom)")
             }
-            controller.createTeam(lead: lead.id, members: members, goal: "Test goal", brief: true)
-        case "teamstate":
+            click(board: point, in: controller)
+        case "orchdone":
+            controller.endWiring()
+        case "orchclick":
+            // orchclick <n>: a real click in the middle of tile n's terminal.
+            guard let surface = tile(args.first ?? "", of: controller), let frame = controller.model.frames[surface.id] else { return }
+            click(board: CGPoint(x: frame.midX, y: frame.midY), in: controller)
+        case "orchgroup":
+            // orchgroup <n>: a real click on the wire pill of tile n's group.
+            guard let surface = tile(args.first ?? "", of: controller), let project = controller.model.projects[surface.id],
+                  let rect = controller.groupsView?.pillRect(of: project) else {
+                DemoDirector.note("orch no pill")
+                return
+            }
+            click(board: CGPoint(x: rect.midX, y: rect.midY), in: controller)
+        case "orchstate":
             let number = { (id: UUID) in (controller.model.surfaces.firstIndex { $0.id == id }).map { "\($0 + 1)" } ?? "?" }
             for team in controller.model.teams {
-                DemoDirector.note("team \(team.name) lead=\(number(team.lead)) color=\(team.color) members="
-                                  + team.members.map { "\(number($0.tile)):\($0.role)" }.joined(separator: ","))
+                let brain = controller.orchestratorBrain(team.id)
+                DemoDirector.note("orch \(controller.orchestratorName(team.id)) color=\(team.color) wiring=\(controller.model.wiring == team.id) "
+                                  + "members=" + team.members.map { "\(number($0.tile)):\($0.role ?? "-")" }.joined(separator: ",")
+                                  + " groups=" + team.groups.map(BoardProjects.name).joined(separator: ",")
+                                  + " agents=" + controller.wiredAgents(team).map { number($0.surface.id) }.joined(separator: ",")
+                                  + " running=\(brain.running) busy=\(brain.busy) turn=\(brain.turn)")
             }
-            DemoDirector.note("team links=\(controller.teamLinks().count) teams=\(controller.model.teams.count)")
-        case "teamlink":
-            // teamlink <from n> <to n|empty>: drags tile n's link button onto another tile (or empty board).
-            guard let from = tile(args.first ?? "", of: controller), let window = controller.window,
-                  let view = window.contentView?.descendants.compactMap({ $0 as? BoardTileView }).first(where: { $0.surface === from }),
-                  let document = view.superview else { return }
-            let height = window.contentView?.bounds.height ?? 0
-            let start = view.convert(CGPoint(x: view.linkRect.midX, y: view.linkRect.midY), to: nil)
-            let end: CGPoint
-            if let to = tile(args.count > 1 ? args[1] : "", of: controller), let frame = controller.model.frames[to.id] {
-                end = document.convert(CGPoint(x: frame.midX, y: frame.midY), to: nil)
-            } else {
-                let frame = controller.model.frames[from.id] ?? .zero
-                end = document.convert(CGPoint(x: frame.maxX + 300, y: frame.minY - 300), to: nil)
+            DemoDirector.note("orch links=\(controller.teamLinks().count) teams=\(controller.model.teams.count)")
+        case "orchcanned":
+            // orchcanned <reply JSON>: the first orchestrator's next turn answers this instead.
+            guard let team = controller.model.teams.first,
+                  let data = HeadlessAgent.object(in: args.joined(separator: " ")),
+                  let reply = try? JSONDecoder().decode(OrchestratorReply.self, from: data) else {
+                DemoDirector.note("orch bad reply")
+                return
             }
-            drag(from: CGPoint(x: start.x, y: height - start.y), by: CGSize(width: end.x - start.x, height: start.y - end.y), in: controller)
+            controller.orchestratorBrain(team.id).canned.append(reply)
+        case "orchcmd":
+            guard let team = controller.model.teams.first else { return }
+            controller.orchestratorBrain(team.id).command(args.joined(separator: " "))
+        case "orchclose":
+            guard let team = controller.model.teams.first else { return }
+            controller.removeCard(team.id)
         case "agentconfirm":
             controller.assistant.confirm()
         case "agentcancel":
@@ -502,9 +537,23 @@ enum BoardTest {
                                              clickCount: clicks, pressure: type == .leftMouseUp ? 0 : 1) else { return }
         // Through the app's queue, as a real click arrives (it sets `NSApp.currentEvent`).
         NSApp.postEvent(event, atStart: false)
+        // A posted event can wait in the queue until the next one comes: wake it after a click.
+        if type == .leftMouseUp, let wake = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [],
+                                                                timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                                                subtype: 0, data1: 0, data2: 0) {
+            NSApp.postEvent(wake, atStart: false)
+        }
     }
 
     /// Press, move in steps over about a third of a second, release.
+    /// A click at a board point, as the mouse would.
+    private static func click(board point: CGPoint, in controller: BoardController) {
+        guard let window = controller.window, let document = controller.groupsView?.superview else { return }
+        let inWindow = document.convert(point, to: nil)
+        mouse(.leftMouseDown, CGPoint(x: inWindow.x, y: (window.contentView?.bounds.height ?? 0) - inWindow.y), in: window)
+        mouse(.leftMouseUp, CGPoint(x: inWindow.x, y: (window.contentView?.bounds.height ?? 0) - inWindow.y), in: window)
+    }
+
     private static func drag(from start: CGPoint, by delta: CGSize, in controller: BoardController) {
         guard let window = controller.window else { return }
         mouse(.leftMouseDown, start, in: window)

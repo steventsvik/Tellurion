@@ -19,6 +19,7 @@ final class BoardCardView: BoardNodeView {
         case .checklist: content = ChecklistContent()
         case .kanban: content = KanbanContent()
         case .map: content = AgentMapContent()
+        case .orchestrator: content = OrchestratorContent()
         }
         super.init(controller: controller, id: card.id)
         clip.wantsLayer = true
@@ -104,6 +105,9 @@ final class BoardCardView: BoardNodeView {
         if card.kind == .map {
             menu.addItem(mapProjectItem(controller))
         }
+        if card.kind == .orchestrator {
+            for item in orchestratorItems(controller) { menu.addItem(item) }
+        }
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Close \(card.kind.title)", image: nil) { [weak controller] in controller?.removeCard(id) })
         return menu
@@ -134,6 +138,42 @@ final class BoardCardView: BoardNodeView {
         })
         item.submenu = menu
         return item
+    }
+
+    /// Connect, which engine thinks for it, how far it goes on its own, and a fresh start.
+    private func orchestratorItems(_ controller: BoardController) -> [NSMenuItem] {
+        let id = nodeID
+        let brain = controller.orchestratorBrain(id)
+        var items: [NSMenuItem] = []
+        let wiring = controller.model.wiring == id
+        items.append(ClosureMenuItem(wiring ? "Done Connecting" : "Connect…", image: nil) { [weak controller] in
+            if wiring { controller?.endWiring() } else { controller?.startWiring(id) }
+        })
+        if let engines = brain.engines, engines.count > 1 {
+            let engine = NSMenuItem(title: "Thinks With", action: nil, keyEquivalent: "")
+            let menu = NSMenu()
+            for option in engines {
+                let entry = ClosureMenuItem(option.title, image: nil) { brain.engine = option }
+                entry.state = brain.engine == option ? .on : .off
+                menu.addItem(entry)
+            }
+            engine.submenu = menu
+            items.append(engine)
+        }
+        let turns = NSMenuItem(title: "Turns on Its Own", action: nil, keyEquivalent: "")
+        let menu = NSMenu()
+        for count in [4, 8, 12, 20, 40] {
+            let entry = ClosureMenuItem("Up to \(count)", image: nil) { [weak controller] in controller?.setTurns(count, for: id) }
+            entry.state = brain.limit == count ? .on : .off
+            menu.addItem(entry)
+        }
+        turns.submenu = menu
+        items.append(turns)
+        if brain.running {
+            items.append(ClosureMenuItem("Stop", image: nil) { brain.stop() })
+        }
+        items.append(ClosureMenuItem("Start Over", image: nil) { brain.clear() })
+        return items
     }
 
     /// A note goes to an agent as a whole: an item made from it.
@@ -171,6 +211,7 @@ final class BoardCardState: ObservableObject {
         case .checklist: summary = card.items.isEmpty ? nil : "\(card.items.filter(\.done).count) of \(card.items.count)"
         case .kanban: summary = card.items.isEmpty ? nil : "\(card.items.filter { $0.column == 2 }.count) of \(card.items.count) done"
         case .map: summary = "Agent Map"
+        case .orchestrator: summary = nil
         }
         if self.summary != summary { self.summary = summary }
         let tint = card.kind == .note ? SketchStyle.color(card.color) : nil

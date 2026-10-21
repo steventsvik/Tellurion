@@ -77,9 +77,9 @@ struct BoardGroup: Equatable {
     let frame: CGRect
 }
 
-/// Behind the tiles: each group's tinted area and label, the lines from teams' leads to their
-/// members, and the lines a dragged tile snaps to. Layers only, sized to what they show; the
-/// view itself draws nothing.
+/// Behind the tiles: each group's tinted area and label, the wires from orchestrators to what's
+/// wired to them, and the lines a dragged tile snaps to. Layers only, sized to what they show;
+/// the view itself draws nothing.
 final class BoardGroupsView: NSView {
     weak var controller: BoardController?
     static let pad: CGFloat = 16
@@ -87,16 +87,20 @@ final class BoardGroupsView: NSView {
 
     private var areas: [CALayer] = []
     private let guideLayer = CAShapeLayer()
-    /// One per lead→member link, each with its role label.
-    private var linkLayers: [(line: CAShapeLayer, label: CATextLayer)] = []
+    /// One per wire: a soft glow under the line, the line with a dot at each end, and a dot
+    /// that travels along it while something on the far end works.
+    private var wireLayers: [(glow: CAShapeLayer, line: CAShapeLayer, runner: CAShapeLayer)] = []
     private var links: [BoardTeamLink] = []
     private var linkZoom: CGFloat = 1
-    /// The link being dragged out of a tile, and the tile it would join.
-    private let pendingLink = CAShapeLayer()
-    private let pendingTarget = CAShapeLayer()
+    private var linkMotion = false
     private(set) var groups: [BoardGroup] = []
     private var labelRects: [CGRect] = []
     private var zoom: CGFloat = 1
+    /// While an orchestrator is connecting: its color and the groups wired to it. Each group
+    /// gets a pill on its border to wire it.
+    private var wiring: (color: NSColor, groups: Set<String>)?
+    private var pills: [CALayer] = []
+    private var pillRects: [CGRect] = []
 
     private var dragStart: (point: CGPoint, window: CGPoint, frames: [UUID: CGRect])?
     private var dragMoved = false
@@ -109,11 +113,6 @@ final class BoardGroupsView: NSView {
         guideLayer.lineDashPattern = [6, 4]
         guideLayer.zPosition = 10
         layer?.addSublayer(guideLayer)
-        for pending in [pendingLink, pendingTarget] {
-            pending.fillColor = nil
-            pending.zPosition = 9
-            layer?.addSublayer(pending)
-        }
     }
 
     @available(*, unavailable)
@@ -122,10 +121,12 @@ final class BoardGroupsView: NSView {
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    func update(groups: [BoardGroup], zoom: CGFloat) {
-        guard groups != self.groups || abs(zoom - self.zoom) > 0.001 else { return }
+    func update(groups: [BoardGroup], zoom: CGFloat, wiring: (color: NSColor, groups: Set<String>)? = nil) {
+        let sameWiring = wiring?.color == self.wiring?.color && wiring?.groups == self.wiring?.groups
+        guard groups != self.groups || abs(zoom - self.zoom) > 0.001 || !sameWiring else { return }
         self.groups = groups
         self.zoom = zoom
+        self.wiring = wiring
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         while areas.count > groups.count { areas.removeLast().removeFromSuperlayer() }
@@ -164,95 +165,147 @@ final class BoardGroupsView: NSView {
             label.contentsScale = (window?.backingScaleFactor ?? 2) * max(scale * zoom, 1)
             labelRects.append(CGRect(x: rect.minX, y: rect.minY - labelHeight, width: (width + 24) * scale, height: labelHeight))
         }
+        updatePills(scale: scale)
         CATransaction.commit()
         window?.invalidateCursorRects(for: self)
     }
 
-    /// The lines from each team's lead to its members, edge to edge, with the member's role.
-    func update(links: [BoardTeamLink], zoom: CGFloat) {
-        guard links != self.links || abs(zoom - linkZoom) > 0.001 else { return }
+    /// "⊕ Click to wire group" on each group's top edge while an orchestrator is connecting
+    /// (✓ Wired once it is), and the group's border in the orchestrator's color.
+    private func updatePills(scale: CGFloat) {
+        let shown = wiring == nil ? 0 : groups.count
+        while pills.count > shown { pills.removeLast().removeFromSuperlayer() }
+        while pills.count < shown {
+            let pill = CALayer()
+            pill.cornerCurve = .continuous
+            pill.zPosition = 7
+            let text = CATextLayer()
+            text.alignmentMode = .center
+            pill.addSublayer(text)
+            layer?.insertSublayer(pill, below: guideLayer)
+            pills.append(pill)
+        }
+        pillRects = []
+        guard let wiring else { return }
+        let font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        for (index, (group, pill)) in zip(groups, pills).enumerated() {
+            let wired = wiring.groups.contains(group.project)
+            let rect = group.frame.insetBy(dx: -Self.pad, dy: -Self.pad)
+            let title = wired ? "✓  Wired" : "⊕  Click to wire group"
+            let size = (title as NSString).size(withAttributes: [.font: font])
+            let bounds = CGRect(x: 0, y: 0, width: size.width + 22, height: 24)
+            pill.bounds = bounds
+            pill.cornerRadius = 12
+            pill.backgroundColor = (wired ? wiring.color : Extreme.chrome.panel.nsColor).cgColor
+            pill.borderColor = wiring.color.withAlphaComponent(0.8).cgColor
+            pill.borderWidth = 1
+            pill.transform = CATransform3DMakeScale(scale, scale, 1)
+            let labelHeight = Self.labelHeight * scale
+            pill.position = CGPoint(x: rect.midX, y: rect.minY - labelHeight)
+            if let text = pill.sublayers?.first as? CATextLayer {
+                text.string = NSAttributedString(string: title, attributes: [
+                    .font: font, .foregroundColor: wired ? Extreme.chrome.ink.nsColor : wiring.color,
+                ])
+                text.frame = bounds.insetBy(dx: 0, dy: (bounds.height - 16) / 2)
+                text.contentsScale = (window?.backingScaleFactor ?? 2) * max(scale * zoom, 1)
+            }
+            pillRects.append(CGRect(x: rect.midX - bounds.width * scale / 2, y: rect.minY - labelHeight - bounds.height * scale / 2,
+                                    width: bounds.width * scale, height: bounds.height * scale))
+            if index < areas.count {
+                areas[index].borderColor = wiring.color.withAlphaComponent(wired ? 0.9 : 0.45).cgColor
+            }
+        }
+    }
+
+    /// The wires from orchestrators, curving from the card to each tile or group. A dot runs
+    /// along a wire while something on its far end works (Core Animation, and only with
+    /// motion on and the window on screen).
+    func update(links: [BoardTeamLink], zoom: CGFloat, motion: Bool? = nil) {
+        let motion = motion ?? linkMotion
+        guard links != self.links || abs(zoom - linkZoom) > 0.001 || motion != linkMotion else { return }
         self.links = links
         linkZoom = zoom
+        linkMotion = motion
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        while linkLayers.count > links.count {
-            let last = linkLayers.removeLast()
-            last.line.removeFromSuperlayer()
-            last.label.removeFromSuperlayer()
+        while wireLayers.count > links.count {
+            let last = wireLayers.removeLast()
+            for layer in [last.glow, last.line, last.runner] { layer.removeFromSuperlayer() }
         }
-        while linkLayers.count < links.count {
-            let line = CAShapeLayer()
-            line.lineCap = .round
-            line.zPosition = 5
-            let label = CATextLayer()
-            label.alignmentMode = .center
-            label.zPosition = 6
-            label.cornerRadius = 4
-            layer?.insertSublayer(line, below: guideLayer)
-            layer?.insertSublayer(label, below: guideLayer)
-            linkLayers.append((line, label))
+        while wireLayers.count < links.count {
+            let glow = CAShapeLayer(), line = CAShapeLayer(), runner = CAShapeLayer()
+            for (layer, z) in [(glow, 4), (line, 5), (runner, 6)] as [(CAShapeLayer, CGFloat)] {
+                layer.zPosition = z
+                layer.lineCap = .round
+                self.layer?.insertSublayer(layer, below: guideLayer)
+            }
+            glow.fillColor = nil
+            wireLayers.append((glow, line, runner))
         }
-        let scale = min(1 / max(zoom, 0.08), 5)
-        let font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        for (link, layers) in zip(links, linkLayers) {
+        let scale = min(1 / max(zoom, 0.08), 4)
+        for (link, layers) in zip(links, wireLayers) {
             let color = BoardProjects.nsColor(link.color)
-            let a = Self.edge(of: link.from, toward: CGPoint(x: link.to.midX, y: link.to.midY))
-            let b = Self.edge(of: link.to, toward: CGPoint(x: link.from.midX, y: link.from.midY))
-            let path = CGMutablePath()
-            path.move(to: a)
-            path.addLine(to: b)
-            // A dot where the line meets each tile.
-            let dot = 4 * min(scale, 3)
-            for point in [a, b] { path.addEllipse(in: CGRect(x: point.x - dot, y: point.y - dot, width: dot * 2, height: dot * 2)) }
-            layers.line.path = path
-            layers.line.strokeColor = color.withAlphaComponent(0.85).cgColor
+            let wire = Self.wire(from: link.from, to: link.to)
+            let dot = 3.5 * scale
+            let line = CGMutablePath()
+            line.addPath(wire.path)
+            for point in [wire.start, wire.end] { line.addEllipse(in: CGRect(x: point.x - dot, y: point.y - dot, width: dot * 2, height: dot * 2)) }
+            layers.line.path = line
+            layers.line.strokeColor = color.withAlphaComponent(0.8).cgColor
             layers.line.fillColor = color.cgColor
-            layers.line.lineWidth = 2 * min(scale, 3)
-            let size = (link.label as NSString).size(withAttributes: [.font: font])
-            layers.label.string = NSAttributedString(string: link.label, attributes: [.font: font, .foregroundColor: color])
-            layers.label.backgroundColor = Extreme.chrome.panel.nsColor.withAlphaComponent(0.95).cgColor
-            layers.label.bounds = CGRect(x: 0, y: 0, width: size.width + 12, height: 18)
-            layers.label.transform = CATransform3DMakeScale(scale, scale, 1)
-            layers.label.position = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
-            // Tiles close together leave no room for it (the member's badge names the role too).
-            let room = hypot(b.x - a.x, b.y - a.y)
-            let needs = (abs(b.x - a.x) > abs(b.y - a.y) ? size.width + 20 : 26) * scale
-            layers.label.isHidden = room < needs
-            layers.label.contentsScale = (window?.backingScaleFactor ?? 2) * max(scale * zoom, 1)
+            layers.line.lineWidth = 1.6 * scale
+            layers.glow.path = wire.path
+            layers.glow.strokeColor = color.withAlphaComponent(link.working ? 0.22 : 0.12).cgColor
+            layers.glow.lineWidth = 7 * scale
+            let size = 4.5 * scale
+            layers.runner.path = CGPath(ellipseIn: CGRect(x: -size, y: -size, width: size * 2, height: size * 2), transform: nil)
+            layers.runner.fillColor = NSColor.white.withAlphaComponent(0.95).cgColor
+            layers.runner.shadowColor = color.cgColor
+            layers.runner.shadowOpacity = 1
+            layers.runner.shadowRadius = 4 * scale
+            layers.runner.shadowOffset = .zero
+            layers.runner.shadowPath = CGPath(ellipseIn: CGRect(x: -size * 1.6, y: -size * 1.6, width: size * 3.2, height: size * 3.2),
+                                              transform: nil)
+            let runs = link.working && motion
+            layers.runner.isHidden = !runs
+            if runs {
+                let travel = CAKeyframeAnimation(keyPath: "position")
+                travel.path = wire.path
+                travel.calculationMode = .paced
+                // About the same speed on screen whatever the length.
+                travel.duration = max(1.2, min(4, wire.length / 260))
+                travel.repeatCount = .infinity
+                layers.runner.add(travel, forKey: "travel")
+            } else {
+                layers.runner.removeAnimation(forKey: "travel")
+            }
         }
         CATransaction.commit()
     }
 
-    /// While a tile's link is dragged: the line to the pointer, and the tile it would join.
-    func showPendingLink(from: CGRect?, to point: CGPoint, target: CGRect?) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        let width = 2 / max(zoom, 0.08)
-        let color = Extreme.chrome.core.nsColor
-        if let from {
-            let path = CGMutablePath()
-            path.move(to: Self.edge(of: from, toward: point))
-            path.addLine(to: point)
-            pendingLink.path = path
+    /// A wire from one rect's edge to another's, leaning horizontal or vertical like the way
+    /// they sit, so it leaves and arrives square to the edges.
+    struct Wire {
+        let path: CGPath
+        let start: CGPoint
+        let end: CGPoint
+        let length: CGFloat
+    }
+
+    static func wire(from: CGRect, to: CGRect) -> Wire {
+        let a = edge(of: from, toward: CGPoint(x: to.midX, y: to.midY))
+        let b = edge(of: to, toward: CGPoint(x: from.midX, y: from.midY))
+        let dx = b.x - a.x, dy = b.y - a.y
+        let path = CGMutablePath()
+        path.move(to: a)
+        // Which side it leaves from: the one the edge point sits on.
+        let sideways = abs(a.x - from.minX) < 1 || abs(a.x - from.maxX) < 1
+        if sideways {
+            path.addCurve(to: b, control1: CGPoint(x: a.x + dx * 0.55, y: a.y), control2: CGPoint(x: b.x - dx * 0.55, y: b.y))
         } else {
-            pendingLink.path = nil
+            path.addCurve(to: b, control1: CGPoint(x: a.x, y: a.y + dy * 0.55), control2: CGPoint(x: b.x, y: b.y - dy * 0.55))
         }
-        pendingLink.strokeColor = color.cgColor
-        pendingLink.lineWidth = width
-        pendingLink.lineDashPattern = [NSNumber(value: 6 / max(zoom, 0.08)), NSNumber(value: 4 / max(zoom, 0.08))]
-        pendingTarget.path = target.map { CGPath(roundedRect: $0.insetBy(dx: -5 / max(zoom, 0.08), dy: -5 / max(zoom, 0.08)),
-                                                 cornerWidth: 12, cornerHeight: 12, transform: nil) }
-        pendingTarget.strokeColor = color.cgColor
-        pendingTarget.lineWidth = width * 1.5
-        CATransaction.commit()
-    }
-
-    func hidePendingLink() {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        pendingLink.path = nil
-        pendingTarget.path = nil
-        CATransaction.commit()
+        return Wire(path: path, start: a, end: b, length: hypot(dx, dy) * 1.15)
     }
 
     /// Where a line from the middle of `rect` toward `point` leaves it.
@@ -280,26 +333,39 @@ final class BoardGroupsView: NSView {
         CATransaction.commit()
     }
 
+    /// Where a group's wire pill is, in board points (tests).
+    func pillRect(of project: String) -> CGRect? {
+        guard let index = groups.firstIndex(where: { $0.project == project }), index < pillRects.count else { return nil }
+        return pillRects[index]
+    }
+
     // MARK: Mouse: only the labels take clicks.
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard let superview else { return nil }
         let local = convert(point, from: superview)
-        return labelRects.contains { $0.contains(local) } ? self : nil
+        return (labelRects + pillRects).contains { $0.contains(local) } ? self : nil
     }
 
     override func resetCursorRects() {
-        for rect in labelRects { addCursorRect(rect, cursor: .openHand) }
+        for rect in labelRects { addCursorRect(rect, cursor: wiring == nil ? .openHand : .pointingHand) }
+        for rect in pillRects { addCursorRect(rect, cursor: .pointingHand) }
     }
 
     private func group(at event: NSEvent) -> BoardGroup? {
         let local = convert(event.locationInWindow, from: nil)
-        guard let index = labelRects.firstIndex(where: { $0.contains(local) }), index < groups.count else { return nil }
+        let index = pillRects.firstIndex { $0.contains(local) } ?? labelRects.firstIndex { $0.contains(local) }
+        guard let index, index < groups.count else { return nil }
         return groups[index]
     }
 
     override func mouseDown(with event: NSEvent) {
         guard let controller, let group = group(at: event) else { return }
+        // Connecting: a click on the label or the pill wires the group.
+        if let id = controller.model.wiring {
+            controller.toggleGroup(group.project, in: id)
+            return
+        }
         if event.clickCount == 2 {
             controller.zoom(toFit: group.frame.insetBy(dx: -50, dy: -50), animated: true)
             return

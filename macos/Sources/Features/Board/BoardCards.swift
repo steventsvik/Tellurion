@@ -6,7 +6,7 @@ import AppKit
 /// Codex tile), and then follows that agent: Doing while it works, Done when it finishes.
 struct BoardCard: Codable, Identifiable, Equatable {
     enum Kind: String, Codable, CaseIterable {
-        case note, checklist, kanban, map
+        case note, checklist, kanban, map, orchestrator
 
         var title: String {
             switch self {
@@ -14,6 +14,7 @@ struct BoardCard: Codable, Identifiable, Equatable {
             case .checklist: return "Checklist"
             case .kanban: return "Kanban"
             case .map: return "Agent Map"
+            case .orchestrator: return "Orchestrator"
             }
         }
 
@@ -23,6 +24,7 @@ struct BoardCard: Codable, Identifiable, Equatable {
             case .checklist: return "checklist"
             case .kanban: return "rectangle.split.3x1"
             case .map: return "map"
+            case .orchestrator: return "point.3.connected.trianglepath.dotted"
             }
         }
 
@@ -32,6 +34,7 @@ struct BoardCard: Codable, Identifiable, Equatable {
             case .checklist: return CGSize(width: 380, height: 420)
             case .kanban: return CGSize(width: 900, height: 520)
             case .map: return CGSize(width: 980, height: 640)
+            case .orchestrator: return CGSize(width: 380, height: 520)
             }
         }
     }
@@ -92,15 +95,22 @@ extension BoardController {
         scheduleSave()
     }
 
-    /// Closes a card; ⌘Z brings it back.
+    /// Closes a card; ⌘Z brings it back (an orchestrator with its wiring).
     func removeCard(_ id: UUID) {
         guard let index = model.cards.firstIndex(where: { $0.id == id }) else { return }
         let card = model.cards[index]
         let frame = model.frames[id] ?? .zero
+        let team = orchestrator(id)
         model.cards.remove(at: index)
         model.order.removeAll { $0 == id }
+        if team != nil {
+            model.teams.removeAll { $0.id == id }
+            orchestratorBrains.removeValue(forKey: id)?.stop(quietly: true)
+            if model.wiring == id { endWiring() }
+        }
         undoManager?.registerUndo(withTarget: self) { board in
             board.insertCard(card, frame: frame)
+            if let team { board.model.teams.append(team) }
             board.undoManager?.registerUndo(withTarget: board) { $0.removeCard(id) }
         }
         undoManager?.setActionName("Close \(card.kind.title)")

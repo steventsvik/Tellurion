@@ -5,8 +5,7 @@ import AppKit
 /// buttons, the resize corner, and the mouse. Dragging the title bar moves the tile (zoomed
 /// out, anywhere on it does); it snaps to its neighbours' edges unless ⌘ is held, lifts while
 /// dragged, and the board scrolls when it's held at the edge. Double-clicking the title bar
-/// zooms in; the corner resizes. A terminal's link button drags out a line to another tile to
-/// put them on a team (see BoardTeams).
+/// zooms in; the corner resizes.
 class BoardNodeView: NSView {
     static let header: CGFloat = 30
     private static let corner: CGFloat = 16
@@ -17,7 +16,7 @@ class BoardNodeView: NSView {
     /// The board's zoom, kept by `setZoom`.
     private(set) var zoom: CGFloat = 1
 
-    private enum Drag { case move, resize, close, zoom, menu, link }
+    private enum Drag { case move, resize, close, zoom, menu }
     private var drag: Drag?
     private var dragStart: (point: CGPoint, window: CGPoint, frame: CGRect)?
     private var dragMoved = false
@@ -50,8 +49,11 @@ class BoardNodeView: NSView {
     func nodeFocus() {}
     /// A click on the title bar that didn't move it.
     func nodeClick() {}
-    /// Has a link button, to drag onto another tile and make a team.
-    var linkable: Bool { false }
+    /// Can be wired to an orchestrator: while one is connecting, a click anywhere on it
+    /// (but its buttons) wires or unwires it (see BoardController.startWiring).
+    var wirable: Bool { false }
+
+    private var wiring: UUID? { wirable ? controller?.model.wiring : nil }
 
     /// Zoomed this far out, the tile's content is too small to use: the whole tile is a handle.
     var isHandle: Bool { zoom < 0.45 }
@@ -78,8 +80,6 @@ class BoardNodeView: NSView {
 
     var menuRect: CGRect { zoomRect.offsetBy(dx: -(Self.button + 8), dy: 0) }
 
-    var linkRect: CGRect { linkable ? menuRect.offsetBy(dx: -(Self.button + 8), dy: 0) : .zero }
-
     /// About 16 points on screen whatever the zoom, and never more than a third of the tile.
     var cornerRect: CGRect {
         let size = min(max(Self.corner, Self.corner / max(zoom, 0.08)), bounds.width / 3, bounds.height / 3)
@@ -96,12 +96,15 @@ class BoardNodeView: NSView {
     }
 
     override func resetCursorRects() {
+        if wiring != nil {
+            addCursorRect(bounds, cursor: .pointingHand)
+            return
+        }
         if isHandle {
             addCursorRect(bounds, cursor: .openHand)
             return
         }
-        addCursorRect(CGRect(x: 0, y: 0, width: (linkable ? linkRect : menuRect).minX - 4, height: Self.header), cursor: .openHand)
-        if linkable { addCursorRect(linkRect, cursor: .crosshair) }
+        addCursorRect(CGRect(x: 0, y: 0, width: menuRect.minX - 4, height: Self.header), cursor: .openHand)
         addCursorRect(cornerRect, cursor: .crosshair)
     }
 
@@ -129,8 +132,6 @@ class BoardNodeView: NSView {
             drag = .zoom
         } else if menuRect.contains(local) {
             drag = .menu
-        } else if linkRect.contains(local) {
-            drag = .link
         } else if cornerRect.contains(local) {
             drag = .resize
         } else {
@@ -145,10 +146,6 @@ class BoardNodeView: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         dragPointer = event.locationInWindow
-        if drag == .link {
-            dragLink()
-            return
-        }
         dragSnaps = !event.modifierFlags.contains(.command)
         applyDrag()
         if dragMoved { updateEdgeScroll() }
@@ -179,26 +176,8 @@ class BoardNodeView: NSView {
             CATransaction.commit()
         }
         controller.groupsView?.showGuides(guides)
-        // Team lines follow straight away too.
+        // Orchestrators' wires follow straight away too.
         if !controller.model.teams.isEmpty { controller.groupsView?.update(links: controller.teamLinks(), zoom: controller.model.zoom) }
-    }
-
-    /// The link follows the pointer; the tile under it lights up.
-    private func dragLink() {
-        guard let controller, let superview, let start = dragStart else { return }
-        if !dragMoved {
-            guard hypot(dragPointer.x - start.window.x, dragPointer.y - start.window.y) >= 3 else { return }
-            dragMoved = true
-        }
-        let point = superview.convert(dragPointer, from: nil)
-        let target = linkTarget(at: point).flatMap { controller.model.frames[$0] }
-        controller.groupsView?.showPendingLink(from: controller.model.frames[nodeID], to: point, target: target)
-    }
-
-    /// The terminal tile under a board point, other than this one.
-    private func linkTarget(at point: CGPoint) -> UUID? {
-        guard let model = controller?.model else { return nil }
-        return model.stacked.reversed().first { $0.id != nodeID && model.frames[$0.id]?.contains(point) == true }?.id
     }
 
     /// Lifted while dragged: a soft shadow under the tile.
@@ -279,7 +258,6 @@ class BoardNodeView: NSView {
         edgeTimer = nil
         if dragMoved, drag == .move { NSCursor.pop() }
         controller?.groupsView?.showGuides([])
-        controller?.groupsView?.hidePendingLink()
         drag = nil
         dragStart = nil
     }
@@ -290,7 +268,7 @@ class BoardNodeView: NSView {
         edgeTimer = nil
         guard let controller else { return }
         let local = convert(event.locationInWindow, from: nil)
-        if dragMoved, drag != .link {
+        if dragMoved {
             controller.groupsView?.showGuides([])
             lift(false)
             if drag == .move { NSCursor.pop() }
@@ -302,18 +280,6 @@ class BoardNodeView: NSView {
             nodeFocus()
         case .menu where menuRect.contains(local):
             nodeMenu()?.popUp(positioning: nil, at: CGPoint(x: menuRect.minX, y: menuRect.maxY + 4), in: self)
-        case .link where dragMoved:
-            controller.groupsView?.hidePendingLink()
-            let point = superview.map { $0.convert(event.locationInWindow, from: nil) } ?? .zero
-            if let target = linkTarget(at: point) {
-                controller.connect(nodeID, to: target)
-            } else if controller.role(of: nodeID) != nil {
-                // Dropped on empty board: off the team.
-                controller.removeFromTeam(tile: nodeID)
-            }
-        case .link where linkRect.contains(local):
-            BoardTeamMenu.menu(for: nodeID, in: controller)
-                .popUp(positioning: nil, at: CGPoint(x: linkRect.minX, y: linkRect.maxY + 4), in: self)
         case .move where !dragMoved:
             // Zoomed out, a click goes to the tile.
             if isHandle { nodeFocus() } else { nodeClick() }

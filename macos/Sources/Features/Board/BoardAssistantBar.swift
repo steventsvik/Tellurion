@@ -163,7 +163,7 @@ struct BoardAssistantBar: View {
         HStack(spacing: 7) {
             chip("New terminal", 0) { controller.addTile() }
             chip("Launch agents", 1) { model.showComposer = true }
-            chip("Team", 6) { model.showTeamComposer = true }
+            chip("Orchestrator", 6) { model.showOrchestratorComposer = true }
             if full { chip("Sketch", 2) { controller.addSketch() } }
             if model.surfaces.count > 1 { chip("Group", 3) { controller.arrangeByProject() } }
             if !model.surfaces.isEmpty {
@@ -443,12 +443,14 @@ final class BoardAssistantOrbView: NSView {
 
 // MARK: - The text field
 
-/// The bar's text field: Return sends, ↑ recalls, Escape goes back to the board, @ lists the
-/// tiles, and holding Space in an empty field dictates.
+/// The bar's text field (and an orchestrator's): Return sends, ↑ recalls, Escape goes back to
+/// the board, @ lists the tiles, and holding Space in an empty field dictates.
 struct BoardAssistantField: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
     let controller: BoardController
+    /// An orchestrator's field: @ lists only these tiles, and ⌘L stays with the bar.
+    var mentions: Set<UUID>?
     let onSubmit: () -> Void
     let onRecall: () -> Void
     let onHold: (Bool) -> Void
@@ -466,11 +468,15 @@ struct BoardAssistantField: NSViewRepresentable {
         field.cell?.isScrollable = true
         field.cell?.wraps = false
         field.delegate = context.coordinator
-        field.setAccessibilityLabel("Ask the board")
+        field.setAccessibilityLabel(mentions == nil ? "Ask the board" : "Command the orchestrator")
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         context.coordinator.field = field
-        controller.assistantField = field
+        if mentions == nil {
+            controller.assistantField = field
+        } else {
+            field.font = .systemFont(ofSize: 12.5)
+        }
         return field
     }
 
@@ -478,7 +484,7 @@ struct BoardAssistantField: NSViewRepresentable {
         context.coordinator.parent = self
         if field.stringValue != text { field.stringValue = text }
         field.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
-            .foregroundColor: Extreme.chrome.dim.nsColor, .font: NSFont.systemFont(ofSize: 13.5),
+            .foregroundColor: Extreme.chrome.dim.nsColor, .font: NSFont.systemFont(ofSize: mentions == nil ? 13.5 : 12.5),
         ])
     }
 
@@ -562,7 +568,8 @@ struct BoardAssistantField: NSViewRepresentable {
         }
 
         private func showTiles(in editor: NSTextView, at caret: Int) {
-            let tiles = parent.controller.tileLabels()
+            let only = parent.mentions
+            let tiles = parent.controller.tileLabels().filter { only?.contains($0.id) ?? true }
             guard let field, !tiles.isEmpty else { return }
             let menu = NSMenu()
             for tile in tiles {

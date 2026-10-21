@@ -57,7 +57,7 @@ struct BoardAssistantAction: Codable, Equatable {
     /// Closing, removing and typing into an agent that's already running wait for you.
     var needsConfirmation: Bool {
         switch type {
-        case "close_tile", "remove_card", "message_agent", "add_to_team": return true
+        case "close_tile", "remove_card", "message_agent", "command_orchestrator": return true
         case "hand_item": return tile != nil
         default: return false
         }
@@ -114,13 +114,13 @@ enum BoardAssistantPrompt {
     - arrange {}: group the tiles by project.
     - show {target?}: zoom to a tile, card or sketch; no target shows everything.
     - rename_board {title}
-    - create_team {agent, members: [{agent, role}], folder?, task?}: start a team: a lead \
-    agent (agent, usually claude) that runs the members with its `team` command, and the \
-    members, each with a role (Coder, Reviewer, Tester…; up to 8). task is the team's goal; \
-    the lead starts on it. The user talks to the lead.
-    - add_to_team {tile, target, role}: put tile T# on the team led by target (T#), or make \
-    target the lead of a new team.
-    - remove_from_team {tile}
+    - create_orchestrator {members: [{agent, role}], folder?, task?}: an orchestrator card \
+    wired to new agents, each with a role (Coder, Reviewer, Tester…; up to 8). An \
+    orchestrator splits the user's command among its agents and follows up until it's done. \
+    task is its first command.
+    - wire {card?, tiles}: wire tiles T# to orchestrator card C# (no card: a new orchestrator).
+    - unwire {card, tiles}
+    - command_orchestrator {card, text}: give orchestrator C# a command.
 
     Folders may start with ~. Without one, tiles start in the board's folder. Several actions \
     run in order. Closing, removing and messaging running agents ask the user first, so \
@@ -136,7 +136,8 @@ enum BoardAssistantPrompt {
                 "type": ["type": "string", "enum": ["launch_agents", "new_terminal", "message_agent", "hand_item", "close_tile",
                                                     "rename_tile", "pause", "resume", "add_note", "add_checklist", "add_kanban",
                                                     "add_items", "add_sketch", "agent_map", "remove_card", "arrange", "show",
-                                                    "rename_board", "create_team", "add_to_team", "remove_from_team"]],
+                                                    "rename_board", "create_orchestrator", "wire", "unwire",
+                                                    "command_orchestrator"]],
                 "tile": ["type": "string"], "tiles": strings, "card": ["type": "string"], "item": ["type": "integer"],
                 "agent": ["type": "string"], "count": ["type": "integer"], "folder": ["type": "string"],
                 "task": ["type": "string"], "command": ["type": "string"], "text": ["type": "string"],
@@ -184,16 +185,11 @@ extension BoardController {
             }
             if let folder = folder(of: surface) { parts.append("in \(Self.tilde(folder))") }
             if model.paused.contains(surface.id) { parts.append("paused") }
-            if team(ledBy: surface.id) != nil { parts.append("leads a team") }
-            if let role = role(of: surface.id) { parts.append("team role: \(role)") }
+            let wired = orchestrators(of: surface.id).compactMap { team in
+                model.cards.firstIndex { $0.id == team.id }.map { "C\($0 + 1)" }
+            }
+            if !wired.isEmpty { parts.append("wired to " + wired.joined(separator: ", ")) }
             lines.append("- " + parts.joined(separator: "; "))
-        }
-        if !model.teams.isEmpty { lines.append("Teams:") }
-        for team in model.teams {
-            let handle = { (id: UUID) in self.model.surfaces.firstIndex { $0.id == id }.map { "T\($0 + 1)" } ?? "?" }
-            let members = team.members.map { "\(handle($0.tile)) (\($0.role))" }.joined(separator: ", ")
-            lines.append("- \(team.name): lead \(handle(team.lead)); members " + (members.isEmpty ? "none" : members)
-                         + (team.goal.map { "; goal: \(Self.clip($0, 160))" } ?? ""))
         }
         if !model.cards.isEmpty { lines.append("Cards:") }
         for (index, card) in model.cards.enumerated() {
@@ -202,6 +198,8 @@ extension BoardController {
             switch card.kind {
             case .note:
                 lines.append("- \(handle) note \"\(card.title)\": \(Self.clip(card.text, 300))")
+            case .orchestrator:
+                lines.append("- \(handle) orchestrator \"\(card.title)\"" + orchestratorSummary(card.id))
             case .map:
                 lines.append("- \(handle) Agent Map of \(card.folder.map(Self.tilde) ?? "no project")")
             case .checklist, .kanban:
@@ -251,6 +249,16 @@ extension BoardController {
             tiles.append(entry.surface)
         }
         return (tiles, rest.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// "; wired to T1, T3 and group web; working" for the board's agent.
+    func orchestratorSummary(_ id: UUID) -> String {
+        guard let team = orchestrator(id) else { return "" }
+        let tiles = team.members.compactMap { member in model.surfaces.firstIndex { $0.id == member.tile }.map { "T\($0 + 1)" } }
+        let wired = tiles + team.groups.map { "group \(BoardProjects.name($0))" }
+        var text = "; wired to " + (wired.isEmpty ? "nothing" : wired.joined(separator: ", "))
+        if let brain = orchestratorBrains[id], brain.running { text += "; working on: \(Self.clip(team.goal ?? "", 120))" }
+        return text
     }
 
     private static func tilde(_ path: String) -> String { (path as NSString).abbreviatingWithTildeInPath }
@@ -319,9 +327,9 @@ extension BoardController {
         case "hand_item":
             guard let surface = surface(action.tile, handles), let item = item(action, handles) else { return nil }
             return "Give \(tileLabel(surface)): “\(Self.clip(item.item.text, 80))”"
-        case "add_to_team":
-            guard let tile = surface(action.tile, handles), let lead = surface(action.target, handles), tile !== lead else { return nil }
-            return "Put \(tileName(tile)) on \(tileName(lead))'s team as \(action.role ?? "a member") (they're told)"
+        case "command_orchestrator":
+            guard let id = handles.id(action.card), orchestrator(id) != nil else { return nil }
+            return "Give \(orchestratorName(id)) the command “\(action.text ?? "")” (it messages its agents)"
         default:
             return nil
         }
@@ -475,27 +483,34 @@ extension BoardController {
             guard let title = action.title, !title.isEmpty else { return nil }
             rename(title)
             return "Renamed the board “\(title)”"
-        case "create_team":
+        case "create_orchestrator":
             if let path = action.folder, folder(path) == nil { return "No folder \(path)" }
             let find = { (name: String) in BoardAgent.catalog.first { $0.binary == name || $0.kind.rawValue == name } }
-            guard let lead = find(action.agent ?? "claude") else { return "\(action.agent ?? "That agent") can't lead a team" }
             let members = (action.members ?? []).prefix(8).map { (agent: find($0.agent), role: $0.role.isEmpty ? "Member" : $0.role) }
             let goal = (action.task ?? action.text)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            launchTeam(lead: lead, members: Array(members), folder: folder(action.folder), goal: goal?.isEmpty == false ? goal : nil)
-            return "Started a team: \(lead.kind.displayName) leading \(members.count) member" + (members.count == 1 ? "" : "s")
-        case "add_to_team":
-            guard let tile = surface(action.tile, handles), let lead = surface(action.target, handles), tile !== lead else { return nil }
-            let role = action.role?.isEmpty == false ? action.role ?? "Member" : "Member"
-            if let team = team(of: lead.id), team.lead != tile.id {
-                addToTeam(team.id, tile: tile.id, role: role)
-            } else {
-                createTeam(lead: lead.id, members: [(tile.id, role)], goal: nil, brief: true)
+            launchOrchestrator(members: Array(members), folder: folder(action.folder), goal: goal?.isEmpty == false ? goal : nil)
+            return "Started an orchestrator with \(members.count) agent" + (members.count == 1 ? "" : "s")
+        case "wire":
+            let tiles = (action.tiles ?? action.tile.map { [$0] } ?? []).compactMap { surface($0, handles)?.id }
+            guard !tiles.isEmpty else { return nil }
+            if let id = handles.id(action.card), orchestrator(id) != nil {
+                wire(tiles, to: id)
+                return "Wired \(tiles.count) tile\(tiles.count == 1 ? "" : "s") to \(orchestratorName(id))"
             }
-            return "Put \(tileLabel(tile)) on the team as \(role)"
-        case "remove_from_team":
-            guard let tile = surface(action.tile, handles), role(of: tile.id) != nil else { return nil }
-            removeFromTeam(tile: tile.id)
-            return "Took \(tileLabel(tile)) off its team"
+            let near = tiles.compactMap { model.frames[$0] }.reduce(CGRect.null) { $0.union($1) }
+            newOrchestrator(at: near.isNull ? nil : CGPoint(x: near.midX, y: near.minY - BoardCard.Kind.orchestrator.size.height / 2 - 60),
+                            wiring: tiles)
+            return "Wired \(tiles.count) tile\(tiles.count == 1 ? "" : "s") to a new orchestrator"
+        case "unwire":
+            guard let id = handles.id(action.card), orchestrator(id) != nil else { return nil }
+            let tiles = (action.tiles ?? action.tile.map { [$0] } ?? []).compactMap { surface($0, handles)?.id }
+            for tile in tiles { unwire(tile, from: id) }
+            return tiles.isEmpty ? nil : "Unwired \(tiles.count) tile\(tiles.count == 1 ? "" : "s")"
+        case "command_orchestrator":
+            guard let id = handles.id(action.card), orchestrator(id) != nil, let text = action.text, !text.isEmpty else { return nil }
+            orchestratorBrain(id).lookUp()
+            orchestratorBrain(id).command(text)
+            return "Gave \(orchestratorName(id)) the command"
         default:
             return nil
         }

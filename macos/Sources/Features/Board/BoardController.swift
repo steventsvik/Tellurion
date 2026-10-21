@@ -14,7 +14,7 @@ final class BoardModel: ObservableObject {
     /// The zoom once a pinch or zoom animation has settled (not every step of it).
     @Published var zoom: CGFloat = 1
     @Published var showComposer = false
-    @Published var showTeamComposer = false
+    @Published var showOrchestratorComposer = false
     @Published var showSidebar = true
     @Published var name = ""
     /// Bumped when an agent on this board changes, so the list and tiles refresh.
@@ -34,8 +34,10 @@ final class BoardModel: ObservableObject {
     @Published var focusedSketch: UUID?
     /// Tiles whose processes are stopped (see BoardPause).
     @Published var paused: Set<UUID> = []
-    /// Leads and the tiles they run (see BoardTeams).
+    /// Orchestrators and what's wired to them (see BoardTeams).
     @Published var teams: [BoardTeam] = []
+    /// The orchestrator that clicks on tiles and groups wire to, while connecting.
+    @Published var wiring: UUID?
     /// The next change to `frames` slides the tiles there instead of jumping.
     var animateNextLayout = false
 
@@ -105,8 +107,12 @@ final class BoardController: BaseTerminalController {
     private(set) lazy var assistant = BoardAssistant(controller: self)
     /// The bar's text field, for ⌘L.
     weak var assistantField: NSTextField?
-    /// What teams' leads have yet to hear (see BoardTeams).
+    /// What orchestrators have yet to hear from their agents (see BoardTeams).
     let teamRelay = BoardTeamRelay()
+    /// Each orchestrator card's brain, made on first use.
+    var orchestratorBrains: [UUID: OrchestratorBrain] = [:]
+    /// Escape ends connecting (see startWiring).
+    var wiringMonitor: Any?
 
     // MARK: Opening
 
@@ -155,7 +161,7 @@ final class BoardController: BaseTerminalController {
             model.frames[card.id] = card.frame
             model.order.append(card.id)
         }
-        model.teams = workspace.teams ?? []
+        model.teams = (workspace.teams ?? []).filter { team in model.cards.contains { $0.id == team.id } }
         model.name = workspace.name
         model.colors = workspace.colors ?? [:]
         self.model = model
@@ -303,7 +309,7 @@ final class BoardController: BaseTerminalController {
         }
         for view in surfaces where !model.order.contains(view.id) { model.order.append(view.id) }
         model.surfaces = surfaces
-        // Closed tiles leave their teams.
+        // Closed tiles come unwired.
         if !model.teams.isEmpty { pruneTeams() }
         watchProjects()
         updateVisibility()
@@ -365,7 +371,7 @@ final class BoardController: BaseTerminalController {
 
     /// A new terminal tile beside the other tiles of its project, next to `near` or in the
     /// middle of the view.
-    /// `focus` false leaves the keyboard where it is (tiles a team's lead opens).
+    /// `focus` false leaves the keyboard where it is (tiles an orchestrator opens).
     @discardableResult
     func addTile(config: Ghostty.SurfaceConfiguration? = nil, command: String? = nil,
                  near: Ghostty.SurfaceView? = nil, frame: CGRect? = nil, focus: Bool = true) -> Ghostty.SurfaceView? {
@@ -992,6 +998,8 @@ final class BoardController: BaseTerminalController {
 
     override func windowWillClose(_ notification: Notification) {
         setPaused(false)
+        for brain in orchestratorBrains.values { brain.stop(quietly: true) }
+        endWiring()
         if deleteOnClose {
             BoardStore.delete(workspace.id)
         } else {
