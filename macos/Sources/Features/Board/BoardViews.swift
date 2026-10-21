@@ -5,17 +5,16 @@ import SwiftUI
 // MARK: - Window
 
 /// A board window: the list of what's on the board, the board, and the panels a classic window
-/// has (code editor, Visual Fix, command history, the command palette).
+/// has (Visual Fix, command history, the command palette). Boards have no code editor or
+/// Mission Control; an Agent Map tile shows where the agents are working.
 struct BoardWindowView: View {
     let controller: BoardController
     @ObservedObject var model: BoardModel
     @StateObject private var motion = WindowMotion()
     @ObservedObject private var settings = ExtremeSettings.shared
-    @ObservedObject private var editor = EditorPanel.shared
     @ObservedObject private var visualFix = VisualFixPanel.shared
     @ObservedObject private var history = CommandBlocksPanel.shared
     @AppStorage(AgentAurora.enabledKey) private var aurora = false
-    @AppStorage(EditorPanel.widthKey) private var editorWidth: Double = EditorPanel.defaultWidth
     @AppStorage(VisualFixPanel.widthKey) private var fixWidth: Double = VisualFixPanel.defaultWidth
 
     static let sidebarWidth: CGFloat = 252
@@ -55,7 +54,6 @@ struct BoardWindowView: View {
                         Spacer(minLength: 0)
                         if panels.history { CommandBlocksColumn(controller: controller) }
                         if panels.visualFix { VisualFixColumn(controller: controller, maxWidth: panels.maxVisualFix) }
-                        if panels.editor { EditorPanelColumn(controller: controller, maxWidth: panels.maxEditor) }
                     }
                     .padding(.top, 28)
                 }
@@ -81,27 +79,20 @@ struct BoardWindowView: View {
 
     /// Which side panels are open on this board, and how wide they can be.
     private struct Panels {
-        var editor: Bool
         var visualFix: Bool
         var history: Bool
         var total: CGFloat
-        var maxEditor: CGFloat
         var maxVisualFix: CGFloat
     }
 
     /// The board keeps at least 420 points.
     private func panelWidth(in total: CGFloat) -> Panels {
-        let showEditor = editor.isVisible(controller)
         let showFix = visualFix.isVisible(controller)
         let showHistory = history.isVisible(controller)
         let room = max(0, total - (model.showSidebar ? Self.sidebarWidth + 1 : 0) - 420 - (showHistory ? 400 : 0))
-        let maxEditor = showFix ? room / 2 : room
-        let maxFix = showEditor ? room / 2 : room
-        // Each column adds its 5-point resize handle.
-        let used = (showHistory ? 400 : 0) + (showEditor ? min(CGFloat(editorWidth), maxEditor) + 5 : 0)
-            + (showFix ? min(CGFloat(fixWidth), maxFix) + 5 : 0)
-        return Panels(editor: showEditor, visualFix: showFix, history: showHistory, total: used,
-                      maxEditor: maxEditor, maxVisualFix: maxFix)
+        // The Visual Fix column adds its 5-point resize handle.
+        let used = (showHistory ? 400 : 0) + (showFix ? min(CGFloat(fixWidth), room) + 5 : 0)
+        return Panels(visualFix: showFix, history: showHistory, total: used, maxVisualFix: room)
     }
 }
 
@@ -170,6 +161,8 @@ private struct BoardToolbar: View {
                     Button { controller.addCard(.note) } label: { Label("Note", systemImage: "note.text") }
                     Button { controller.addCard(.checklist) } label: { Label("Checklist", systemImage: "checklist") }
                     Button { controller.addCard(.kanban) } label: { Label("Kanban", systemImage: "rectangle.split.3x1") }
+                    Divider()
+                    Button { controller.showAgentMap() } label: { Label("Agent Map", systemImage: "map") }
                 } label: {
                     Image(systemName: "rectangle.stack.badge.plus").font(.system(size: 12, weight: .medium))
                         .foregroundColor(Extreme.text.opacity(0.85))
@@ -178,7 +171,7 @@ private struct BoardToolbar: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .frame(width: 26, height: 22)
-                .help("Add a sketch, note, checklist or kanban board")
+                .help("Add a sketch, note, checklist, kanban board or Agent Map")
                 button("rectangle.3.group", "Arrange by project") { controller.arrangeByProject() }
                 divider
                 button("minus.magnifyingglass", "Zoom out (⌥⌘-)") { controller.zoom(by: 1 / 1.4) }
@@ -301,7 +294,7 @@ private struct BoardSidebar: View {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(model.cards) { card in
                         BoardSketchRow(title: card.title, count: card.items.count, focused: false,
-                                       symbol: card.kind.symbol, empty: card.kind == .note ? "Note" : "Empty")
+                                       symbol: card.kind.symbol, empty: card.kind == .note ? "Note" : card.kind == .map ? "Agent Map" : "Empty")
                             .onTapGesture {
                                 controller.raise(id: card.id)
                                 if let frame = model.frames[card.id] { controller.zoom(toFit: frame.insetBy(dx: -40, dy: -40), animated: true) }
@@ -351,10 +344,8 @@ private struct BoardSidebar: View {
         HStack(spacing: 4) {
             NewSessionMenu(owner: controller, compact: true)
             Spacer(minLength: 0)
-            if settings.isOn(.editor) { EditorHeaderButton(owner: controller) }
             if all, settings.isOn(.localhost) { LocalhostHeaderButton() }
             if all, settings.isOn(.review) { ReviewHeaderButton() }
-            if settings.isOn(.missionControl) { MissionControlButton() }
             ToolsButton(owner: controller, condensed: $condensed)
         }
     }
@@ -454,12 +445,9 @@ private struct BoardSidebar: View {
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
-                    if !isOpen {
-                        Button("Delete Board") {
-                            BoardStore.delete(board.id)
-                            reloadBoards()
-                        }
-                    }
+                    Button("Open in New Window") { Board.reopen(controller.ghostty, board, newWindow: true) }
+                    Divider()
+                    Button("Delete Board…") { Board.delete(board, from: controller) }
                 }
             }
         }

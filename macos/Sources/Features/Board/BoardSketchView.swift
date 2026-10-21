@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 
 /// A sketch on the board: a title bar like a terminal's, the drawing, and a floating toolbar.
-final class BoardSketchView: BoardNodeView, NSDraggingSource {
+final class BoardSketchView: BoardNodeView, NSDraggingSource, NSServicesMenuRequestor {
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
         context == .outsideApplication ? .copy : []
     }
@@ -141,6 +141,18 @@ final class BoardSketchView: BoardNodeView, NSDraggingSource {
     }
 
     override func nodeClick() { focusCanvas() }
+
+    // The title bar's menu asks the sketch, not its drawing, whether it takes a picture from
+    // an iPhone or iPad; it does, and the picture goes into the drawing.
+    override func validRequestor(forSendType sendType: NSPasteboard.PasteboardType?,
+                                 returnType: NSPasteboard.PasteboardType?) -> Any? {
+        canvas.validRequestor(forSendType: sendType, returnType: returnType) as? SketchCanvasView === canvas
+            ? self : super.validRequestor(forSendType: sendType, returnType: returnType)
+    }
+
+    func readSelection(from pasteboard: NSPasteboard) -> Bool {
+        canvas.readSelection(from: pasteboard)
+    }
 
     func share(from view: NSView) {
         guard let url = controller?.exportSketch(nodeID) else { return }

@@ -8,6 +8,11 @@ enum MissionControl {
     static let windowID = "mission-control"
 
     static func toggle() {
+        // A board shows its agents on its Agent Map instead.
+        if let board = TerminalWindows.controller(of: NSApp.keyWindow ?? NSApp.mainWindow) as? BoardController {
+            board.showAgentMap()
+            return
+        }
         if AgentToolWindows.isOpen(windowID) {
             AgentToolWindows.close(id: windowID)
         } else {

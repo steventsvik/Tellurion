@@ -59,6 +59,19 @@ final class BoardController: BaseTerminalController {
         NSApp.windows.compactMap { $0.windowController as? BoardController }
     }
 
+    /// The board in front: the main window's, else one on screen, else any (boards you
+    /// switched away from stay open out of sight).
+    static var front: BoardController? {
+        all.first { $0.window?.isMainWindow == true }
+            ?? all.filter { $0.window?.isVisible == true }.max { $0.lastShown < $1.lastShown }
+            ?? all.max { $0.lastShown < $1.lastShown }
+    }
+
+    /// When this board was last in front, so closing one brings back the one before it.
+    private(set) var lastShown = Date()
+    /// Deleting the board: closing its window removes it instead of saving it.
+    private var deleteOnClose = false
+
     /// Quitting: windows closing now stay open in the saved board.
     private static var terminating = false
 
@@ -86,11 +99,13 @@ final class BoardController: BaseTerminalController {
 
     // MARK: Opening
 
+    /// Opens a board in place of the front one, which steps back out of sight and keeps
+    /// running; the list of boards switches between them. `newWindow` opens it beside instead.
     @discardableResult
-    static func open(_ ghostty: Ghostty.App, workspace: BoardWorkspace, restoring: Bool) -> BoardController {
-        let front = all.first { $0.window?.isMainWindow == true } ?? all.first
+    static func open(_ ghostty: Ghostty.App, workspace: BoardWorkspace, restoring: Bool, newWindow: Bool = false) -> BoardController {
+        let front = newWindow ? nil : Self.front
         let controller = BoardController(ghostty, workspace: workspace, restoring: restoring)
-        controller.makeWindow(tabbedWith: front?.window)
+        controller.makeWindow(replacing: front?.window, offset: newWindow)
         controller.saveNow()
         NotificationCenter.default.post(name: boardsDidChange, object: nil)
         return controller
@@ -172,11 +187,17 @@ final class BoardController: BaseTerminalController {
         observers.forEach(NotificationCenter.default.removeObserver)
     }
 
-    private func makeWindow(tabbedWith front: NSWindow?) {
+    private func makeWindow(replacing front: NSWindow?, offset: Bool) {
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let size = NSSize(width: min(1480, screen.width - 80), height: min(940, screen.height - 60))
-        let frame = workspace.windowFrame ?? NSRect(x: screen.midX - size.width / 2, y: screen.midY - size.height / 2,
+        var frame = workspace.windowFrame ?? NSRect(x: screen.midX - size.width / 2, y: screen.midY - size.height / 2,
                                                     width: size.width, height: size.height)
+        let replaced = front.flatMap { Self.canReplace($0) ? $0 : nil }
+        if let replaced { frame = replaced.frame }
+        // Its own window, a step down and right of the front one so both show.
+        if offset, let main = Self.front?.window, !main.styleMask.contains(.fullScreen) {
+            frame = main.frame.offsetBy(dx: 30, dy: -30)
+        }
         let window = NSWindow(contentRect: frame,
                               styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
@@ -184,8 +205,8 @@ final class BoardController: BaseTerminalController {
         window.titleVisibility = .hidden
         window.isRestorable = false
         window.isReleasedWhenClosed = false
-        window.tabbingMode = .preferred
-        window.tabbingIdentifier = "com.steventsvik.ghostty-extreme.board"
+        // Boards switch from their list, not with tabs: a tab bar would cover the board's top.
+        window.tabbingMode = .disallowed
         window.collectionBehavior.insert(.fullScreenPrimary)
         window.minSize = NSSize(width: 640, height: 420)
         window.appearance = NSAppearance(named: Extreme.chrome.isLight ? .aqua : .darkAqua)
@@ -201,10 +222,8 @@ final class BoardController: BaseTerminalController {
         window.contentView = NSHostingView(rootView: BoardWindowView(controller: self, model: model).environmentObject(ghostty))
         window.title = workspace.name
 
-        if let front, front !== window {
-            front.addTabbedWindow(window, ordered: .above)
-        }
         window.makeKeyAndOrderFront(nil)
+        replaced?.orderOut(nil)
         if let first = surfaceTree.root?.leftmostLeaf() {
             Ghostty.moveFocus(to: first)
         }
@@ -872,9 +891,68 @@ final class BoardController: BaseTerminalController {
 
     // MARK: Window
 
+    /// Whether a board can take `window`'s place: not in full screen (it has its own space).
+    private static func canReplace(_ window: NSWindow) -> Bool {
+        window.isVisible && !window.styleMask.contains(.fullScreen)
+    }
+
+    override func bringForward() { show() }
+
+    /// Brings this board forward in place of the front one, which steps back out of sight.
+    func show() {
+        guard let window else { return }
+        if !window.isVisible, let front = Self.front, front !== self, let frontWindow = front.window, Self.canReplace(frontWindow) {
+            window.setFrame(frontWindow.frame, display: false)
+            window.makeKeyAndOrderFront(nil)
+            frontWindow.orderOut(nil)
+        } else {
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    /// Asks, then closes the board (its terminals too) and deletes it for good.
+    func confirmDelete() {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Delete “\(workspace.name)”?"
+        alert.informativeText = model.surfaces.isEmpty
+            ? "Its sketches, notes and maps are deleted. You can't undo this."
+            : "Its terminals are closed, and its sketches, notes and maps are deleted. You can't undo this."
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        show()
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            self.deleteOnClose = true
+            // After the sheet is gone, so a "close running terminals?" prompt can show.
+            DispatchQueue.main.async {
+                self.window?.performClose(nil)
+                // Kept open (its terminals' prompt was cancelled): it isn't deleted.
+                DispatchQueue.main.async { if self.window?.isVisible == true { self.deleteOnClose = false } }
+            }
+        }
+    }
+
+    override func windowDidBecomeKey(_ notification: Notification) {
+        super.windowDidBecomeKey(notification)
+        lastShown = Date()
+    }
+
     override func windowWillClose(_ notification: Notification) {
-        if !Self.terminating { workspace.open = false }
-        saveNow()
+        if deleteOnClose {
+            BoardStore.delete(workspace.id)
+        } else {
+            if !Self.terminating { workspace.open = false }
+            saveNow()
+        }
+        // The board you were on before comes back in its place.
+        if !Self.terminating, let window, window.isVisible, !window.styleMask.contains(.fullScreen),
+           let next = Self.all.filter({ $0 !== self && $0.window?.isVisible == false && $0.window?.isMiniaturized == false })
+               .max(by: { $0.lastShown < $1.lastShown }), let nextWindow = next.window {
+            nextWindow.setFrame(window.frame, display: false)
+            nextWindow.makeKeyAndOrderFront(nil)
+        }
         super.windowWillClose(notification)
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: Self.boardsDidChange, object: nil)

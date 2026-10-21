@@ -61,24 +61,50 @@ enum Board {
         }
     }
 
-    /// A new, empty board, as a tab of the front board when there is one.
+    /// A new, empty board, in place of the front board.
     @discardableResult
     static func newBoard(_ ghostty: Ghostty.App, folder: String? = nil) -> BoardController {
-        let front = BoardController.all.first { $0.window?.isMainWindow == true } ?? BoardController.all.first
+        let front = BoardController.front
         let start = folder ?? front?.workspace.folder ?? front?.focusedSurface?.pwd
         let workspace = BoardWorkspace(name: BoardStore.newName(), folder: start)
         return BoardController.open(ghostty, workspace: workspace, restoring: false)
     }
 
-    /// Reopens a saved board, or brings it forward when it's open already.
-    static func reopen(_ ghostty: Ghostty.App, _ workspace: BoardWorkspace) {
+    /// Switches to a saved board: brings it forward when it's open, else opens it, either way
+    /// in place of the front board. `newWindow` shows it in a window of its own instead.
+    static func reopen(_ ghostty: Ghostty.App, _ workspace: BoardWorkspace, newWindow: Bool = false) {
         if let open = BoardController.all.first(where: { $0.workspace.id == workspace.id }) {
-            open.window?.makeKeyAndOrderFront(nil)
+            if newWindow, open.window?.isVisible == false, let window = open.window, let front = BoardController.front?.window {
+                window.setFrame(front.frame.offsetBy(dx: 30, dy: -30), display: false)
+                window.makeKeyAndOrderFront(nil)
+            } else {
+                open.show()
+            }
             return
         }
         var workspace = workspace
         workspace.open = true
-        BoardController.open(ghostty, workspace: workspace, restoring: true)
+        BoardController.open(ghostty, workspace: workspace, restoring: true, newWindow: newWindow)
+    }
+
+    /// Deletes a board after asking: an open one is closed first.
+    static func delete(_ workspace: BoardWorkspace, from board: BoardController) {
+        if let open = BoardController.all.first(where: { $0.workspace.id == workspace.id }) {
+            open.confirmDelete()
+            return
+        }
+        guard let window = board.window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Delete “\(workspace.name)”?"
+        alert.informativeText = "Its sketches, notes and maps are deleted. You can't undo this."
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        alert.beginSheetModal(for: window) { response in
+            guard response == .alertFirstButtonReturn else { return }
+            BoardStore.delete(workspace.id)
+            NotificationCenter.default.post(name: BoardController.boardsDidChange, object: nil)
+        }
     }
 }
 #endif

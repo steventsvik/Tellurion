@@ -55,14 +55,9 @@ enum BoardTileMenu {
                 }))
             }
             list.append(nil)
-            if settings.isOn(.editor) {
-                let open = EditorPanel.shared.isVisible(board)
-                list.append(Action(title: open ? "Close Code Editor" : "Open Folder in Code Editor", enabled: open || pwd != nil,
-                                   run: here { [weak board] in
-                    guard let board else { return }
-                    if open { EditorPanel.shared.hide(returningFocusTo: board) } else { EditorPanel.shared.show(from: board, folder: pwd) }
-                }))
-            }
+            list.append(Action(title: "Show on Agent Map", enabled: pwd != nil) { [weak board] in
+                board?.showAgentMap(for: surface)
+            })
             if settings.isOn(.visualFix) {
                 list.append(Action(title: VisualFixPanel.shared.isVisible(board) ? "Close Visual Fix" : "Visual Fix…",
                                    run: here { [weak board] in VisualFixPanel.shared.toggle(board) }))

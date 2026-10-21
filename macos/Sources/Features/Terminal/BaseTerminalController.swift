@@ -718,6 +718,11 @@ class BaseTerminalController: NSWindowController,
         }
     }
 
+    /// Tellurion: puts this window in front (a board takes the front board's place instead).
+    func bringForward() {
+        window?.makeKeyAndOrderFront(nil)
+    }
+
     @objc private func ghosttyDidPresentTerminal(_ notification: Notification) {
         guard let target = notification.object as? Ghostty.SurfaceView else { return }
         guard surfaceTree.contains(target) else { return }
@@ -728,7 +733,7 @@ class BaseTerminalController: NSWindowController,
         if let window, let group = window.tabGroup, group.selectedWindow !== window {
             group.selectedWindow = window
         }
-        window?.makeKeyAndOrderFront(nil)
+        bringForward()
 
         // We use a small delay to ensure this runs after any UI cleanup
         // (e.g., command palette restoring focus to its original surface).

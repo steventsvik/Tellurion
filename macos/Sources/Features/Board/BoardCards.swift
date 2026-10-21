@@ -6,13 +6,14 @@ import AppKit
 /// Codex tile), and then follows that agent: Doing while it works, Done when it finishes.
 struct BoardCard: Codable, Identifiable, Equatable {
     enum Kind: String, Codable, CaseIterable {
-        case note, checklist, kanban
+        case note, checklist, kanban, map
 
         var title: String {
             switch self {
             case .note: return "Note"
             case .checklist: return "Checklist"
             case .kanban: return "Kanban"
+            case .map: return "Agent Map"
             }
         }
 
@@ -21,6 +22,7 @@ struct BoardCard: Codable, Identifiable, Equatable {
             case .note: return "note.text"
             case .checklist: return "checklist"
             case .kanban: return "rectangle.split.3x1"
+            case .map: return "map"
             }
         }
 
@@ -29,6 +31,7 @@ struct BoardCard: Codable, Identifiable, Equatable {
             case .note: return CGSize(width: 340, height: 300)
             case .checklist: return CGSize(width: 380, height: 420)
             case .kanban: return CGSize(width: 900, height: 520)
+            case .map: return CGSize(width: 980, height: 640)
             }
         }
     }
@@ -41,6 +44,8 @@ struct BoardCard: Codable, Identifiable, Equatable {
     /// A note's words.
     var text = ""
     var items: [CardItem] = []
+    /// An Agent Map's project folder.
+    var folder: String?
     /// Where it sits on the board (kept in the board's frames while open).
     var frame: CGRect = .zero
 }
@@ -70,6 +75,10 @@ extension BoardController {
         }
         var card = BoardCard(id: UUID(), kind: kind, title: title)
         if kind == .checklist { card.items = [] }
+        if kind == .map {
+            card.folder = mapFolder(near: point)
+            if let folder = card.folder { card.title = BoardProjects.name(folder) }
+        }
         let frame: CGRect
         if let point {
             frame = freeSpot(size: kind.size, near: nil, around: point)
@@ -109,6 +118,43 @@ extension BoardController {
         }
         undoManager?.setActionName("Close \(card.kind.title)")
         scheduleSave()
+    }
+
+    // MARK: Agent Map
+
+    /// The project an Agent Map shows: the nearest tile's to `point`, else the focused tile's,
+    /// else the board's folder.
+    private func mapFolder(near point: CGPoint?) -> String? {
+        if let point {
+            let nearest = model.surfaces.compactMap { surface in
+                model.frames[surface.id].map { (surface, hypot($0.midX - point.x, $0.midY - point.y)) }
+            }.min { $0.1 < $1.1 }?.0
+            if let nearest, let project = model.projects[nearest.id] { return project }
+        }
+        if let surface = focusedSurface ?? model.focused?.value, let project = model.projects[surface.id] { return project }
+        return BoardProjects.project(of: workspace.folder) ?? model.projects.values.first
+    }
+
+    /// Goes to the Agent Map of a tile's project (the focused tile's without one), adding one
+    /// when the board has none for it.
+    func showAgentMap(for surface: Ghostty.SurfaceView? = nil) {
+        let project = (surface ?? focusedSurface ?? model.focused?.value).flatMap { model.projects[$0.id] } ?? mapFolder(near: nil)
+        if let card = model.cards.first(where: { $0.kind == .map && (project == nil || $0.folder == project) }),
+           let frame = model.frames[card.id] {
+            raise(id: card.id)
+            zoom(toFit: frame.insetBy(dx: -40, dy: -40), animated: true)
+            return
+        }
+        let near = surface.flatMap { model.frames[$0.id] }.map { CGPoint(x: $0.maxX + BoardCard.Kind.map.size.width / 2, y: $0.midY) }
+        let id = addCard(.map, at: near)
+        if let project { updateCard(id) { $0.folder = project; $0.title = BoardProjects.name(project) } }
+    }
+
+    func setMapFolder(_ id: UUID, to folder: String) {
+        updateCard(id) { card in
+            card.folder = folder
+            card.title = BoardProjects.name(folder)
+        }
     }
 
     func updateCard(_ id: UUID, _ change: (inout BoardCard) -> Void) {

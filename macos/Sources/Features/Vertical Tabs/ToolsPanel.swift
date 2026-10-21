@@ -69,6 +69,7 @@ private struct ToolsPanel: View {
     private var sections: [Section] {
         let pwd = owner.focusedSurface?.pwd
         let hermes = HermesSessions.shared.isHermes(owner)
+        let board = owner as? BoardController
         var group: [Tool] = []
         var all: [Section] = []
         func add(_ feature: ExtremeFeature, _ symbol: String, _ title: String, _ detail: String,
@@ -83,13 +84,20 @@ private struct ToolsPanel: View {
         }
 
         if !hermes {
-            add(.editor, PixelIcon.code.symbol, "Code editor", "Watch the agent edit, live") { EditorPanel.shared.toggle(from: owner) }
+            if board == nil {
+                add(.editor, PixelIcon.code.symbol, "Code editor", "Watch the agent edit, live") { EditorPanel.shared.toggle(from: owner) }
+            }
             add(.visualFix, PixelIcon.target.symbol, "Visual Fix", "Point at your app, have it changed") { VisualFixPanel.shared.toggle(owner) }
             add(.commandHistory, "list.bullet.rectangle", "Command history", "Every command with its output") { CommandBlocksPanel.shared.toggle(owner) }
         }
-        section("This tab")
+        section(board == nil ? "This tab" : "This tile")
 
-        add(.missionControl, PixelIcon.grid.symbol, "Mission Control", "Every agent as a live card", MissionControl.toggle)
+        if let board {
+            group.append(Tool(feature: nil, symbol: "map", title: "Agent map", detail: "Where agents are working, file by file",
+                              shortcut: "⌃⌘M") { [weak board] in board?.showAgentMap() })
+        } else {
+            add(.missionControl, PixelIcon.grid.symbol, "Mission Control", "Every agent as a live card", MissionControl.toggle)
+        }
         if !hermes {
             add(.races, "flag.checkered.2.crossed", "Agent races", "One task, several agents, keep the best") { AgentRaces.showSetup(from: owner) }
         }
