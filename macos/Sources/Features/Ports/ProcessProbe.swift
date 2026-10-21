@@ -102,7 +102,7 @@ enum ProcessProbe {
     }
 
     /// The kernel's copy of the process's arguments and environment (`NAME=value` strings).
-    private static func procArgs(_ pid: Int32) -> (arguments: [String], environment: [String])? {
+    static func procArgs(_ pid: Int32) -> (arguments: [String], environment: [String])? {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
         var size = 0
         guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return nil }

@@ -55,6 +55,10 @@ final class OrchestratorBrain: ObservableObject {
     private var watchdog: DispatchWorkItem?
     /// Agents already pointed out as stuck, so each is mentioned once.
     private var flagged: Set<UUID> = []
+    /// Counts turns started, so a lookup that finishes after a stop is dropped.
+    private var pass = 0
+    /// Wired tiles found running an agent that hasn't reported a status (see BoardPause.agents).
+    private(set) var detected: Set<UUID> = []
     /// Tests: replies to use instead of running the engine, in order.
     var canned: [OrchestratorReply] = []
 
@@ -114,6 +118,7 @@ final class OrchestratorBrain: ObservableObject {
     func stop(quietly: Bool = false) {
         process?.terminate()
         process = nil
+        pass += 1
         busy = false
         waiting = []
         watchdog?.cancel()
@@ -180,7 +185,28 @@ final class OrchestratorBrain: ObservableObject {
         }
         turn += 1
         busy = true
-        let context = controller.orchestratorContext(team, agents: installed)
+        pass += 1
+        let pass = self.pass
+        // Agents started by hand haven't always said anything yet: look for them by process.
+        let unknown = Set(controller.wiredAgents(team).filter { VerticalTabsAgents.shared.info(for: $0.surface) == nil }.map(\.surface.id))
+        guard unknown.isEmpty else {
+            BoardPause.queue.async { [weak self] in
+                let found = BoardPause.agents(in: unknown)
+                DispatchQueue.main.async {
+                    guard self?.pass == pass else { return }
+                    self?.proceed(command: command, updates: updates, detected: found)
+                }
+            }
+            return
+        }
+        proceed(command: command, updates: updates, detected: [:])
+    }
+
+    private func proceed(command: String?, updates: [Update], detected: [UUID: String]) {
+        guard let controller, let team = controller.orchestrator(id), busy else { return }
+        self.detected = Set(detected.keys)
+        let engine = self.engine, tool = engine.flatMap { ToolPath.find($0.rawValue) }
+        let context = controller.orchestratorContext(team, agents: installed, detected: detected)
         var body = "Turn \(turn) of at most \(limit).\n\nThe agents now:\n\(context.text)"
         if let goal { body += "\n\nThe user's command: \(goal)" }
         if let command, command != goal { body += "\n\nNew from the user: \(command)" }
@@ -240,7 +266,7 @@ final class OrchestratorBrain: ObservableObject {
         let own = undo?.groupingLevel == 0
         if own { undo?.beginUndoGrouping() }
         for action in reply.actions {
-            guard let line = controller.performOrchestration(action, for: id, handles: handles) else { continue }
+            guard let line = controller.performOrchestration(action, for: id, handles: handles, detected: detected) else { continue }
             add(.action, line)
             if action.type != "wait" { dispatched = true }
         }
@@ -371,7 +397,8 @@ struct OrchestratorContext {
 }
 
 extension BoardController {
-    func orchestratorContext(_ team: BoardTeam, agents installed: [BoardAgent]) -> OrchestratorContext {
+    /// `detected`: agents found running by process in tiles that haven't reported any status.
+    func orchestratorContext(_ team: BoardTeam, agents installed: [BoardAgent], detected: [UUID: String] = [:]) -> OrchestratorContext {
         var handles: [String: UUID] = [:]
         var lines: [String] = []
         let wired = wiredAgents(team)
@@ -385,6 +412,9 @@ extension BoardController {
             if let info = VerticalTabsAgents.shared.info(for: agent.surface) {
                 parts.append("\(info.kind.displayName), \(info.activity.label.lowercased())")
                 if let detail = info.detail, AgentAlerts.isWaiting(info.activity) { parts.append("waiting on: \(detail)") }
+            } else if let binary = detected[agent.surface.id] {
+                let name = BoardAgent.catalog.first { $0.binary == binary }?.kind.displayName ?? binary
+                parts.append("\(name), running (it hasn't reported a status yet; it takes messages)")
             } else {
                 parts.append("terminal (no agent)")
             }
@@ -400,7 +430,10 @@ extension BoardController {
     }
 
     /// One action from an orchestrator's brain; what was done, in words.
-    func performOrchestration(_ action: OrchestratorAction, for id: UUID, handles: [String: UUID]) -> String? {
+    /// `detected`: tiles running an agent that hasn't reported a status, which take messages
+    /// typed in directly.
+    func performOrchestration(_ action: OrchestratorAction, for id: UUID, handles: [String: UUID],
+                              detected: Set<UUID> = []) -> String? {
         guard let team = orchestrator(id) else { return nil }
         let wired = wiredAgents(team)
         let from = orchestratorName(id)
@@ -414,7 +447,11 @@ extension BoardController {
         }
         func send(_ text: String, to agent: BoardTeamAgent) {
             if VerticalTabsAgents.shared.info(for: agent.surface) == nil {
-                deliver(text, to: agent.surface)
+                // An agent's input box takes one line (a newline would send it early); a shell
+                // runs what it's given.
+                let line = text.replacingOccurrences(of: "\n", with: " ")
+                deliver(detected.contains(agent.surface.id) ? "From \(from)" + (agent.role.map { ", to you as the \($0)" } ?? "")
+                        + ": " + line : text, to: agent.surface)
             } else {
                 deliverToAgent("From \(from)" + (agent.role.map { ", to you as the \($0)" } ?? "") + ":\n\n" + text,
                                to: agent.surface, label: "From \(from)")

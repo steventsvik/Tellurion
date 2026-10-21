@@ -41,6 +41,32 @@ enum BoardPause {
     }
 }
 
+extension BoardPause {
+    /// The agent CLI running in each of these terminals (BoardAgent binaries), found by their
+    /// processes: for agents started by hand that haven't reported anything yet. Call off the
+    /// main thread.
+    static func agents(in surfaces: Set<UUID>) -> [UUID: String] {
+        guard !surfaces.isEmpty else { return [:] }
+        let wanted = Dictionary(uniqueKeysWithValues: surfaces.map { ($0.uuidString, $0) })
+        let binaries = Set(BoardAgent.catalog.map(\.binary))
+        var found: [UUID: String] = [:]
+        for pid in ProcessProbe.userPIDs() where pid != getpid() {
+            guard let process = ProcessProbe.procArgs(pid),
+                  let tag = process.environment.first(where: { $0.hasPrefix(surfaceKey + "=") }),
+                  let surface = wanted[String(tag.dropFirst(surfaceKey.count + 1))], found[surface] == nil else { continue }
+            // The program, or the script node runs ("node …/bin/codex.js").
+            for argument in process.arguments.prefix(2) {
+                let name = ((argument as NSString).lastPathComponent as NSString).deletingPathExtension
+                if binaries.contains(name) {
+                    found[surface] = name
+                    break
+                }
+            }
+        }
+        return found
+    }
+}
+
 extension BoardController {
     /// Pauses or resumes tiles (all of them when `ids` is nil). Paused tiles show it in their
     /// title bar; closing one continues it first so it can quit.

@@ -89,7 +89,7 @@ final class BoardGroupsView: NSView {
     private let guideLayer = CAShapeLayer()
     /// One per wire: a soft glow under the line, the line with a dot at each end, and a dot
     /// that travels along it while something on the far end works.
-    private var wireLayers: [(glow: CAShapeLayer, line: CAShapeLayer, runner: CAShapeLayer)] = []
+    private var wireLayers: [(glow: CAShapeLayer, line: CAShapeLayer, ends: CAShapeLayer, runner: CAShapeLayer)] = []
     private var links: [BoardTeamLink] = []
     private var linkZoom: CGFloat = 1
     private var linkMotion = false
@@ -230,30 +230,32 @@ final class BoardGroupsView: NSView {
         CATransaction.setDisableActions(true)
         while wireLayers.count > links.count {
             let last = wireLayers.removeLast()
-            for layer in [last.glow, last.line, last.runner] { layer.removeFromSuperlayer() }
+            for layer in [last.glow, last.line, last.ends, last.runner] { layer.removeFromSuperlayer() }
         }
         while wireLayers.count < links.count {
-            let glow = CAShapeLayer(), line = CAShapeLayer(), runner = CAShapeLayer()
-            for (layer, z) in [(glow, 4), (line, 5), (runner, 6)] as [(CAShapeLayer, CGFloat)] {
+            let glow = CAShapeLayer(), line = CAShapeLayer(), ends = CAShapeLayer(), runner = CAShapeLayer()
+            for (layer, z) in [(glow, 4), (line, 5), (ends, 5.5), (runner, 6)] as [(CAShapeLayer, CGFloat)] {
                 layer.zPosition = z
                 layer.lineCap = .round
                 self.layer?.insertSublayer(layer, below: guideLayer)
             }
+            // Strokes only: filling a curve would paint the area under it.
             glow.fillColor = nil
-            wireLayers.append((glow, line, runner))
+            line.fillColor = nil
+            wireLayers.append((glow, line, ends, runner))
         }
         let scale = min(1 / max(zoom, 0.08), 4)
         for (link, layers) in zip(links, wireLayers) {
             let color = BoardProjects.nsColor(link.color)
             let wire = Self.wire(from: link.from, to: link.to)
             let dot = 3.5 * scale
-            let line = CGMutablePath()
-            line.addPath(wire.path)
-            for point in [wire.start, wire.end] { line.addEllipse(in: CGRect(x: point.x - dot, y: point.y - dot, width: dot * 2, height: dot * 2)) }
-            layers.line.path = line
+            let ends = CGMutablePath()
+            for point in [wire.start, wire.end] { ends.addEllipse(in: CGRect(x: point.x - dot, y: point.y - dot, width: dot * 2, height: dot * 2)) }
+            layers.line.path = wire.path
             layers.line.strokeColor = color.withAlphaComponent(0.8).cgColor
-            layers.line.fillColor = color.cgColor
             layers.line.lineWidth = 1.6 * scale
+            layers.ends.path = ends
+            layers.ends.fillColor = color.cgColor
             layers.glow.path = wire.path
             layers.glow.strokeColor = color.withAlphaComponent(link.working ? 0.22 : 0.12).cgColor
             layers.glow.lineWidth = 7 * scale

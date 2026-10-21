@@ -180,6 +180,11 @@ enum BoardTest {
             guard let surface = tile(args.first ?? "", of: controller) else { return }
             surface.surfaceModel?.sendKeyEvent(.init(key: .enter, action: .press, text: "\r"))
             surface.surfaceModel?.sendKeyEvent(.init(key: .enter, action: .release))
+        case "down":
+            // down <n>: presses ↓ in tile n (moves a prompt's choice).
+            guard let surface = tile(args.first ?? "", of: controller) else { return }
+            surface.surfaceModel?.sendKeyEvent(.init(key: .arrowDown, action: .press))
+            surface.surfaceModel?.sendKeyEvent(.init(key: .arrowDown, action: .release))
         case "act":
             guard args.count == 2, let surface = tile(args[0], of: controller) else { return }
             let ok = surface.surfaceModel?.perform(action: args[1]) ?? false
@@ -391,6 +396,14 @@ enum BoardTest {
                 return
             }
             controller.orchestratorBrain(team.id).canned.append(reply)
+        case "orchwiregroup":
+            // orchwiregroup <n>: wires tile n's project group to the first orchestrator.
+            guard let team = controller.model.teams.first, let surface = tile(args.first ?? "", of: controller),
+                  let project = controller.model.projects[surface.id] else {
+                DemoDirector.note("orch no group")
+                return
+            }
+            controller.toggleGroup(project, in: team.id)
         case "orchturns":
             guard let team = controller.model.teams.first, let turns = Int(args.first ?? "") else { return }
             controller.setTurns(turns, for: team.id)

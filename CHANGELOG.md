@@ -34,6 +34,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
   - **Drag a sketch out.** Drag a sketch's title-bar symbol into Finder, Mail or Messages to drop it as a picture.
   - Tiles you've scrolled out of view, and boards in hidden windows, stop drawing.
 - **Menu bar.** A new menu bar item shows a count when agents need you, in either edition. Its menu lists every agent (those waiting first; choose one to go to it), your boards, and New Sketch, Launch Agents and New Board. Turn it off in Settings (Menu bar).
+- **Fixed:** in a project deep in your folders, Claude Code's transcript path was too long to report, so the code editor couldn't follow the agent's session and an orchestrator couldn't read its answers. Long paths are now reported by session, and found from there. (Takes effect once the hooks are reinstalled, which happens with the update.)
 - **Fixed:** with several agents started in one folder, the code editor could keep following another agent's session after the agent's own one was known. It now switches to the agent's own session as soon as it's reported.
 
 ## 1.7.2

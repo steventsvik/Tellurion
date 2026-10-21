@@ -104,6 +104,8 @@ sequence=$(jq -r --arg agent "$agent" --arg event "$event" --arg ns "$namespace"
 # actions live. Sent separately to stay under Ghostty's 255-byte notification body limit.
 if [ "$event" = "session_start" ] || [ "$event" = "prompt_submit" ]; then
   transcript=$(jq -r '.transcript_path // empty' <<<"$input" 2>/dev/null)
+  # A long path doesn't fit: send the session's file name, and the app finds the file.
+  if [ ${#transcript} -ge 160 ]; then transcript=$(basename "$transcript" .jsonl); fi
   if [ -n "$transcript" ] && [ ${#transcript} -lt 160 ]; then
     sequence+=$(jq -rn --arg agent "$agent" --arg path "$transcript" --arg ns "$namespace" --arg t "$token" \
       '"\u001b]777;notify;\($ns)://agent;\({agent: $agent, t: $t, event: "transcript", detail: $path} | tojson)\u0007"')
