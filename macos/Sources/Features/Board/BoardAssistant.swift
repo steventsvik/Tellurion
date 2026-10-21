@@ -75,6 +75,17 @@ final class BoardAssistant: ObservableObject {
     func send(_ raw: String) {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let controller, !text.isEmpty, !busy else { return }
+        // @Group: shows who it reaches, and sends once you confirm.
+        if let (group, rest) = controller.groupMention(in: text) {
+            guard !rest.isEmpty else { return }
+            messages.append(Message(role: .user, text: text))
+            var handles = BoardAssistantHandles()
+            handles.ids["G"] = group.id
+            let names = controller.groupSurfaces(group).map { controller.tileLabel($0) }
+            pending = Pending(lines: ["Tell \(group.name) → " + ListFormatter.localizedString(byJoining: names) + " ← “\(rest)”"],
+                              actions: [BoardAssistantAction(type: "message_group", text: rest, target: "G")], handles: handles)
+            return
+        }
         let (mentioned, rest) = controller.mentions(in: text)
         if !mentioned.isEmpty {
             guard !rest.isEmpty else { return }

@@ -57,7 +57,7 @@ struct BoardAssistantAction: Codable, Equatable {
     /// Closing, removing and typing into an agent that's already running wait for you.
     var needsConfirmation: Bool {
         switch type {
-        case "close_tile", "remove_card", "message_agent", "command_orchestrator": return true
+        case "close_tile", "remove_card", "message_agent", "command_orchestrator", "message_group", "close_group": return true
         case "hand_item": return tile != nil
         default: return false
         }
@@ -121,6 +121,12 @@ enum BoardAssistantPrompt {
     - wire {card?, tiles}: wire tiles T# to orchestrator card C# (no card: a new orchestrator).
     - unwire {card, tiles}
     - command_orchestrator {card, text}: give orchestrator C# a command.
+    - create_group {tiles, title?, role?}: put tiles T# in a new named group (role: frontend, \
+    backend, testers, reviewers, design, docs, security or general). Groups are listed with \
+    handles G#.
+    - add_to_group {target, tiles}: add tiles to group G#.
+    - message_group {target, text}: send text to every tile in group G#.
+    - close_group {target}: close group G# and its tiles.
 
     Folders may start with ~. Without one, tiles start in the board's folder. Several actions \
     run in order. Closing, removing and messaging running agents ask the user first, so \
@@ -137,7 +143,8 @@ enum BoardAssistantPrompt {
                                                     "rename_tile", "pause", "resume", "add_note", "add_checklist", "add_kanban",
                                                     "add_items", "add_sketch", "agent_map", "remove_card", "arrange", "show",
                                                     "rename_board", "create_orchestrator", "wire", "unwire",
-                                                    "command_orchestrator"]],
+                                                    "command_orchestrator", "create_group", "add_to_group",
+                                                    "message_group", "close_group"]],
                 "tile": ["type": "string"], "tiles": strings, "card": ["type": "string"], "item": ["type": "integer"],
                 "agent": ["type": "string"], "count": ["type": "integer"], "folder": ["type": "string"],
                 "task": ["type": "string"], "command": ["type": "string"], "text": ["type": "string"],
@@ -191,6 +198,14 @@ extension BoardController {
             if !wired.isEmpty { parts.append("wired to " + wired.joined(separator: ", ")) }
             lines.append("- " + parts.joined(separator: "; "))
         }
+        if !model.groups.isEmpty { lines.append("Groups:") }
+        for (index, group) in model.groups.enumerated() {
+            let handle = "G\(index + 1)"
+            handles.ids[handle] = group.id
+            let tiles = group.tiles.compactMap { id in model.surfaces.firstIndex { $0.id == id }.map { "T\($0 + 1)" } }
+            lines.append("- \(handle) \"\(group.name)\" (\(group.role.title)): " + tiles.joined(separator: ", ")
+                         + (group.collapsed ? "; collapsed" : ""))
+        }
         if !model.cards.isEmpty { lines.append("Cards:") }
         for (index, card) in model.cards.enumerated() {
             let handle = "C\(index + 1)"
@@ -237,6 +252,18 @@ extension BoardController {
         }
     }
 
+    /// A group @mentioned in `text` ("@Backend fix the tests"), and the text without it.
+    func groupMention(in text: String) -> (group: BoardGroupNode, rest: String)? {
+        // Longest first, so "@Backend 2" isn't read as "@Backend".
+        for group in model.groups.sorted(by: { $0.name.count > $1.name.count }) {
+            let token = "@" + group.name
+            guard text.range(of: token, options: .caseInsensitive) != nil else { continue }
+            let rest = text.replacingOccurrences(of: token, with: "", options: .caseInsensitive)
+            return (group, rest.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return nil
+    }
+
     /// The tiles @mentioned in `text`, and the text without them.
     func mentions(in text: String) -> (tiles: [Ghostty.SurfaceView], rest: String) {
         var rest = text
@@ -255,7 +282,7 @@ extension BoardController {
     func orchestratorSummary(_ id: UUID) -> String {
         guard let team = orchestrator(id) else { return "" }
         let tiles = team.members.compactMap { member in model.surfaces.firstIndex { $0.id == member.tile }.map { "T\($0 + 1)" } }
-        let wired = tiles + team.groups.map { "group \(BoardProjects.name($0))" }
+        let wired = tiles + team.groups.map { "group \(groupTitle($0))" }
         var text = "; wired to " + (wired.isEmpty ? "nothing" : wired.joined(separator: ", "))
         if let brain = orchestratorBrains[id], brain.running { text += "; working on: \(Self.clip(team.goal ?? "", 120))" }
         return text
@@ -327,6 +354,12 @@ extension BoardController {
         case "hand_item":
             guard let surface = surface(action.tile, handles), let item = item(action, handles) else { return nil }
             return "Give \(tileLabel(surface)): “\(Self.clip(item.item.text, 80))”"
+        case "message_group":
+            guard let id = handles.id(action.target), let group = namedGroup(id) else { return nil }
+            return "Send to \(group.name)'s \(group.tiles.count) tiles: “\(action.text ?? "")”"
+        case "close_group":
+            guard let id = handles.id(action.target), let group = namedGroup(id) else { return nil }
+            return "Close \(group.name) and its \(group.tiles.count) tiles"
         case "command_orchestrator":
             guard let id = handles.id(action.card), orchestrator(id) != nil else { return nil }
             return "Give \(orchestratorName(id)) the command “\(action.text ?? "")” (it messages its agents)"
@@ -506,6 +539,26 @@ extension BoardController {
             let tiles = (action.tiles ?? action.tile.map { [$0] } ?? []).compactMap { surface($0, handles)?.id }
             for tile in tiles { unwire(tile, from: id) }
             return tiles.isEmpty ? nil : "Unwired \(tiles.count) tile\(tiles.count == 1 ? "" : "s")"
+        case "create_group":
+            let tiles = (action.tiles ?? action.tile.map { [$0] } ?? []).compactMap { surface($0, handles)?.id }
+            guard !tiles.isEmpty else { return nil }
+            let role = BoardRole(rawValue: (action.role ?? "general").lowercased()) ?? .general
+            let id = createGroup(tiles, name: action.title, role: role)
+            return "Grouped \(tiles.count) tile\(tiles.count == 1 ? "" : "s") as \(namedGroup(id)?.name ?? role.title)"
+        case "add_to_group":
+            guard let id = handles.id(action.target), let group = namedGroup(id) else { return nil }
+            let tiles = (action.tiles ?? action.tile.map { [$0] } ?? []).compactMap { surface($0, handles)?.id }
+            guard !tiles.isEmpty else { return nil }
+            addToGroup(tiles, group: id)
+            return "Added \(tiles.count) tile\(tiles.count == 1 ? "" : "s") to \(group.name)"
+        case "message_group":
+            guard let id = handles.id(action.target), let group = namedGroup(id), let text = action.text else { return nil }
+            let count = messageGroup(id, text)
+            return "Sent to \(group.name) (\(count) tile\(count == 1 ? "" : "s"))"
+        case "close_group":
+            guard let id = handles.id(action.target), let group = namedGroup(id) else { return nil }
+            for surface in groupSurfaces(group) { closeSurface(surface, withConfirmation: false) }
+            return "Closed \(group.name)"
         case "command_orchestrator":
             guard let id = handles.id(action.card), orchestrator(id) != nil, let text = action.text, !text.isEmpty else { return nil }
             orchestratorBrain(id).lookUp()

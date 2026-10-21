@@ -49,6 +49,13 @@ enum BoardTeams {
     static let turns = 12
     static let maxAgents = 24
 
+    /// How an orchestrator names a named group it's wired to (project groups are their path).
+    static func groupKey(_ id: UUID) -> String { "group:" + id.uuidString }
+
+    static func groupID(_ key: String) -> UUID? {
+        key.hasPrefix("group:") ? UUID(uuidString: String(key.dropFirst(6))) : nil
+    }
+
     static func clip(_ text: String, _ length: Int) -> String {
         text.count > length ? String(text.prefix(length)) + "…" : text
     }
@@ -73,9 +80,16 @@ extension BoardController {
         model.cards.first { $0.id == id }?.title ?? "Orchestrator"
     }
 
-    /// The tiles of a project on this board.
-    func groupTiles(_ project: String) -> [Ghostty.SurfaceView] {
-        model.surfaces.filter { model.projects[$0.id] == project }
+    /// The tiles of a wired group: a named group's, or a project's on this board.
+    func groupTiles(_ key: String) -> [Ghostty.SurfaceView] {
+        if let id = BoardTeams.groupID(key) { return namedGroup(id).map(groupSurfaces) ?? [] }
+        return model.surfaces.filter { model.projects[$0.id] == key }
+    }
+
+    /// A wired group's name: a named group's, or the project folder's.
+    func groupTitle(_ key: String) -> String {
+        if let id = BoardTeams.groupID(key) { return namedGroup(id)?.name ?? "Group" }
+        return BoardProjects.name(key)
     }
 
     /// Everything wired: terminals first, then each group's tiles, each once.
@@ -97,8 +111,10 @@ extension BoardController {
     /// The orchestrators a tile is wired to, by itself or with its group.
     func orchestrators(of tile: UUID) -> [BoardTeam] {
         let project = model.projects[tile]
+        let named = namedGroup(containing: tile).map { BoardTeams.groupKey($0.id) }
         return model.teams.filter { team in
             team.members.contains { $0.tile == tile } || project.map(team.groups.contains) == true
+                || named.map(team.groups.contains) == true
         }
     }
 
@@ -128,7 +144,10 @@ extension BoardController {
             for project in team.groups {
                 let tiles = groupTiles(project)
                 let working = tiles.contains { isWorking($0) }
-                if let area = areas.first(where: { $0.project == project && $0.tiles.count == tiles.count }) {
+                if let id = BoardTeams.groupID(project), let group = namedGroup(id), let frame = groupFrame(group) {
+                    links.append(BoardTeamLink(from: card, to: frame.insetBy(dx: -BoardGroupsView.pad, dy: -BoardGroupsView.pad),
+                                               color: team.color, working: working))
+                } else if let area = areas.first(where: { $0.project == project && $0.tiles.count == tiles.count }) {
                     links.append(BoardTeamLink(from: card, to: area.frame, color: team.color, working: working))
                 } else {
                     for tile in tiles {

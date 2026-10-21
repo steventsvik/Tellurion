@@ -32,6 +32,7 @@ final class BoardTiles {
             .merge(with: model.$titles.map { _ in () }, model.$projects.map { _ in () }, model.$colors.map { _ in () })
             .merge(with: model.$sketches.map { _ in () }, model.$focusedSketch.map { _ in () }, model.$cards.map { _ in () })
             .merge(with: model.$paused.map { _ in () }, model.$teams.map { _ in () }, model.$wiring.map { _ in () })
+            .merge(with: model.$groups.map { _ in () })
             .sink { [weak self] in self?.needsSync() }
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: ExtremeSettings.featuresDidChange)
@@ -80,6 +81,7 @@ final class BoardTiles {
         // While an orchestrator is connecting: what's wired to it, in its color.
         let wiringTeam = model.wiring.flatMap { controller.orchestrator($0) }
         let wired = Set(wiringTeam.map { controller.wiredAgents($0).map(\.surface.id) } ?? [])
+        let collapsed = controller.collapsedTiles
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for surface in model.surfaces {
@@ -97,6 +99,8 @@ final class BoardTiles {
                         color: model.color(of: surface.id).map(BoardProjects.nsColor),
                         focused: model.focused, zoom: model.zoom, motion: motion)
             view.paused = model.paused.contains(surface.id)
+            view.skipsPermissions = controller.skipsPermissions(surface.id)
+            if view.isHidden != collapsed.contains(surface.id) { view.isHidden = collapsed.contains(surface.id) }
             view.wire = wiringTeam.map { (BoardProjects.nsColor($0.color), wired.contains(surface.id)) }
         }
         for sketch in model.sketches {
@@ -136,6 +140,8 @@ final class BoardTiles {
         groups.update(groups: Self.groups(model), zoom: model.zoom,
                       wiring: wiringTeam.map { (BoardProjects.nsColor($0.color), Set($0.groups)) })
         groups.update(links: controller.teamLinks(), zoom: model.zoom, motion: motion)
+        groups.update(named: controller.namedGroupDisplays(), zoom: model.zoom,
+                      wiring: wiringTeam.map { (BoardProjects.nsColor($0.color), Set($0.groups)) })
         // Back to front, without removing anything (that would take a terminal's focus).
         let order = Dictionary(model.order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         let nodes: [(UUID, NSView)] = views.map { ($0, $1) } + sketchViews.map { ($0, $1) } + cardViews.map { ($0, $1) }
@@ -157,7 +163,8 @@ final class BoardTiles {
     /// Each project's tiles that sit together.
     static func groups(_ model: BoardModel) -> [BoardGroup] {
         var byProject: [String: [(id: UUID, frame: CGRect)]] = [:]
-        for surface in model.surfaces {
+        let grouped = Set(model.groups.flatMap(\.tiles))
+        for surface in model.surfaces where !grouped.contains(surface.id) {
             guard let project = model.projects[surface.id], let frame = model.frames[surface.id] else { continue }
             byProject[project, default: []].append((surface.id, frame))
         }
@@ -300,6 +307,18 @@ final class BoardTileView: BoardNodeView {
 
     override var wirable: Bool { true }
 
+    override var tileButtons: Bool { true }
+
+    override func nodeRestart() { controller?.restartTile(surface) }
+
+    override func nodeDuplicate() { controller?.duplicateTile(surface) }
+
+    /// Started with permission prompts skipped: a red badge says so.
+    var skipsPermissions: Bool {
+        get { state.skipsPermissions }
+        set { if state.skipsPermissions != newValue { state.skipsPermissions = newValue } }
+    }
+
     /// Its processes are stopped (see BoardPause).
     var paused: Bool {
         get { state.paused }
@@ -332,6 +351,20 @@ final class BoardTileState: ObservableObject {
     @Published var focused = false
     @Published var zoom: CGFloat = 1
     @Published var paused = false
+    @Published var skipsPermissions = false
+}
+
+/// A tile whose agent runs without asking permission.
+struct BoardSkipPill: View {
+    var body: some View {
+        Label("NO PROMPTS", systemImage: "exclamationmark.shield.fill")
+            .font(Extreme.font(9.5, weight: .bold))
+            .foregroundColor(.red)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Capsule().fill(Color.red.opacity(0.14)))
+            .fixedSize()
+            .help("Started with permission prompts skipped: it runs commands and edits files without asking.")
+    }
 }
 
 /// The title bar's picture. Its buttons sit where `BoardTileView` expects clicks.
@@ -356,8 +389,11 @@ private struct BoardTileHeader: View {
             if state.paused {
                 BoardPausedPill()
             } else if let info = state.info {
-                AgentStatusPill(activity: info.activity)
+                AgentStatusPill(activity: info.activity, caps: true)
             }
+            if state.skipsPermissions { BoardSkipPill() }
+            glyph("arrow.clockwise").help("Restart")
+            glyph("plus.square.on.square").help("Duplicate")
             glyph("ellipsis")
             glyph("arrow.up.left.and.arrow.down.right")
             glyph("xmark")

@@ -408,7 +408,7 @@ extension BoardController {
             handles[handle] = agent.surface.id
             var parts = ["\(handle) \"\(tileLabel(agent.surface))\""]
             if let role = agent.role { parts.append("role \(role)") }
-            if let group = agent.group { parts.append("in group \(BoardProjects.name(group))") }
+            if let group = agent.group { parts.append("in group \(groupTitle(group))") }
             if let info = VerticalTabsAgents.shared.info(for: agent.surface) {
                 parts.append("\(info.kind.displayName), \(info.activity.label.lowercased())")
                 if let detail = info.detail, AgentAlerts.isWaiting(info.activity) { parts.append("waiting on: \(detail)") }

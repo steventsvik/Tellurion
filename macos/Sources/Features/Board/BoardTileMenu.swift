@@ -74,12 +74,32 @@ enum BoardTileMenu {
             }
         }
         list.append(nil)
+        list.append(contentsOf: groupActions(for: surface.id, in: board))
         list.append(contentsOf: BoardTeamMenu.actions(for: surface.id, in: board))
         list.append(contentsOf: undoActions(for: surface))
         list.append(nil)
         list.append(Action(title: "Copy Working Directory", enabled: pwd != nil) { VerticalTabsActions.copy(pwd ?? "") })
         list.append(nil)
         list.append(Action(title: "Close Tile") { [weak board] in board?.close(surface) })
+        return list
+    }
+
+    /// Making groups and moving the tile between them.
+    private static func groupActions(for tile: UUID, in board: BoardController) -> [Action?] {
+        var list: [Action?] = []
+        let own = board.namedGroup(containing: tile)
+        if let own {
+            list.append(Action(title: "Remove from \(own.name)") { [weak board] in board?.removeFromGroup(tile) })
+        } else {
+            list.append(Action(title: "New Group with This Tile") { [weak board] in
+                guard let board else { return }
+                let id = board.createGroup([tile])
+                board.promptRenameGroup(id)
+            })
+        }
+        for group in board.model.groups where group.id != own?.id {
+            list.append(Action(title: "Add to \(group.name)") { [weak board] in board?.addToGroup([tile], group: group.id) })
+        }
         return list
     }
 

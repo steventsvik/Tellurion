@@ -40,6 +40,8 @@ struct BoardWorkspace: Codable, Identifiable, Equatable {
     var cards: [BoardCard]?
     /// Leads and the tiles they run (see BoardTeams).
     var teams: [BoardTeam]?
+    /// Groups you made (see BoardNamedGroups).
+    var groups: [BoardGroupNode]?
     /// Open when Tellurion last quit; reopened at launch.
     var open = true
     var updated = Date()

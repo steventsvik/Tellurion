@@ -109,6 +109,14 @@ struct BoardAssistantBar: View {
             BoardAssistantField(text: $text, placeholder: placeholder, controller: controller,
                                 onSubmit: submit, onRecall: recall, onHold: { $0 ? startDictation() : dictation.stop() })
                 .frame(height: 22)
+            if dictation.listening {
+                HStack(spacing: 6) {
+                    Circle().fill(Color.red).frame(width: 6, height: 6)
+                    Text("listening").font(Extreme.font(11, weight: .medium)).foregroundColor(.red)
+                    BoardWaveform(levels: dictation.levels).frame(width: 56, height: 18)
+                }
+                .transition(.opacity)
+            }
             iconButton(expanded ? "chevron.down" : "chevron.up", expanded ? "Hide the conversation" : "Show the conversation") {
                 expanded.toggle()
             }
@@ -162,10 +170,19 @@ struct BoardAssistantBar: View {
     private func chipRow(full: Bool) -> some View {
         HStack(spacing: 7) {
             chip("New terminal", 0) { controller.addTile() }
-            chip("Launch agents", 1) { model.showComposer = true }
+            chip("Spawn 4", 1) { controller.spawnFour() }
+            chip("Group", 3) {
+                model.groupComposerPreset = nil
+                model.showGroupComposer = true
+            }
+            .popover(isPresented: $model.showGroupComposer, arrowEdge: .bottom) {
+                BoardGroupComposer(controller: controller, preset: model.groupComposerPreset) {
+                    model.showGroupComposer = false
+                }
+            }
+            presetsChip
             chip("Orchestrator", 6) { model.showOrchestratorComposer = true }
             if full { chip("Sketch", 2) { controller.addSketch() } }
-            if model.surfaces.count > 1 { chip("Group", 3) { controller.arrangeByProject() } }
             if !model.surfaces.isEmpty {
                 if model.paused.isEmpty {
                     chip("Pause all", 4) { controller.setPaused(true) }
@@ -176,6 +193,11 @@ struct BoardAssistantBar: View {
             if full { chip("Agent Map", 5) { controller.showAgentMap() } }
         }
         .fixedSize()
+    }
+
+    /// Saved groups to start again: spawn one, edit it in the composer, or delete it.
+    private var presetsChip: some View {
+        chip("Presets", 8) { controller.showPresetsMenu() }
     }
 
     private func chip(_ title: String, _ color: Int, action: @escaping () -> Void) -> some View {
@@ -357,6 +379,23 @@ struct BoardAssistantBar: View {
             assistant.record(reason)
             showReply = true
         })
+    }
+}
+
+// MARK: - The waveform
+
+/// The microphone's loudness while dictating: thin bars, newest on the right.
+struct BoardWaveform: View {
+    let levels: [CGFloat]
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 2) {
+            ForEach(levels.indices, id: \.self) { index in
+                Capsule().fill(Color.red.opacity(0.85))
+                    .frame(width: 1.5, height: max(2, levels[index] * 18))
+            }
+        }
+        .animation(.linear(duration: 0.05), value: levels)
     }
 }
 
@@ -570,8 +609,19 @@ struct BoardAssistantField: NSViewRepresentable {
         private func showTiles(in editor: NSTextView, at caret: Int) {
             let only = parent.mentions
             let tiles = parent.controller.tileLabels().filter { only?.contains($0.id) ?? true }
-            guard let field, !tiles.isEmpty else { return }
+            let groups = only == nil ? parent.controller.model.groups : []
+            guard let field, !tiles.isEmpty || !groups.isEmpty else { return }
             let menu = NSMenu()
+            // Groups first: @Backend reaches every tile in it.
+            for group in groups {
+                let item = NSMenuItem(title: group.name, action: #selector(pick(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = group.name
+                item.image = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: nil)
+                item.toolTip = "Every tile in \(group.name) (\(group.tiles.count))"
+                menu.addItem(item)
+            }
+            if !groups.isEmpty, !tiles.isEmpty { menu.addItem(.separator()) }
             for tile in tiles {
                 let item = NSMenuItem(title: tile.label, action: #selector(pick(_:)), keyEquivalent: "")
                 item.target = self

@@ -101,6 +101,14 @@ final class BoardGroupsView: NSView {
     private var wiring: (color: NSColor, groups: Set<String>)?
     private var pills: [CALayer] = []
     private var pillRects: [CGRect] = []
+    /// Groups you made: a frame, a header and (collapsed) a strip of their tiles, each.
+    private var named: [BoardNamedGroupDisplay] = []
+    private var namedZoom: CGFloat = 1
+    private var namedWiring: (color: NSColor, groups: Set<String>)?
+    private var namedLayers: [(frame: CAShapeLayer, header: CATextLayer, strip: CATextLayer, pill: CATextLayer)] = []
+    /// Per group: the header (drag, menu), its chevron, the collapsed strip and the wire pill.
+    private var namedHits: [(id: UUID, header: CGRect, chevron: CGRect, strip: CGRect?, pill: CGRect?)] = []
+    private var namedDrag: UUID?
 
     private var dragStart: (point: CGPoint, window: CGPoint, frames: [UUID: CGRect])?
     private var dragMoved = false
@@ -168,6 +176,150 @@ final class BoardGroupsView: NSView {
         updatePills(scale: scale)
         CATransaction.commit()
         window?.invalidateCursorRects(for: self)
+    }
+
+    /// Groups you made: a frame in the group's color around its tiles, the header
+    /// "● BACKEND  12 · 11 running ⌄" above it, and (collapsed) a strip listing its tiles in
+    /// place of them. While an orchestrator is connecting, a pill on the header wires it.
+    func update(named groups: [BoardNamedGroupDisplay], zoom: CGFloat, wiring: (color: NSColor, groups: Set<String>)?) {
+        let sameWiring = wiring?.color == namedWiring?.color && wiring?.groups == namedWiring?.groups
+        guard groups != named || abs(zoom - namedZoom) > 0.001 || !sameWiring else { return }
+        named = groups
+        namedZoom = zoom
+        namedWiring = wiring
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        while namedLayers.count > groups.count {
+            let last = namedLayers.removeLast()
+            for layer in [last.frame, last.header, last.strip, last.pill] as [CALayer] { layer.removeFromSuperlayer() }
+        }
+        while namedLayers.count < groups.count {
+            let frame = CAShapeLayer(), header = CATextLayer(), strip = CATextLayer(), pill = CATextLayer()
+            frame.zPosition = 1
+            for (layer, z) in [(header, 3), (strip, 3), (pill, 7)] as [(CATextLayer, CGFloat)] {
+                layer.zPosition = z
+                layer.alignmentMode = .left
+                layer.truncationMode = .end
+                layer.anchorPoint = .zero
+            }
+            pill.alignmentMode = .center
+            for layer in [frame, header, strip, pill] as [CALayer] { self.layer?.insertSublayer(layer, below: guideLayer) }
+            namedLayers.append((frame, header, strip, pill))
+        }
+        let scale = min(1 / max(zoom, 0.08), 5)
+        let contents = (window?.backingScaleFactor ?? 2) * max(scale * zoom, 1)
+        namedHits = []
+        for (group, layers) in zip(groups, namedLayers) {
+            let headerHeight = Self.labelHeight * scale
+            let rect: CGRect
+            var stripRect: CGRect?
+            if group.collapsed {
+                // A strip in place of the tiles: one line per tile.
+                let size = CGSize(width: 300, height: 14 + CGFloat(max(group.rows.count, 1)) * 22)
+                rect = CGRect(x: group.frame.minX, y: group.frame.minY, width: size.width * scale, height: size.height * scale)
+                stripRect = rect
+            } else {
+                rect = group.frame.insetBy(dx: -Self.pad, dy: -Self.pad)
+            }
+            let outline = CGRect(x: rect.minX, y: rect.minY - headerHeight, width: rect.width, height: rect.height + headerHeight)
+            layers.frame.path = CGPath(roundedRect: outline, cornerWidth: 16, cornerHeight: 16, transform: nil)
+            layers.frame.fillColor = group.color.withAlphaComponent(group.collapsed ? 0.12 : 0.05).cgColor
+            layers.frame.strokeColor = group.color.withAlphaComponent(0.55).cgColor
+            layers.frame.lineWidth = 1.5 * min(scale, 3)
+            layers.frame.lineDashPattern = nil
+
+            // The header: ● NAME  count · running ⌄
+            let bold = NSFont.systemFont(ofSize: 12, weight: .bold), plain = NSFont.systemFont(ofSize: 11.5, weight: .medium)
+            let muted = Extreme.chrome.muted.nsColor
+            let text = NSMutableAttributedString(string: "● ", attributes: [.font: plain, .foregroundColor: group.color])
+            text.append(NSAttributedString(string: group.name.uppercased(), attributes: [.font: bold, .foregroundColor: Extreme.chrome.text.nsColor, .kern: 0.6]))
+            let counts = "  \(group.count)" + (group.running > 0 ? " · \(group.running) running" : " · idle") + "  "
+            text.append(NSAttributedString(string: counts, attributes: [.font: plain, .foregroundColor: muted]))
+            text.append(NSAttributedString(string: group.collapsed ? "›" : "⌄", attributes: [.font: bold, .foregroundColor: muted]))
+            let width = min(text.size().width + 8, max(rect.width / scale - 20, 60))
+            layers.header.string = text
+            layers.header.bounds = CGRect(x: 0, y: 0, width: width, height: 18)
+            layers.header.transform = CATransform3DMakeScale(scale, scale, 1)
+            layers.header.position = CGPoint(x: outline.minX + 14 * scale, y: outline.minY + 5 * scale)
+            layers.header.contentsScale = contents
+            let header = CGRect(x: outline.minX, y: outline.minY, width: (width + 28) * scale, height: headerHeight)
+            let chevronWidth = 22 * scale
+            let chevron = CGRect(x: header.maxX - chevronWidth - 8 * scale, y: header.minY, width: chevronWidth + 8 * scale, height: header.height)
+
+            // Collapsed: its tiles, one line each.
+            layers.strip.isHidden = !group.collapsed
+            if group.collapsed {
+                let lines = NSMutableAttributedString()
+                for (index, row) in group.rows.enumerated() {
+                    if index > 0 { lines.append(NSAttributedString(string: "\n")) }
+                    lines.append(NSAttributedString(string: "●  ", attributes: [.font: plain, .foregroundColor: row.color]))
+                    lines.append(NSAttributedString(string: row.name, attributes: [.font: NSFont.systemFont(ofSize: 12.5, weight: .semibold),
+                                                                                     .foregroundColor: Extreme.chrome.text.nsColor]))
+                    lines.append(NSAttributedString(string: "   " + row.status, attributes: [.font: plain, .foregroundColor: muted]))
+                }
+                let paragraph = NSMutableParagraphStyle()
+                paragraph.minimumLineHeight = 22
+                lines.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: lines.length))
+                layers.strip.string = lines
+                layers.strip.bounds = CGRect(x: 0, y: 0, width: 280, height: CGFloat(max(group.rows.count, 1)) * 22 + 4)
+                layers.strip.transform = CATransform3DMakeScale(scale, scale, 1)
+                layers.strip.position = CGPoint(x: rect.minX + 14 * scale, y: rect.minY + 6 * scale)
+                layers.strip.contentsScale = contents
+            }
+
+            // Connecting: the pill that wires this group.
+            var pillRect: CGRect?
+            layers.pill.isHidden = wiring == nil
+            if let wiring {
+                let on = wiring.groups.contains(BoardTeams.groupKey(group.id))
+                let title = on ? "✓  Wired" : "⊕  Click to wire group"
+                let font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+                let size = (title as NSString).size(withAttributes: [.font: font])
+                layers.pill.string = NSAttributedString(string: title, attributes: [
+                    .font: font, .foregroundColor: on ? Extreme.chrome.ink.nsColor : wiring.color,
+                ])
+                layers.pill.bounds = CGRect(x: 0, y: 0, width: size.width + 22, height: 22)
+                layers.pill.backgroundColor = (on ? wiring.color : Extreme.chrome.panel.nsColor).cgColor
+                layers.pill.borderColor = wiring.color.withAlphaComponent(0.8).cgColor
+                layers.pill.borderWidth = 1
+                layers.pill.cornerRadius = 11
+                layers.pill.transform = CATransform3DMakeScale(scale, scale, 1)
+                let pillSize = CGSize(width: (size.width + 22) * scale, height: 22 * scale)
+                let origin = CGPoint(x: outline.midX - pillSize.width / 2, y: outline.minY - pillSize.height / 2)
+                layers.pill.position = origin
+                layers.pill.contentsScale = contents
+                pillRect = CGRect(origin: origin, size: pillSize)
+            }
+            namedHits.append((group.id, header, chevron, stripRect, pillRect))
+        }
+        CATransaction.commit()
+        window?.invalidateCursorRects(for: self)
+    }
+
+    /// A click on a named group's header, chevron, strip or wire pill.
+    private func namedMouseDown(_ event: NSEvent) -> Bool {
+        guard let controller else { return false }
+        let local = convert(event.locationInWindow, from: nil)
+        if let id = controller.model.wiring, let hit = namedHits.first(where: { $0.pill?.contains(local) == true || $0.header.contains(local) }) {
+            controller.toggleGroup(BoardTeams.groupKey(hit.id), in: id)
+            return true
+        }
+        guard let hit = namedHits.first(where: { $0.header.contains(local) || $0.strip?.contains(local) == true }) else { return false }
+        if hit.chevron.contains(local) || (hit.strip?.contains(local) == true && !hit.header.contains(local)) {
+            controller.toggleCollapsed(hit.id)
+            return true
+        }
+        if event.clickCount == 2 {
+            controller.promptRenameGroup(hit.id)
+            return true
+        }
+        guard let group = controller.namedGroup(hit.id) else { return true }
+        dragMoved = false
+        namedDrag = hit.id
+        let frames = Dictionary(uniqueKeysWithValues: group.tiles.compactMap { id in controller.model.frames[id].map { (id, $0) } })
+        dragStart = (local, event.locationInWindow, frames)
+        for id in group.tiles { controller.raise(id: id) }
+        return true
     }
 
     /// "⊕ Click to wire group" on each group's top edge while an orchestrator is connecting
@@ -346,12 +498,21 @@ final class BoardGroupsView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard let superview else { return nil }
         let local = convert(point, from: superview)
+        if namedHits.contains(where: { $0.header.contains(local) || $0.strip?.contains(local) == true || $0.pill?.contains(local) == true }) {
+            return self
+        }
         return (labelRects + pillRects).contains { $0.contains(local) } ? self : nil
     }
 
     override func resetCursorRects() {
         for rect in labelRects { addCursorRect(rect, cursor: wiring == nil ? .openHand : .pointingHand) }
         for rect in pillRects { addCursorRect(rect, cursor: .pointingHand) }
+        for hit in namedHits {
+            addCursorRect(hit.header, cursor: .openHand)
+            addCursorRect(hit.chevron, cursor: .pointingHand)
+            if let strip = hit.strip { addCursorRect(strip, cursor: .pointingHand) }
+            if let pill = hit.pill { addCursorRect(pill, cursor: .pointingHand) }
+        }
     }
 
     private func group(at event: NSEvent) -> BoardGroup? {
@@ -362,6 +523,7 @@ final class BoardGroupsView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        if namedMouseDown(event) { return }
         guard let controller, let group = group(at: event) else { return }
         // Connecting: a click on the label or the pill wires the group.
         if let id = controller.model.wiring {
@@ -388,13 +550,17 @@ final class BoardGroupsView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { dragStart = nil }
+        defer { dragStart = nil; namedDrag = nil }
         guard dragMoved else { return }
         NSCursor.pop()
         controller?.tileDidSettle()
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
+        let local = convert(event.locationInWindow, from: nil)
+        if let controller, let hit = namedHits.first(where: { $0.header.contains(local) || $0.strip?.contains(local) == true }) {
+            return controller.groupMenu(hit.id)
+        }
         guard let controller, let group = group(at: event) else { return nil }
         let menu = NSMenu()
         menu.addItem(ClosureMenuItem("Show \(BoardProjects.name(group.project))", image: nil) { [weak controller] in

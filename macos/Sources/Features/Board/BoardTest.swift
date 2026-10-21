@@ -346,6 +346,56 @@ enum BoardTest {
         case "minsize":
             guard let window = controller.window else { return }
             DemoDirector.note("minsize window=\(window.minSize) content=\(window.contentMinSize) fitting=\(window.contentView?.fittingSize ?? .zero)")
+        case "groupnew":
+            // groupnew <tile n…> [name]: a named group of those tiles.
+            let tiles = args.compactMap { tile($0, of: controller)?.id }
+            let name = args.last.flatMap { Int($0) == nil ? $0 : nil }
+            controller.createGroup(tiles, name: name, role: .backend)
+        case "groupspawn":
+            // groupspawn <name> <role> <agent,agent,…> [skip]: the composer's Spawn.
+            guard args.count >= 3 else { return }
+            controller.spawnGroup(name: args[0], role: BoardRole(rawValue: args[1]) ?? .general,
+                                  slots: args[2].split(separator: ",").map(String.init), folder: nil, task: nil,
+                                  skip: args.count > 3 && args[3] == "skip")
+        case "groupcollapse":
+            guard let group = controller.model.groups.first else { return }
+            controller.toggleCollapsed(group.id)
+        case "groupcompose":
+            controller.model.showGroupComposer = true
+        case "grouptidy":
+            guard let group = controller.model.groups.first else { return }
+            controller.tidyGroup(group.id)
+        case "groupstate":
+            let number = { (id: UUID) in (controller.model.surfaces.firstIndex { $0.id == id }).map { "\($0 + 1)" } ?? "?" }
+            for group in controller.model.groups {
+                let display = controller.namedGroupDisplays().first { $0.id == group.id }
+                DemoDirector.note("group \(group.name) role=\(group.role.rawValue) collapsed=\(group.collapsed) tiles="
+                                  + group.tiles.map(number).joined(separator: ",")
+                                  + " running=\(display?.running ?? -1) frame=\(display.map { "\(Int($0.frame.width))x\(Int($0.frame.height))" } ?? "-")")
+            }
+            DemoDirector.note("group count=\(controller.model.groups.count) projectAreas=\(BoardTiles.groups(controller.model).count) hidden="
+                              + controller.collapsedTiles.map(number).sorted().joined(separator: ","))
+            for surface in controller.model.surfaces {
+                DemoDirector.note("tile \(number(surface.id)) title=\(controller.model.titles[surface.id] ?? "-") skip=\(controller.skipsPermissions(surface.id))")
+            }
+        case "drop":
+            // drop <n> <dx> <dy>: moves tile n by that much and lets it settle (joins or leaves groups).
+            guard args.count == 3, let surface = tile(args[0], of: controller), let frame = controller.model.frames[surface.id],
+                  let dx = Double(args[1]), let dy = Double(args[2]) else { return }
+            controller.move(id: surface.id, to: frame.offsetBy(dx: dx, dy: dy))
+            controller.settleDrop(id: surface.id, from: frame)
+        case "droponto":
+            // droponto <n> <m>: drops tile n at tile m's group, beside m.
+            guard args.count == 2, let a = tile(args[0], of: controller), let b = tile(args[1], of: controller),
+                  let fa = controller.model.frames[a.id], let fb = controller.model.frames[b.id] else { return }
+            controller.move(id: a.id, to: CGRect(x: fb.maxX + 20, y: fb.minY, width: fa.width, height: fa.height))
+            controller.settleDrop(id: a.id)
+        case "tilerestart":
+            guard let surface = tile(args.first ?? "", of: controller) else { return }
+            controller.restartTile(surface)
+        case "tiledup":
+            guard let surface = tile(args.first ?? "", of: controller) else { return }
+            controller.duplicateTile(surface)
         case "orchnew":
             // orchnew [tile n…]: an orchestrator wired to those tiles.
             let tiles = args.compactMap { tile($0, of: controller)?.id }
@@ -382,7 +432,7 @@ enum BoardTest {
                 let brain = controller.orchestratorBrain(team.id)
                 DemoDirector.note("orch \(controller.orchestratorName(team.id)) color=\(team.color) wiring=\(controller.model.wiring == team.id) "
                                   + "members=" + team.members.map { "\(number($0.tile)):\($0.role ?? "-")" }.joined(separator: ",")
-                                  + " groups=" + team.groups.map(BoardProjects.name).joined(separator: ",")
+                                  + " groups=" + team.groups.map(controller.groupTitle).joined(separator: ",")
                                   + " agents=" + controller.wiredAgents(team).map { number($0.surface.id) }.joined(separator: ",")
                                   + " running=\(brain.running) busy=\(brain.busy) turn=\(brain.turn)")
             }

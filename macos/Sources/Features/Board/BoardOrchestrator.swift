@@ -106,8 +106,9 @@ struct OrchestratorSnapshot: Equatable {
         let single = agents.filter { $0.group == nil }.map(row)
         if !single.isEmpty { sections.append(OrchestratorSection(id: "", title: nil, color: nil, rows: single)) }
         for project in team.groups {
-            sections.append(OrchestratorSection(id: project, title: BoardProjects.name(project).uppercased(),
-                                                color: board.model.colors[project],
+            let named = BoardTeams.groupID(project).flatMap { board.namedGroup($0) }
+            sections.append(OrchestratorSection(id: project, title: board.groupTitle(project).uppercased(),
+                                                color: named == nil ? board.model.colors[project] : nil,
                                                 rows: agents.filter { $0.group == project }.map(row)))
         }
         self.agents = agents.count
@@ -118,10 +119,11 @@ struct OrchestratorSnapshot: Equatable {
             VerticalTabsAgents.shared.info(for: agent.surface)?.activity != .working && !AgentInbox.shared.waiting(for: agent.surface).isEmpty
         }.count
         guard wiring else { return }
-        let projects = Set(board.model.surfaces.compactMap { board.model.projects[$0.id] }).union(team.groups).sorted()
+        let projects = board.model.groups.map { BoardTeams.groupKey($0.id) }
+            + Set(board.model.surfaces.compactMap { board.model.projects[$0.id] }).union(team.groups.filter { BoardTeams.groupID($0) == nil }).sorted()
         groupChoices = projects.map { project in
             let count = board.groupTiles(project).count
-            return OrchestratorChoice(id: project, title: BoardProjects.name(project), detail: "\(count)",
+            return OrchestratorChoice(id: project, title: board.groupTitle(project), detail: "\(count)",
                                       wired: team.groups.contains(project), group: project, tile: nil)
         }
         tileChoices = board.tileLabels().map { entry in

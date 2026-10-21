@@ -15,6 +15,9 @@ final class BoardModel: ObservableObject {
     @Published var zoom: CGFloat = 1
     @Published var showComposer = false
     @Published var showOrchestratorComposer = false
+    /// The Group composer, from the bar's Group chip (prefilled when editing a preset).
+    @Published var showGroupComposer = false
+    var groupComposerPreset: BoardPreset?
     @Published var showSidebar = true
     @Published var name = ""
     /// Bumped when an agent on this board changes, so the list and tiles refresh.
@@ -36,6 +39,8 @@ final class BoardModel: ObservableObject {
     @Published var paused: Set<UUID> = []
     /// Orchestrators and what's wired to them (see BoardTeams).
     @Published var teams: [BoardTeam] = []
+    /// Groups you made (see BoardNamedGroups).
+    @Published var groups: [BoardGroupNode] = []
     /// The orchestrator that clicks on tiles and groups wire to, while connecting.
     @Published var wiring: UUID?
     /// The next change to `frames` slides the tiles there instead of jumping.
@@ -87,7 +92,8 @@ final class BoardController: BaseTerminalController {
     weak var canvas: BoardCanvasView?
 
     /// The line each tile was opened with, started again after a relaunch.
-    private var commands: [UUID: String] = [:]
+    /// The line each tile was started with, to start it again after a relaunch.
+    private(set) var commands: [UUID: String] = [:]
     /// Tiles where an agent has reported status. When its status goes away, the agent quit
     /// and isn't started again.
     private var agentSeen: Set<UUID> = []
@@ -161,6 +167,7 @@ final class BoardController: BaseTerminalController {
             model.frames[card.id] = card.frame
             model.order.append(card.id)
         }
+        model.groups = workspace.groups ?? []
         model.teams = (workspace.teams ?? []).filter { team in model.cards.contains { $0.id == team.id } }
         model.name = workspace.name
         model.colors = workspace.colors ?? [:]
@@ -174,7 +181,10 @@ final class BoardController: BaseTerminalController {
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: VerticalTabsAgents.didChange, object: nil, queue: .main) { [weak self] note in
             guard let self, let surface = note.object as? Ghostty.SurfaceView, self.surfaceTree.contains(surface) else { return }
-            if VerticalTabsAgents.shared.info(for: surface) != nil { self.agentSeen.insert(surface.id) }
+            if VerticalTabsAgents.shared.info(for: surface) != nil {
+                self.agentSeen.insert(surface.id)
+                self.nameAgentIfNeeded(surface)
+            }
             self.model.agentTick &+= 1
             self.cardsAgentChanged(surface)
             self.teamMemberChanged(surface)
@@ -311,6 +321,7 @@ final class BoardController: BaseTerminalController {
         model.surfaces = surfaces
         // Closed tiles come unwired.
         if !model.teams.isEmpty { pruneTeams() }
+        if !model.groups.isEmpty { pruneGroups() }
         watchProjects()
         updateVisibility()
         scheduleSave()
@@ -414,8 +425,10 @@ final class BoardController: BaseTerminalController {
     }
 
     /// Starts agents and shells from the composer as a block of tiles, then shows them all.
-    func launch(_ lines: [(agent: BoardAgent?, command: String)], folder: String?) {
-        guard let app = ghostty.app, !lines.isEmpty else { return }
+    /// `skip`: the agents were started without permission prompts (kept for their restarts).
+    @discardableResult
+    func launch(_ lines: [(agent: BoardAgent?, command: String)], folder: String?, skip: Bool = false) -> [Ghostty.SurfaceView] {
+        guard let app = ghostty.app, !lines.isEmpty else { return [] }
         if let folder { workspace.folder = folder }
         let n = lines.count
         let columns = n <= 3 ? n : Int(ceil(Double(n).squareRoot()))
@@ -438,11 +451,14 @@ final class BoardController: BaseTerminalController {
                                            y: area.minY + CGFloat(row) * (size.height + Self.gap),
                                            width: size.width, height: size.height)
             // Started again plainly after a relaunch (Claude Code and Codex resume instead).
-            commands[view.id] = line.agent.map { $0.binary + "\n" } ?? nil
+            commands[view.id] = line.agent.map { agent in
+                agent.binary + (skip ? agent.skipFlag.map { " " + $0 } ?? "" : "") + "\n"
+            } ?? nil
             views.append(view)
         }
         insert(views, undoAction: n == 1 ? "Launch Agent" : "Launch Agents")
         zoom(toFit: area, animated: true)
+        return views
     }
 
     /// The folder new tiles start in, from now on.
@@ -532,8 +548,10 @@ final class BoardController: BaseTerminalController {
     }
 
     /// A tile dropped mostly over another slides to the nearest free spot.
-    func settleDrop(id: UUID) {
+    /// `from`: where the drag began, so ⌘Z after a drop that changed its group puts it back.
+    func settleDrop(id: UUID, from: CGRect? = nil) {
         defer { tileDidSettle() }
+        if !model.groups.isEmpty { regroup(after: id, from: from) }
         guard let frame = model.frames[id] else { return }
         let others = model.nodeIDs.filter { $0 != id }.compactMap { model.frames[$0] }
         let covers = others.contains { other in
@@ -888,9 +906,10 @@ final class BoardController: BaseTerminalController {
         guard let canvas else { return }
         let windowVisible = window?.occlusionState.contains(.visible) ?? false
         let view = canvas.documentVisibleRect.insetBy(dx: -80, dy: -80)
+        let collapsed = collapsedTiles
         for surfaceView in surfaceTree {
             guard let surface = surfaceView.surface, let frame = model.frames[surfaceView.id] else { continue }
-            let on = windowVisible && frame.intersects(view)
+            let on = windowVisible && frame.intersects(view) && !collapsed.contains(surfaceView.id)
             if visible[surfaceView.id] != on {
                 visible[surfaceView.id] = on
                 ghostty_surface_set_occlusion(surface, on)
@@ -933,6 +952,7 @@ final class BoardController: BaseTerminalController {
         }
         workspace.colors = model.colors.isEmpty ? nil : model.colors
         workspace.teams = model.teams.isEmpty ? nil : model.teams
+        workspace.groups = model.groups.isEmpty ? nil : model.groups
         workspace.cards = model.cards.isEmpty ? nil : model.cards.map { card in
             var card = card
             card.frame = model.frames[card.id] ?? card.frame

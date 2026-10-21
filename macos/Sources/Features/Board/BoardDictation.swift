@@ -6,6 +6,10 @@ import Speech
 /// the Mac when it can, and asks for the microphone and speech recognition once.
 final class BoardDictation: ObservableObject {
     @Published private(set) var listening = false
+    /// The last couple of seconds of loudness (0…1), newest last, for the waveform. Only
+    /// updated while listening, about 20 times a second.
+    @Published private(set) var levels: [CGFloat] = Array(repeating: 0, count: 24)
+    private var lastLevel = Date.distantPast
 
     private let audio = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -42,10 +46,25 @@ final class BoardDictation: ObservableObject {
         wanted = false
         guard listening else { return }
         listening = false
+        levels = Array(repeating: 0, count: levels.count)
         audio.stop()
         audio.inputNode.removeTap(onBus: 0)
         request?.endAudio()
         request = nil
+    }
+
+    /// Loudness of a buffer (RMS, scaled so speech fills most of the range).
+    private func measure(_ buffer: AVAudioPCMBuffer) {
+        guard let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return }
+        let count = Int(buffer.frameLength)
+        var sum: Float = 0
+        for index in 0..<count { sum += samples[index] * samples[index] }
+        let level = CGFloat(min(1, sqrt(sum / Float(count)) * 9))
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.listening, Date().timeIntervalSince(self.lastLevel) > 0.05 else { return }
+            self.lastLevel = Date()
+            self.levels = Array(self.levels.dropFirst()) + [level]
+        }
     }
 
     private func begin(update: @escaping (String) -> Void, failed: @escaping (String) -> Void) {
@@ -57,8 +76,9 @@ final class BoardDictation: ObservableObject {
         request.shouldReportPartialResults = true
         if recognizer.supportsOnDeviceRecognition { request.requiresOnDeviceRecognition = true }
         let input = audio.inputNode
-        input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { buffer, _ in
+        input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { [weak self] buffer, _ in
             request.append(buffer)
+            self?.measure(buffer)
         }
         audio.prepare()
         do {

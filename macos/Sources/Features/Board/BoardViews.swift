@@ -271,10 +271,11 @@ private struct BoardSidebar: View {
     private struct Row: Identifiable {
         let surface: Ghostty.SurfaceView
         let info: VerticalTabAgentInfo?
-        /// Wired to an orchestrator: listed under it, with a line in its color.
-        var wire: Int?
-        /// The first of an orchestrator's: its name above the row.
+        /// In a group or wired to an orchestrator: listed under it, with a line in its color.
+        var wireColor: Color?
+        /// The first of a group's or an orchestrator's: its name above the row.
         var heading: String?
+        var headingSymbol = BoardCard.Kind.orchestrator.symbol
         var id: UUID { surface.id }
     }
 
@@ -349,18 +350,18 @@ private struct BoardSidebar: View {
                     ForEach(rows) { row in
                         if let heading = row.heading {
                             HStack(spacing: 6) {
-                                Image(systemName: BoardCard.Kind.orchestrator.symbol).font(.system(size: 9.5, weight: .semibold))
+                                Image(systemName: row.headingSymbol).font(.system(size: 9.5, weight: .semibold))
                                 Text(heading.uppercased()).font(Extreme.font(10, weight: .bold)).tracking(0.6).lineLimit(1)
                             }
-                            .foregroundColor(row.wire.map(BoardProjects.color) ?? Extreme.muted)
+                            .foregroundColor(row.wireColor ?? Extreme.muted)
                             .padding(.horizontal, 8).padding(.top, 10).padding(.bottom, 2)
                         }
                         BoardSidebarRow(board: controller, surface: row.surface, info: row.info, name: model.titles[row.surface.id],
                                         color: model.color(of: row.surface.id).map(BoardProjects.color))
-                            .padding(.leading, row.wire == nil ? 0 : 16)
+                            .padding(.leading, row.wireColor == nil ? 0 : 16)
                             .overlay(alignment: .leading) {
-                                if let wire = row.wire {
-                                    Rectangle().fill(BoardProjects.color(wire).opacity(0.7)).frame(width: 2).padding(.leading, 6)
+                                if let wire = row.wireColor {
+                                    Rectangle().fill(wire.opacity(0.7)).frame(width: 2).padding(.leading, 6)
                                 }
                             }
                             .onTapGesture { controller.focusTile(row.surface) }
@@ -441,16 +442,27 @@ private struct BoardSidebar: View {
         }
         let sorted = model.surfaces.map { Row(surface: $0, info: VerticalTabsAgents.shared.info(for: $0)) }
             .sorted { key($0) < key($1) }
-        guard !model.teams.isEmpty else { return sorted }
-        // Each orchestrator's agents under its name, after the rest (a tile once, under the first).
+        guard !model.teams.isEmpty || !model.groups.isEmpty else { return sorted }
+        // Each group's tiles under its name, then each orchestrator's agents under its name,
+        // after the rest (a tile once, under the first).
         let byID = Dictionary(sorted.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         var placed = Set<UUID>()
         var wired: [Row] = []
+        for group in model.groups {
+            let tiles = group.tiles.filter { byID[$0] != nil && placed.insert($0).inserted }
+            for (index, id) in tiles.enumerated() {
+                guard var row = byID[id] else { continue }
+                row.wireColor = Color(nsColor: group.nsColor)
+                row.heading = index == 0 ? group.name : nil
+                row.headingSymbol = "square.grid.2x2.fill"
+                wired.append(row)
+            }
+        }
         for team in model.teams {
             let agents = controller.wiredAgents(team).filter { placed.insert($0.surface.id).inserted }
             for (index, agent) in agents.enumerated() {
                 guard var row = byID[agent.surface.id] else { continue }
-                row.wire = team.color
+                row.wireColor = BoardProjects.color(team.color)
                 row.heading = index == 0 ? controller.orchestratorName(team.id) : nil
                 wired.append(row)
             }
