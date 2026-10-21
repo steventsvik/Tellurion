@@ -42,6 +42,10 @@ struct BoardWorkspace: Codable, Identifiable, Equatable {
     var teams: [BoardTeam]?
     /// Groups you made (see BoardNamedGroups).
     var groups: [BoardGroupNode]?
+    /// Big text on the board (see BoardLabels).
+    var labels: [BoardLabelNode]?
+    /// Ink drawn on the board (see BoardInk).
+    var ink: [BoardInkStroke]?
     /// Open when Tellurion last quit; reopened at launch.
     var open = true
     var updated = Date()

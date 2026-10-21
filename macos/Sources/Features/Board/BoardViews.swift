@@ -38,7 +38,8 @@ struct BoardWindowView: View {
                         }
                         .padding(.top, 52)
                     }
-                    if model.surfaces.isEmpty {
+                    // Out of the way while drawing or placing things.
+                    if model.surfaces.isEmpty && model.tool == .select && model.cards.isEmpty && model.labels.isEmpty && model.ink.isEmpty {
                         BoardEmptyState(controller: controller)
                     }
                     // "Your app is live" when a localhost session starts listening.
@@ -46,6 +47,13 @@ struct BoardWindowView: View {
                         LocalhostToastLayer(controller: controller).padding(.top, 34)
                     }
                     BoardCornerOverlay(controller: controller)
+                    HStack(alignment: .center) {
+                        BoardToolPalette(controller: controller, model: model)
+                        Spacer()
+                        BoardSidePalette(controller: controller, model: model)
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(maxHeight: .infinity)
                     VStack(spacing: 0) {
                         Spacer(minLength: 0)
                         BoardAssistantBar(controller: controller, assistant: controller.assistant, model: model)
@@ -71,6 +79,7 @@ struct BoardWindowView: View {
                 }
                 // ⌘P / ⌘⇧P over the whole window, for the tile with the cursor.
                 BoardPaletteLayer(controller: controller, model: model)
+                BoardRadialMenu(controller: controller, model: model)
             }
         }
         .ignoresSafeArea()

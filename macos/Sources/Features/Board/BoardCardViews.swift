@@ -22,6 +22,7 @@ final class BoardCardView: BoardNodeView {
         case .kanban: content = KanbanContent()
         case .map: content = AgentMapContent()
         case .orchestrator: content = OrchestratorContent()
+        case .web: content = WebContent()
         }
         super.init(controller: controller, id: card.id)
         clip.wantsLayer = true
@@ -240,6 +241,7 @@ final class BoardCardState: ObservableObject {
         case .kanban: summary = card.items.isEmpty ? nil : "\(card.items.filter { $0.column == 2 }.count) of \(card.items.count) done"
         case .map: summary = "Agent Map"
         case .orchestrator: summary = nil
+        case .web: summary = card.viewport
         }
         if self.summary != summary { self.summary = summary }
         let tint = card.kind == .note ? SketchStyle.color(card.color) : nil

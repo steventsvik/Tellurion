@@ -15,6 +15,8 @@ final class BoardTiles {
     private var views: [UUID: BoardTileView] = [:]
     private var sketchViews: [UUID: BoardSketchView] = [:]
     private var cardViews: [UUID: BoardCardView] = [:]
+    private var labelViews: [UUID: BoardLabelView] = [:]
+    private let ink: BoardInkView
     private var cancellables: Set<AnyCancellable> = []
 
     init(controller: BoardController, document: NSView) {
@@ -25,6 +27,10 @@ final class BoardTiles {
         groups.autoresizingMask = [.width, .height]
         document.addSubview(groups, positioned: .below, relativeTo: nil)
         controller.groupsView = groups
+        ink = BoardInkView(frame: document.bounds)
+        ink.controller = controller
+        ink.autoresizingMask = [.width, .height]
+        document.addSubview(ink)
         let model = controller.model
         // Batched to the next turn of the run loop: several of these change together.
         Publishers.Merge6(model.$surfaces.map { _ in () }, model.$frames.map { _ in () }, model.$order.map { _ in () },
@@ -32,7 +38,8 @@ final class BoardTiles {
             .merge(with: model.$titles.map { _ in () }, model.$projects.map { _ in () }, model.$colors.map { _ in () })
             .merge(with: model.$sketches.map { _ in () }, model.$focusedSketch.map { _ in () }, model.$cards.map { _ in () })
             .merge(with: model.$paused.map { _ in () }, model.$teams.map { _ in () }, model.$wiring.map { _ in () })
-            .merge(with: model.$groups.map { _ in () })
+            .merge(with: model.$groups.map { _ in () }, model.$labels.map { _ in () }, model.$ink.map { _ in () },
+                   model.$tool.map { _ in () })
             .sink { [weak self] in self?.needsSync() }
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: ExtremeSettings.featuresDidChange)
@@ -116,6 +123,23 @@ final class BoardTiles {
             }
             view.update(title: sketch.title, focused: model.focusedSketch == sketch.id, zoom: model.zoom)
         }
+        let labelIDs = Set(model.labels.map(\.id))
+        for (id, view) in labelViews where !labelIDs.contains(id) {
+            view.removeFromSuperview()
+            labelViews[id] = nil
+        }
+        for label in model.labels {
+            guard let frame = model.frames[label.id] else { continue }
+            let view = labelViews[label.id] ?? {
+                let view = BoardLabelView(controller: controller, label: label)
+                document.addSubview(view)
+                labelViews[label.id] = view
+                return view
+            }()
+            if view.frame != frame { view.frame = frame }
+            view.apply(label)
+        }
+        ink.update(model.ink)
         for card in model.cards {
             guard let frame = model.frames[card.id] else { continue }
             let view = cardViews[card.id] ?? {
@@ -145,11 +169,14 @@ final class BoardTiles {
         // Back to front, without removing anything (that would take a terminal's focus).
         let order = Dictionary(model.order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         let nodes: [(UUID, NSView)] = views.map { ($0, $1) } + sketchViews.map { ($0, $1) } + cardViews.map { ($0, $1) }
+            + labelViews.map { ($0, $1) }
         var rank: [ObjectIdentifier: Int] = Dictionary(nodes.map { (ObjectIdentifier($1), order[$0] ?? -1) },
                                                        uniquingKeysWith: { a, _ in a })
         rank[ObjectIdentifier(groups)] = Int.min
-        let current = document.subviews.compactMap { $0 as? BoardNodeView }.map { rank[ObjectIdentifier($0)] ?? -1 }
-        if current != current.sorted() || document.subviews.first !== groups {
+        // Ink over everything.
+        rank[ObjectIdentifier(ink)] = Int.max
+        let current = document.subviews.filter { $0 is BoardNodeView || $0 is BoardLabelView }.map { rank[ObjectIdentifier($0)] ?? -1 }
+        if current != current.sorted() || document.subviews.first !== groups || document.subviews.last !== ink {
             withUnsafePointer(to: rank) { pointer in
                 document.sortSubviews({ a, b, context in
                     guard let ranks = context?.assumingMemoryBound(to: [ObjectIdentifier: Int].self).pointee else { return .orderedSame }

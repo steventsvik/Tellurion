@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import WebKit
 import GhosttyKit
 
 /// Test-only: `GHOSTTY_EXTREME_TEST_BOARD=<file>` plays a timed script against the boards, like
@@ -396,6 +397,63 @@ enum BoardTest {
         case "tiledup":
             guard let surface = tile(args.first ?? "", of: controller) else { return }
             controller.duplicateTile(surface)
+        case "pick":
+            // pick <name>: picks a palette tool (select, pen, eraser, text, web, agent, terminal…).
+            guard let tool = BoardTool(rawValue: args.first ?? "") else { return }
+            controller.choose(tool)
+        case "inkline":
+            // inkline <tile n | 0> <dx> <dy>: drags the mouse with the current tool from tile n's middle
+            // (0: the view's middle) by that many board points.
+            guard args.count == 3, let dx = Double(args[1]), let dy = Double(args[2]),
+                  let window = controller.window, let document = controller.groupsView?.superview,
+                  let visible = controller.canvas?.documentVisibleRect else { return }
+            let from = tile(args[0], of: controller).flatMap { controller.model.frames[$0.id] } ?? visible
+            let x = from.midX, y = from.midY
+            let height = window.contentView?.bounds.height ?? 0
+            let start = document.convert(CGPoint(x: x, y: y), to: nil)
+            let end = document.convert(CGPoint(x: x + dx, y: y + dy), to: nil)
+            drag(from: CGPoint(x: start.x, y: height - start.y), by: CGSize(width: end.x - start.x, height: start.y - end.y), in: controller)
+        case "tileorigin":
+            // tileorigin <n>: logs tile n's frame (to aim inklines).
+            guard let surface = tile(args.first ?? "", of: controller) else { return }
+            DemoDirector.note("tile frame \(controller.model.frames[surface.id] ?? .zero)")
+        case "inkstate":
+            DemoDirector.note("ink strokes=\(controller.model.ink.count) anchored=\(controller.model.ink.filter { $0.anchor != nil }.count) "
+                              + controller.model.ink.compactMap { controller.inkPoints($0)?.first }.map { "(\(Int($0.x)),\(Int($0.y)))" }.joined(separator: " "))
+            DemoDirector.note("labels " + controller.model.labels.map { "\($0.text)@\(Int($0.frame.minX)),\(Int($0.frame.minY))" }.joined(separator: " "))
+        case "labelnew":
+            guard let rect = controller.canvas?.documentVisibleRect else { return }
+            controller.addLabel(at: CGPoint(x: rect.midX, y: rect.minY + 120), text: args.joined(separator: " "), edit: false)
+        case "radial":
+            guard let rect = controller.canvas?.documentVisibleRect, let content = controller.window?.contentView else { return }
+            controller.model.radial = (CGPoint(x: content.bounds.midX, y: content.bounds.midY), CGPoint(x: rect.midX, y: rect.midY))
+        case "webnew":
+            guard let rect = controller.canvas?.documentVisibleRect else { return }
+            controller.addWebTile(at: CGPoint(x: rect.midX, y: rect.midY), url: args.first)
+        case "webstate":
+            for card in controller.model.cards where card.kind == .web {
+                DemoDirector.note("web \(card.title) tabs=\(card.tabs ?? []) tab=\(card.tab ?? -1) viewport=\(card.viewport ?? "-") frame=\(controller.model.frames[card.id].map { "\(Int($0.width))x\(Int($0.height))" } ?? "-")")
+            }
+        case "webviewport":
+            // webviewport <preset name…|fit>: the first web tile's viewport.
+            guard let content = controller.window?.contentView?.descendants.compactMap({ $0 as? WebContent }).first else { return }
+            let name = args.joined(separator: " ")
+            content.setViewport(name == "fit" ? nil : name)
+        case "webinspect":
+            guard let content = controller.window?.contentView?.descendants.compactMap({ $0 as? WebContent }).first else { return }
+            let before = NSApp.windows.filter(\.isVisible).count
+            content.inspect()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                DemoDirector.note("webinspect content " + (content.subviews + content.subviews.flatMap(\.subviews)).map { "\(type(of: $0)) \(Int($0.frame.minY)) \(Int($0.frame.width))x\(Int($0.frame.height))" }.joined(separator: ", "))
+                DemoDirector.note("webinspect windows \(before) -> \(NSApp.windows.filter(\.isVisible).count): "
+                                  + NSApp.windows.map { "\(type(of: $0))[\($0.isVisible ? "v" : "-")\($0.isKeyWindow ? "k" : "")] \(Int($0.frame.width))x\(Int($0.frame.height)) '\($0.title)'" }.joined(separator: ", "))
+            }
+        case "webeval":
+            // webeval <js>: runs script in the first web tile's page and logs the result.
+            guard let page = controller.window?.contentView?.descendants.compactMap({ $0 as? WKWebView }).first(where: { !$0.isHidden }) else { return }
+            page.evaluateJavaScript(args.joined(separator: " ")) { result, error in
+                DemoDirector.note("webeval \(result.map { "\($0)" } ?? "nil") \(error.map { "\($0.localizedDescription)" } ?? "")")
+            }
         case "orchnew":
             // orchnew [tile n…]: an orchestrator wired to those tiles.
             let tiles = args.compactMap { tile($0, of: controller)?.id }

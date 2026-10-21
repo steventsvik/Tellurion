@@ -6,7 +6,7 @@ import AppKit
 /// Codex tile), and then follows that agent: Doing while it works, Done when it finishes.
 struct BoardCard: Codable, Identifiable, Equatable {
     enum Kind: String, Codable, CaseIterable {
-        case note, checklist, kanban, map, orchestrator
+        case note, checklist, kanban, map, orchestrator, web
 
         var title: String {
             switch self {
@@ -15,6 +15,7 @@ struct BoardCard: Codable, Identifiable, Equatable {
             case .kanban: return "Kanban"
             case .map: return "Agent Map"
             case .orchestrator: return "Orchestrator"
+            case .web: return "Web"
             }
         }
 
@@ -25,6 +26,7 @@ struct BoardCard: Codable, Identifiable, Equatable {
             case .kanban: return "rectangle.split.3x1"
             case .map: return "map"
             case .orchestrator: return "point.3.connected.trianglepath.dotted"
+            case .web: return "globe"
             }
         }
 
@@ -35,6 +37,7 @@ struct BoardCard: Codable, Identifiable, Equatable {
             case .kanban: return CGSize(width: 900, height: 520)
             case .map: return CGSize(width: 980, height: 640)
             case .orchestrator: return CGSize(width: 380, height: 520)
+            case .web: return BoardWeb.size
             }
         }
     }
@@ -49,6 +52,11 @@ struct BoardCard: Codable, Identifiable, Equatable {
     var items: [CardItem] = []
     /// An Agent Map's project folder.
     var folder: String?
+    /// A web tile's tabs (their addresses; empty for the start page), the one shown, and its
+    /// viewport preset.
+    var tabs: [String]?
+    var tab: Int?
+    var viewport: String?
     /// Where it sits on the board (kept in the board's frames while open).
     var frame: CGRect = .zero
 }

@@ -41,6 +41,19 @@ final class BoardModel: ObservableObject {
     @Published var teams: [BoardTeam] = []
     /// Groups you made (see BoardNamedGroups).
     @Published var groups: [BoardGroupNode] = []
+    /// Big text on the board, and ink drawn on it.
+    @Published var labels: [BoardLabelNode] = []
+    @Published var ink: [BoardInkStroke] = []
+    /// What a click on the board does (see BoardPalettes).
+    @Published var tool: BoardTool = .select
+    @Published var inkColor = UserDefaults.standard.integer(forKey: "BoardInkColor") {
+        didSet { UserDefaults.standard.set(inkColor, forKey: "BoardInkColor") }
+    }
+    @Published var inkWidth: CGFloat = UserDefaults.standard.object(forKey: "BoardInkWidth") as? CGFloat ?? 2.5 {
+        didSet { UserDefaults.standard.set(inkWidth, forKey: "BoardInkWidth") }
+    }
+    /// The radial menu: where it opened in the window (SwiftUI points) and on the board.
+    @Published var radial: (window: CGPoint, board: CGPoint)?
     /// The orchestrator that clicks on tiles and groups wire to, while connecting.
     @Published var wiring: UUID?
     /// The next change to `frames` slides the tiles there instead of jumping.
@@ -50,7 +63,7 @@ final class BoardModel: ObservableObject {
     func color(of id: UUID) -> Int? { projects[id].flatMap { colors[$0] } }
 
     /// Every tile on the board: terminals and sketches.
-    var nodeIDs: [UUID] { surfaces.map(\.id) + sketches.map(\.id) + cards.map(\.id) }
+    var nodeIDs: [UUID] { surfaces.map(\.id) + sketches.map(\.id) + cards.map(\.id) + labels.map(\.id) }
 
     var stacked: [Ghostty.SurfaceView] {
         surfaces.sorted { (order.firstIndex(of: $0.id) ?? -1) < (order.firstIndex(of: $1.id) ?? -1) }
@@ -119,6 +132,8 @@ final class BoardController: BaseTerminalController {
     var orchestratorBrains: [UUID: OrchestratorBrain] = [:]
     /// Escape ends connecting (see startWiring).
     var wiringMonitor: Any?
+    /// The tool keys (see installToolKeys).
+    var toolKeyMonitor: Any?
 
     // MARK: Opening
 
@@ -168,6 +183,12 @@ final class BoardController: BaseTerminalController {
             model.order.append(card.id)
         }
         model.groups = workspace.groups ?? []
+        model.labels = workspace.labels ?? []
+        for label in model.labels {
+            model.frames[label.id] = label.frame
+            model.order.append(label.id)
+        }
+        model.ink = workspace.ink ?? []
         model.teams = (workspace.teams ?? []).filter { team in model.cards.contains { $0.id == team.id } }
         model.name = workspace.name
         model.colors = workspace.colors ?? [:]
@@ -256,6 +277,7 @@ final class BoardController: BaseTerminalController {
         if let first = surfaceTree.root?.leftmostLeaf() {
             Ghostty.moveFocus(to: first)
         }
+        installToolKeys()
         BoardTest.startIfRequested(self)
     }
 
@@ -322,6 +344,7 @@ final class BoardController: BaseTerminalController {
         // Closed tiles come unwired.
         if !model.teams.isEmpty { pruneTeams() }
         if !model.groups.isEmpty { pruneGroups() }
+        if !model.ink.isEmpty { pruneInk() }
         watchProjects()
         updateVisibility()
         scheduleSave()
@@ -953,6 +976,12 @@ final class BoardController: BaseTerminalController {
         workspace.colors = model.colors.isEmpty ? nil : model.colors
         workspace.teams = model.teams.isEmpty ? nil : model.teams
         workspace.groups = model.groups.isEmpty ? nil : model.groups
+        workspace.labels = model.labels.isEmpty ? nil : model.labels.map { label in
+            var label = label
+            label.frame = model.frames[label.id] ?? label.frame
+            return label
+        }
+        workspace.ink = model.ink.isEmpty ? nil : model.ink
         workspace.cards = model.cards.isEmpty ? nil : model.cards.map { card in
             var card = card
             card.frame = model.frames[card.id] ?? card.frame

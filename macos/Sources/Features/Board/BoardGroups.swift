@@ -87,6 +87,7 @@ final class BoardGroupsView: NSView {
 
     private var areas: [CALayer] = []
     private let guideLayer = CAShapeLayer()
+    private let boxLayer = CAShapeLayer()
     /// One per wire: a soft glow under the line, the line with a dot at each end, and a dot
     /// that travels along it while something on the far end works.
     private var wireLayers: [(glow: CAShapeLayer, line: CAShapeLayer, ends: CAShapeLayer, runner: CAShapeLayer)] = []
@@ -472,6 +473,23 @@ final class BoardGroupsView: NSView {
     }
 
     /// The lines the dragged tile lines up with.
+    /// A dashed box being dragged out (the web tool), or nil to hide it.
+    func showBox(_ rect: CGRect?) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if boxLayer.superlayer == nil {
+            boxLayer.fillColor = Extreme.chrome.core.nsColor.withAlphaComponent(0.05).cgColor
+            boxLayer.zPosition = 11
+            layer?.addSublayer(boxLayer)
+        }
+        let zoom = max(self.zoom, 0.08)
+        boxLayer.path = rect.map { CGPath(roundedRect: $0, cornerWidth: 12, cornerHeight: 12, transform: nil) }
+        boxLayer.strokeColor = Extreme.chrome.core.nsColor.cgColor
+        boxLayer.lineWidth = 1.5 / zoom
+        boxLayer.lineDashPattern = [NSNumber(value: 7 / zoom), NSNumber(value: 5 / zoom)]
+        CATransaction.commit()
+    }
+
     func showGuides(_ lines: [(CGPoint, CGPoint)]) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
