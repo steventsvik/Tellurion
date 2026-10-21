@@ -4,7 +4,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
-## Unreleased
+## 1.8.0
 
 - **Board edition.** Tellurion can now show your terminals as tiles on a board instead of tabs. Pick **Board** when you first open Tellurion, or any time in **Settings → Edition**; Classic stays the default and nothing changes unless you switch.
   - **Every terminal is a tile.** Each one is a full terminal, so Vim, full-screen apps and every agent work as they do in a tab. Drag a tile by its title bar, resize it from its corner, and arrange them however you like.
