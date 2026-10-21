@@ -28,11 +28,20 @@ final class AgentMapContent: CardContent {
     private var hovered: Int?
     private var legendHits: [(rect: CGRect, id: UUID)] = []
     private var crumbHits: [(rect: CGRect, path: String)] = []
+    /// The project with symlinks resolved, to match tool paths that came the other way.
+    private var realRoot: String?
     private var scanning = false
+    /// Asked for while a scan ran: scan again when it's done.
+    private var scanAgain = false
     private var rescanWork: DispatchWorkItem?
+    /// Files agents changed that a scan didn't find (ignored by git, or past the limit): they
+    /// don't start another scan.
+    private var unlisted: Set<String> = []
+    private var waiting: Set<String> = []
     private var timer: Timer?
-    private var observer: NSObjectProtocol?
-    private var ticks = 0
+    private var observers: [NSObjectProtocol] = []
+    private var refreshQueued = false
+    private var lastDraw = Date()
     private var trackingArea: NSTrackingArea?
 
     private let agentLayer = CALayer()
@@ -72,9 +81,12 @@ final class AgentMapContent: CardContent {
     override func apply(_ card: BoardCard) {
         guard card.folder != root else { return }
         root = card.folder
+        realRoot = card.folder.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path }
         focus = ""
         tree = nil
         heat = [:]
+        unlisted = []
+        waiting = []
         for track in tracks.values { track.remove() }
         tracks = [:]
         order = []
@@ -83,26 +95,35 @@ final class AgentMapContent: CardContent {
         refreshTracks()
     }
 
+    private var occlusion: NSObjectProtocol?
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window != nil {
-            start()
-        } else {
-            stop()
+        if let occlusion { NotificationCenter.default.removeObserver(occlusion) }
+        occlusion = window.map { window in
+            NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main) { [weak self] _ in
+                self?.updateRunning()
+            }
         }
+        updateRunning()
+    }
+
+    /// Follows the agents only while the map can be seen: not in a board out of sight, a
+    /// minimized window, or one covered up.
+    private func updateRunning() {
+        if let window, window.occlusionState.contains(.visible) { start() } else { stop() }
     }
 
     private func start() {
         guard timer == nil else { return }
-        observer = NotificationCenter.default.addObserver(forName: VerticalTabsAgents.didChange, object: nil, queue: .main) { [weak self] _ in
-            self?.refreshTracks()
-        }
+        observers.append(NotificationCenter.default.addObserver(forName: VerticalTabsAgents.didChange, object: nil, queue: .main) { [weak self] _ in
+            self?.queueRefresh()
+        })
         // New agents, transcripts found on disk, and fading files.
         timer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.refreshTracks()
-            self.ticks += 1
-            if self.ticks % 8 == 0, !self.heat.isEmpty { self.needsDisplay = true }
+            if !self.heat.isEmpty, Date().timeIntervalSince(self.lastDraw) > 30 { self.fadeHeat() }
         }
         refreshTracks()
     }
@@ -110,9 +131,25 @@ final class AgentMapContent: CardContent {
     private func stop() {
         timer?.invalidate()
         timer = nil
-        if let observer { NotificationCenter.default.removeObserver(observer) }
-        observer = nil
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers = []
         for track in tracks.values { track.feed.stop() }
+    }
+
+    /// Hook events from every agent in the app come in bursts: one refresh per turn of the run loop.
+    private func queueRefresh() {
+        guard !refreshQueued else { return }
+        refreshQueued = true
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshQueued = false
+            self?.refreshTracks()
+        }
+    }
+
+    /// Files fade; ones untouched for hours drop off the count.
+    private func fadeHeat() {
+        heat = heat.filter { Date().timeIntervalSince($0.value.date) < 4 * 3600 }
+        needsDisplay = true
     }
 
     // MARK: Files
@@ -125,15 +162,26 @@ final class AgentMapContent: CardContent {
     }
 
     private func scan() {
-        guard let root, !scanning else { return }
+        guard let root else { return }
+        guard !scanning else {
+            scanAgain = true
+            return
+        }
         scanning = true
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let tree = MapNode.scan(root, limit: Self.maxFiles)
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.scanning = false
-                guard self.root == root else { return }
+                // The project changed, or more files appeared, while this one ran.
+                if self.scanAgain || self.root != root {
+                    self.scanAgain = false
+                    self.scan()
+                    if self.root != root { return }
+                }
                 self.tree = tree
+                self.unlisted.formUnion(self.waiting.filter { tree.find($0) == nil })
+                self.waiting = []
                 if tree.find(self.focus)?.isFolder != true { self.focus = "" }
                 self.relayout()
             }
@@ -189,10 +237,16 @@ final class AgentMapContent: CardContent {
 
     /// A path from an agent's tool call, relative to the project, or nil when it's elsewhere.
     private func relative(_ path: String, cwd: String?) -> String? {
-        guard let root else { return nil }
+        guard let root, let realRoot else { return nil }
         var full = path
         if !path.hasPrefix("/") { full = ((cwd ?? root) as NSString).appendingPathComponent(path) }
         full = (full as NSString).standardizingPath
+        if let inside = Self.path(full, in: root) { return inside }
+        // Through a symlink, one side or the other.
+        return Self.path(URL(fileURLWithPath: full).resolvingSymlinksInPath().path, in: realRoot)
+    }
+
+    private static func path(_ full: String, in root: String) -> String? {
         if full == root { return "" }
         guard full.hasPrefix(root + "/") else { return nil }
         return String(full.dropFirst(root.count + 1))
@@ -200,7 +254,14 @@ final class AgentMapContent: CardContent {
 
     // MARK: Drawing
 
+    private static let dates: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
     override func draw(_ dirtyRect: NSRect) {
+        lastDraw = Date()
         let chrome = Extreme.chrome
         chrome.ink.nsColor.setFill()
         bounds.fill()
@@ -238,8 +299,10 @@ final class AgentMapContent: CardContent {
         }
         drawBar(chrome)
         drawLegend(chrome)
-        if tree == nil {
-            Self.drawText(root == nil ? "No project" : "Reading the project…", in: mapRect.insetBy(dx: 12, dy: mapRect.height / 2 - 8),
+        if tree == nil || tree?.children.isEmpty == true {
+            let message = root == nil ? "No project. Choose one with Project in this map's menu."
+                : tree == nil ? "Reading the project…" : "No files here. The folder may have moved."
+            Self.drawText(message, in: mapRect.insetBy(dx: 12, dy: mapRect.height / 2 - 8),
                           size: 12, weight: .medium, color: chrome.muted.nsColor, center: true)
         }
     }
@@ -345,13 +408,13 @@ final class AgentMapContent: CardContent {
 
     /// The agents whose terminals are in this project, each followed through its transcript.
     private func refreshTracks() {
-        guard let root, window != nil else { return }
+        guard root != nil, timer != nil else { return }
         var seen = Set<UUID>()
+        var changed = false
         for pair in TerminalWindows.surfaces {
             let surface = pair.surface
             guard let info = VerticalTabsAgents.shared.info(for: surface), info.kind != .hermes, info.kind != .unknown,
-                  let pwd = surface.pwd.map({ ($0 as NSString).standardizingPath }),
-                  pwd == root || pwd.hasPrefix(root + "/") else { continue }
+                  let pwd = surface.pwd, relative(pwd, cwd: nil) != nil else { continue }
             seen.insert(surface.id)
             let track: AgentTrack
             if let existing = tracks[surface.id] {
@@ -361,6 +424,7 @@ final class AgentMapContent: CardContent {
                 nextColor += 1
                 tracks[surface.id] = track
                 order.append(surface.id)
+                changed = true
                 agentLayer.addSublayer(track.trail)
                 agentLayer.addSublayer(track.dot)
                 track.feed.onItems = { [weak self, weak track] items, reset in
@@ -371,7 +435,7 @@ final class AgentMapContent: CardContent {
             let name = (pair.controller as? BoardController).flatMap { board in
                 BoardTileTitle.title(surface, info, name: board.model.titles[surface.id])
             } ?? info.name
-            track.update(info: info, name: name)
+            if track.update(info: info, name: name) { changed = true }
             if let transcript = track.lookup.transcript(for: info, in: pwd), transcript != track.feed.path {
                 track.feed.follow(path: transcript, kind: info.kind)
             }
@@ -380,7 +444,10 @@ final class AgentMapContent: CardContent {
             tracks[id]?.remove()
             tracks[id] = nil
             order.removeAll { $0 == id }
+            changed = true
         }
+        // Most refreshes change nothing; redrawing thousands of files for them would cost.
+        guard changed else { return }
         layoutLegend()
         moveAgents(animated: true)
         needsDisplay = true
@@ -389,8 +456,7 @@ final class AgentMapContent: CardContent {
     private func receive(_ items: [AgentFeed.Item], reset: Bool, for track: AgentTrack) {
         if reset { track.trail.path = nil }
         var unknown = false
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let formatter = Self.dates
         for item in items where item["kind"] as? String == "tool" {
             let action = item["action"] as? String ?? "other"
             if action == "run", let command = item["command"] as? String {
@@ -412,7 +478,10 @@ final class AgentMapContent: CardContent {
             }
             heat[path] = spot
             if changed, !reset {
-                if tree?.find(path) == nil { unknown = true }
+                if tree?.find(path) == nil, !unlisted.contains(path) {
+                    waiting.insert(path)
+                    unknown = true
+                }
                 if let cell = cell(for: path) { track.ping(at: CGPoint(x: cell.rect.midX, y: cell.rect.midY)) }
             }
         }
@@ -637,7 +706,9 @@ final class MapNode {
     private func total() -> Double {
         guard isFolder else { return weight }
         children = children.filter { $0.total() > 0 }
-        weight = children.reduce(0) { $0 + $1.weight }
+        // A folder grows slower than its contents, so thousands of small files (test data,
+        // assets) don't crowd out the code.
+        weight = pow(children.reduce(0) { $0 + $1.weight }, 0.85)
         return weight
     }
 
@@ -646,16 +717,16 @@ final class MapNode {
     ]
 
     private static func walk(_ root: String, limit: Int) -> [String] {
-        let url = URL(fileURLWithPath: root)
-        guard let walker = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isDirectoryKey],
-                                                          options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
+        guard let walker = FileManager.default.enumerator(atPath: root) else { return [] }
         var files: [String] = []
-        for case let item as URL in walker {
-            if (try? item.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
-                if skipped.contains(item.lastPathComponent) { walker.skipDescendants() }
+        while let path = walker.nextObject() as? String {
+            let name = (path as NSString).lastPathComponent
+            let isFolder = walker.fileAttributes?[.type] as? FileAttributeType == .typeDirectory
+            if name.hasPrefix(".") || (isFolder && skipped.contains(name)) {
+                if isFolder { walker.skipDescendants() }
                 continue
             }
-            files.append(String(item.path.dropFirst(root.count + 1)))
+            if !isFolder { files.append(path) }
             if files.count >= limit { break }
         }
         return files
@@ -784,12 +855,15 @@ private final class AgentTrack {
 
     var legend: String { [name, doing ?? activity.label].joined(separator: " · ") }
 
-    func update(info: VerticalTabAgentInfo, name: String) {
+    /// Whether anything shown changed.
+    func update(info: VerticalTabAgentInfo, name: String) -> Bool {
+        guard name != self.name || info.activity != activity || letter.string == nil else { return false }
         self.name = name
         activity = info.activity
         letter.string = String(info.name.prefix(1)).uppercased()
         // A ring that says the agent is waiting for you.
         dot.borderColor = (AgentAlerts.isWaiting(info.activity) ? NSColor.systemOrange : NSColor.white.withAlphaComponent(0.92)).cgColor
+        return true
     }
 
     func visit(_ path: String) {

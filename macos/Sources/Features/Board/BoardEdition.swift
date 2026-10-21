@@ -94,16 +94,23 @@ enum Board {
             return
         }
         guard let window = board.window else { return }
+        confirmDelete(workspace.name, closingTerminals: false, in: window) {
+            BoardStore.delete(workspace.id)
+            NotificationCenter.default.post(name: BoardController.boardsDidChange, object: nil)
+        }
+    }
+
+    static func confirmDelete(_ name: String, closingTerminals: Bool, in window: NSWindow, then delete: @escaping () -> Void) {
         let alert = NSAlert()
-        alert.messageText = "Delete “\(workspace.name)”?"
-        alert.informativeText = "Its sketches, notes and maps are deleted. You can't undo this."
+        alert.messageText = "Delete “\(name)”?"
+        alert.informativeText = closingTerminals
+            ? "Its terminals are closed, and its sketches, notes and maps are deleted. You can't undo this."
+            : "Its sketches, notes and maps are deleted. You can't undo this."
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
         alert.beginSheetModal(for: window) { response in
-            guard response == .alertFirstButtonReturn else { return }
-            BoardStore.delete(workspace.id)
-            NotificationCenter.default.post(name: BoardController.boardsDidChange, object: nil)
+            if response == .alertFirstButtonReturn { delete() }
         }
     }
 }

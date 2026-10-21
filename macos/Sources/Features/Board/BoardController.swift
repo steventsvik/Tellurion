@@ -275,6 +275,8 @@ final class BoardController: BaseTerminalController {
     override func surfaceTreeDidChange(from: SplitTree<Ghostty.SurfaceView>, to: SplitTree<Ghostty.SurfaceView>) {
         super.surfaceTreeDidChange(from: from, to: to)
         let surfaces = Array(to)
+        // Undo keeps a closed terminal alive; it isn't the board's focused tile any more.
+        if let focused = model.focused?.value, !to.contains(focused) { model.focused = nil }
         let anchor = focusedSurface.flatMap { model.frames[$0.id] }
         for view in surfaces where model.frames[view.id] == nil {
             // A split, a new tab from a keybinding, or an undone close.
@@ -306,14 +308,25 @@ final class BoardController: BaseTerminalController {
         for view in model.surfaces {
             if let project = BoardProjects.project(of: folder(of: view)) { projects[view.id] = project }
         }
-        // A new project takes the first color no project on the board has; a project keeps
-        // its color for as long as the board does.
+        // A project keeps its color for as long as the board does, unless a project on the board
+        // now has it (it left, and the color was given away): then, like a new project, it takes
+        // the first color no project on the board has.
         var colors = model.colors
-        let present = Set(projects.values)
-        for project in model.surfaces.compactMap({ projects[$0.id] }) where colors[project] == nil {
-            let used = Set(present.compactMap { colors[$0] })
-            let free = BoardProjects.palette.indices.first { !used.contains($0) }
-            colors[project] = free ?? (used.count % BoardProjects.palette.count)
+        var present: [String] = []
+        for project in model.surfaces.compactMap({ projects[$0.id] }) where !present.contains(project) { present.append(project) }
+        var taken: [Int: String] = [:]
+        var needColor: [String] = []
+        for project in present {
+            if let color = colors[project], taken[color] == nil {
+                taken[color] = project
+            } else {
+                needColor.append(project)
+            }
+        }
+        for project in needColor {
+            let color = BoardProjects.palette.indices.first { taken[$0] == nil } ?? (taken.count % BoardProjects.palette.count)
+            colors[project] = color
+            taken[color] = project
         }
         if model.projects != projects { model.projects = projects }
         if model.colors != colors {
@@ -419,10 +432,6 @@ final class BoardController: BaseTerminalController {
     }
 
     static let minTileSize = CGSize(width: 280, height: 160)
-
-    func move(_ view: Ghostty.SurfaceView, to frame: CGRect) {
-        move(id: view.id, to: frame)
-    }
 
     func move(id: UUID, to frame: CGRect) {
         model.frames[id] = clamp(frame)
@@ -609,19 +618,26 @@ final class BoardController: BaseTerminalController {
 
     /// Asks for a tile's name.
     func promptTitle(for view: Ghostty.SurfaceView) {
+        promptRename("Rename Tile", info: "Leave blank to show the terminal's own title.", current: model.titles[view.id] ?? "") { [weak self] text in
+            self?.setTitle(text, for: view)
+        }
+    }
+
+    /// A sheet with one field to rename a tile, sketch or card.
+    func promptRename(_ title: String, info: String? = nil, current: String, done: @escaping (String) -> Void) {
         guard let window else { return }
         let alert = NSAlert()
-        alert.messageText = "Rename Tile"
-        alert.informativeText = "Leave blank to show the terminal's own title."
+        alert.messageText = title
+        if let info { alert.informativeText = info }
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
-        field.stringValue = model.titles[view.id] ?? ""
+        field.stringValue = current
         alert.accessoryView = field
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Rename")
         alert.addButton(withTitle: "Cancel")
         alert.window.initialFirstResponder = field
-        alert.beginSheetModal(for: window) { [weak self] response in
+        alert.beginSheetModal(for: window) { response in
             guard response == .alertFirstButtonReturn else { return }
-            self?.setTitle(field.stringValue, for: view)
+            done(field.stringValue)
         }
     }
 
@@ -718,7 +734,12 @@ final class BoardController: BaseTerminalController {
 
     /// Scrolls just enough to show the tile, keeping the zoom.
     func reveal(_ view: Ghostty.SurfaceView) {
-        guard let canvas, let frame = model.frames[view.id] else { return }
+        if let frame = model.frames[view.id] { revealRect(frame) }
+    }
+
+    /// Scrolls just enough to show a rect, keeping the zoom.
+    func revealRect(_ frame: CGRect) {
+        guard let canvas else { return }
         let visible = canvas.documentVisibleRect
         guard !visible.contains(frame) else { return }
         let origin = CGPoint(x: frame.midX - visible.width / 2, y: frame.midY - visible.height / 2)
@@ -729,6 +750,11 @@ final class BoardController: BaseTerminalController {
             canvas.reflectScrolledClipView(canvas.contentView)
             self?.updateVisibility()
         }
+    }
+
+    /// Zooms in on a tile, sketch or card with a little room around it.
+    func zoom(toNode id: UUID) {
+        if let frame = model.frames[id] { zoom(toFit: frame.insetBy(dx: -40, dy: -40), animated: true) }
     }
 
     /// Shortcuts' "Focus Terminal", and others: the board moves to the tile too.
@@ -742,7 +768,7 @@ final class BoardController: BaseTerminalController {
     /// Zooms in on the tile at full size and puts the cursor in it.
     func focusTile(_ view: Ghostty.SurfaceView) {
         raise(view)
-        if let frame = model.frames[view.id] { zoom(toFit: frame.insetBy(dx: -40, dy: -40), animated: true) }
+        zoom(toNode: view.id)
         Ghostty.moveFocus(to: view)
     }
 
@@ -769,8 +795,8 @@ final class BoardController: BaseTerminalController {
 
     func zoomToActualSize() {
         guard let canvas else { return }
-        if let view = focusedSurface, let frame = model.frames[view.id] {
-            zoom(toFit: frame.insetBy(dx: -40, dy: -40), animated: true)
+        if let view = focusedSurface, model.frames[view.id] != nil {
+            zoom(toNode: view.id)
         } else {
             let visible = canvas.documentVisibleRect
             canvas.setMagnification(1, centeredAt: CGPoint(x: visible.midX, y: visible.midY))
@@ -908,31 +934,26 @@ final class BoardController: BaseTerminalController {
         } else {
             window.makeKeyAndOrderFront(nil)
         }
+        // Hidden boards' lists don't reload; this one may be behind.
+        NotificationCenter.default.post(name: Self.boardsDidChange, object: nil)
     }
 
-    /// Asks, then closes the board (its terminals too) and deletes it for good.
+    /// Asks (over the board you're on, without switching), then closes this board, terminals
+    /// and all, and deletes it for good.
     func confirmDelete() {
-        guard let window else { return }
-        let alert = NSAlert()
-        alert.messageText = "Delete “\(workspace.name)”?"
-        alert.informativeText = model.surfaces.isEmpty
-            ? "Its sketches, notes and maps are deleted. You can't undo this."
-            : "Its terminals are closed, and its sketches, notes and maps are deleted. You can't undo this."
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-        alert.buttons.first?.hasDestructiveAction = true
-        show()
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn, let self else { return }
+        guard let sheet = window?.isVisible == true ? window : Self.front?.window ?? window else { return }
+        Board.confirmDelete(workspace.name, closingTerminals: !model.surfaces.isEmpty, in: sheet) { [weak self] in
+            guard let self else { return }
             self.deleteOnClose = true
-            // After the sheet is gone, so a "close running terminals?" prompt can show.
-            DispatchQueue.main.async {
-                self.window?.performClose(nil)
-                // Kept open (its terminals' prompt was cancelled): it isn't deleted.
-                DispatchQueue.main.async { if self.window?.isVisible == true { self.deleteOnClose = false } }
-            }
+            // The question said the terminals close, so no second one.
+            self.window?.close()
         }
     }
+
+    /// Each board undoes its own changes: ⌘Z never reaches into a board out of sight.
+    private let boardUndo = ExpiringUndoManager()
+
+    override func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { boardUndo }
 
     override func windowDidBecomeKey(_ notification: Notification) {
         super.windowDidBecomeKey(notification)
@@ -947,10 +968,11 @@ final class BoardController: BaseTerminalController {
             saveNow()
         }
         // The board you were on before comes back in its place.
-        if !Self.terminating, let window, window.isVisible, !window.styleMask.contains(.fullScreen),
+        if !Self.terminating, let window, window.isVisible,
            let next = Self.all.filter({ $0 !== self && $0.window?.isVisible == false && $0.window?.isMiniaturized == false })
                .max(by: { $0.lastShown < $1.lastShown }), let nextWindow = next.window {
-            nextWindow.setFrame(window.frame, display: false)
+            // A full-screen board leaves its space; the next one comes back where it was.
+            if !window.styleMask.contains(.fullScreen) { nextWindow.setFrame(window.frame, display: false) }
             nextWindow.makeKeyAndOrderFront(nil)
         }
         super.windowWillClose(notification)

@@ -40,6 +40,15 @@ struct SketchElement: Codable, Identifiable, Equatable {
     /// The boxes a connector's ends are attached to; they follow the boxes.
     var start: UUID?
     var end: UUID?
+
+    /// A connector always has two ends; ones from a damaged file or another app get them.
+    var repaired: SketchElement {
+        guard kind.isConnector, points.count < 2 else { return self }
+        var element = self
+        let start = points.first ?? CGPoint(x: frame.minX, y: frame.minY)
+        element.points = [start, points.count == 1 ? start : CGPoint(x: frame.maxX, y: frame.maxY)]
+        return element
+    }
 }
 
 // MARK: - Colors and sizes
@@ -399,6 +408,8 @@ enum SketchRenderer {
 /// Pictures put on sketches, saved as files beside the board's file and loaded once.
 enum BoardSketchImages {
     private static var cache: [String: NSImage] = [:]
+    /// Pictures whose file is gone, so a redraw doesn't look on disk again.
+    private static var missing: Set<String> = []
 
     static var folder: URL { BoardStore.folder.appendingPathComponent("images", isDirectory: true) }
 
@@ -426,11 +437,34 @@ enum BoardSketchImages {
 
     static func image(_ name: String) -> NSImage? {
         if let image = cache[name] { return image }
+        guard !missing.contains(name) else { return nil }
         // Names are ours (a UUID and .png); anything else isn't loaded.
         guard name.range(of: #"^[0-9A-F-]{36}\.png$"#, options: .regularExpression) != nil,
-              let image = NSImage(contentsOf: folder.appendingPathComponent(name)) else { return nil }
+              let image = NSImage(contentsOf: folder.appendingPathComponent(name)) else {
+            missing.insert(name)
+            return nil
+        }
         cache[name] = image
         return image
+    }
+
+    /// Pictures as sketch elements in a row, each at most `largest` points on its long side,
+    /// starting at `origin` (or centered on it).
+    static func elements(for images: [NSImage], largest: CGFloat, at origin: CGPoint, centered: Bool = false) -> [SketchElement] {
+        var placed: [SketchElement] = []
+        var x = origin.x
+        for image in images {
+            guard let name = store(image) else { continue }
+            let scale = min(1, largest / max(image.size.width, image.size.height, 1))
+            let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+            var element = SketchElement(kind: .image)
+            element.image = name
+            element.frame = CGRect(x: centered ? x - size.width / 2 : x, y: centered ? origin.y - size.height / 2 : origin.y,
+                                   width: size.width, height: size.height)
+            placed.append(element)
+            x += size.width + 16
+        }
+        return placed
     }
 }
 #endif

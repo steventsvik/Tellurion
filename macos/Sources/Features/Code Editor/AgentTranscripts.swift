@@ -84,6 +84,9 @@ enum AgentTranscripts {
 final class AgentTranscriptLookup {
     private var lastLookup = Date.distantPast
     private var found: String?
+    /// The reported transcript `found` was looked up against: one found before the hooks
+    /// reported theirs doesn't outrank the report.
+    private var foundAgainst: String?
 
     func reset() { found = nil }
 
@@ -99,9 +102,11 @@ final class AgentTranscriptLookup {
         }
         let reported = info.transcriptPath
         guard let folder, info.kind == .claude || info.kind == .codex else { return reported }
+        if found != nil, foundAgainst != reported { found = nil }
         let quiet = reported.map { !Self.recentlyModified($0, within: 20) } ?? true
         if reported == nil || (quiet && info.activity == .working), Date().timeIntervalSince(lastLookup) > 3 {
             lastLookup = Date()
+            foundAgainst = reported
             if let reported {
                 found = AgentTranscripts.newer(than: reported, kind: info.kind, folder: folder)
             } else {

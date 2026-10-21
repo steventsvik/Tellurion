@@ -90,7 +90,6 @@ final class BoardGroupsView: NSView {
     private var labelRects: [CGRect] = []
     private var zoom: CGFloat = 1
 
-    private var dragGroup: BoardGroup?
     private var dragStart: (point: CGPoint, window: CGPoint, frames: [UUID: CGRect])?
     private var dragMoved = false
 
@@ -194,10 +193,8 @@ final class BoardGroupsView: NSView {
         guard let controller, let group = group(at: event) else { return }
         if event.clickCount == 2 {
             controller.zoom(toFit: group.frame.insetBy(dx: -50, dy: -50), animated: true)
-            dragGroup = nil
             return
         }
-        dragGroup = group
         dragMoved = false
         let frames = Dictionary(uniqueKeysWithValues: group.tiles.compactMap { id in controller.model.frames[id].map { (id, $0) } })
         dragStart = (convert(event.locationInWindow, from: nil), event.locationInWindow, frames)
@@ -214,7 +211,7 @@ final class BoardGroupsView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { dragGroup = nil; dragStart = nil }
+        defer { dragStart = nil }
         guard dragMoved else { return }
         NSCursor.pop()
         controller?.tileDidSettle()

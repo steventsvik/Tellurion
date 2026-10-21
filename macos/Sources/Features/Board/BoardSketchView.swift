@@ -135,8 +135,7 @@ final class BoardSketchView: BoardNodeView, NSDraggingSource, NSServicesMenuRequ
     }
 
     override func nodeFocus() {
-        guard let controller, let frame = controller.model.frames[nodeID] else { return }
-        controller.zoom(toFit: frame.insetBy(dx: -40, dy: -40), animated: true)
+        controller?.zoom(toNode: nodeID)
         focusCanvas()
     }
 

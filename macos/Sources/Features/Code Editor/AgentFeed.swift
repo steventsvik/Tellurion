@@ -4,8 +4,8 @@ import Foundation
 /// Tails an agent's session transcript (JSONL) and turns new records into timeline items
 /// for the editor's Agent panel: prompts, thinking, messages, tool calls and results.
 ///
-/// Only bytes appended since the last read are processed, on a background queue, and
-/// only while the editor panel is open.
+/// Only bytes appended since the last read are processed, on a background queue, and only
+/// while something shows them (the editor panel, or a board's Agent Map).
 final class AgentFeed {
     typealias Item = [String: Any]
 
