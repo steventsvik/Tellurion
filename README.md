@@ -3,6 +3,11 @@
 </p>
 
 <p align="center">
+  <a href="https://trendshift.io/repositories/282033"><img src="https://trendshift.io/api/badge/trendshift/repositories/282033/daily?language=Zig" alt="#1 Zig Repository Of The Day on Trendshift" width="250" height="55"></a>
+  <a href="https://trendshift.io/repositories/282033"><img src="https://trendshift.io/api/badge/trendshift/repositories/282033/weekly?language=Zig" alt="#4 Zig Repository Of The Week on Trendshift" width="250" height="55"></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/steventsvik/Tellurion/releases/latest"><img alt="Latest release" src="https://raw.githubusercontent.com/steventsvik/Tellurion/badges/release.svg"></a>
   <a href="https://github.com/steventsvik/Tellurion/stargazers"><img alt="GitHub stars" src="https://raw.githubusercontent.com/steventsvik/Tellurion/badges/stars.svg"></a>
   <a href="https://github.com/steventsvik/Tellurion/releases"><img alt="Total downloads" src="https://raw.githubusercontent.com/steventsvik/Tellurion/badges/downloads.svg"></a>
