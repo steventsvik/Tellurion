@@ -78,4 +78,42 @@ enum AgentTranscripts {
         return date?.timeIntervalSince1970 ?? 0
     }
 }
+/// An agent's transcript: the one its hooks reported, or else found on disk. Also moves to a
+/// newer one when the reported transcript goes quiet while the agent works. One per agent
+/// being followed, since it remembers what it found.
+final class AgentTranscriptLookup {
+    private var lastLookup = Date.distantPast
+    private var found: String?
+
+    func reset() { found = nil }
+
+    func transcript(for info: VerticalTabAgentInfo, in folder: String?) -> String? {
+        if info.kind == .codex, let id = info.codexSessionID {
+            if let reported = info.transcriptPath, CodexTracking.metadata(reported)?.id == id { return reported }
+            if let found, CodexTracking.metadata(found)?.id == id { return found }
+            if Date().timeIntervalSince(lastLookup) > 3 {
+                lastLookup = Date()
+                found = CodexTracking.transcript(session: id)
+            }
+            return found.flatMap { CodexTracking.metadata($0)?.id == id ? $0 : nil }
+        }
+        let reported = info.transcriptPath
+        guard let folder, info.kind == .claude || info.kind == .codex else { return reported }
+        let quiet = reported.map { !Self.recentlyModified($0, within: 20) } ?? true
+        if reported == nil || (quiet && info.activity == .working), Date().timeIntervalSince(lastLookup) > 3 {
+            lastLookup = Date()
+            if let reported {
+                found = AgentTranscripts.newer(than: reported, kind: info.kind, folder: folder)
+            } else {
+                found = AgentTranscripts.find(kind: info.kind, folder: folder)
+            }
+        }
+        return found ?? reported
+    }
+
+    private static func recentlyModified(_ path: String, within seconds: TimeInterval) -> Bool {
+        let date = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+        return date.map { Date().timeIntervalSince($0) < seconds } ?? false
+    }
+}
 #endif

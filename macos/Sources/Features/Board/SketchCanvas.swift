@@ -110,6 +110,7 @@ final class SketchCanvasView: NSView, NSTextViewDelegate, NSServicesMenuRequesto
         super.init(frame: .zero)
         wantsLayer = true
         registerForDraggedTypes([.fileURL, .png, .tiff, Self.pasteboardType])
+        _ = Self.registerReturnTypes
     }
 
     @available(*, unavailable)
@@ -775,6 +776,15 @@ final class SketchCanvasView: NSView, NSTextViewDelegate, NSServicesMenuRequesto
     }
 
     // MARK: From an iPhone or iPad (Continuity Camera and Sketch)
+
+    /// macOS only offers an iPhone's camera, scanner or sketch to an app that has said it
+    /// takes pictures back; until then "Import from iPhone or iPad" stays dimmed. Text stays
+    /// registered too, for the terminals' Services.
+    private static let registerReturnTypes: Void = {
+        let text: [NSPasteboard.PasteboardType] = [.string, .init("public.utf8-plain-text")]
+        let pictures = NSImage.imageTypes.map { NSPasteboard.PasteboardType($0) }
+        NSApp.registerServicesMenuSendTypes(text, returnTypes: text + pictures)
+    }()
 
     override func validRequestor(forSendType sendType: NSPasteboard.PasteboardType?,
                                  returnType: NSPasteboard.PasteboardType?) -> Any? {

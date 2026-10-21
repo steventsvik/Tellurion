@@ -120,7 +120,7 @@ enum PaletteExtras {
                     EnvironmentWindow.show(folder: surfaceView.pwd)
                 })
             }
-            if !HermesSessions.shared.isHermes(owner), ExtremeSettings.isOn(.editor) {
+            if !HermesSessions.shared.isHermes(owner), !(owner is BoardController), ExtremeSettings.isOn(.editor) {
                 options.append(CommandOption(
                     title: "Toggle Code Editor",
                     description: "Show or hide this tab's code editor",
@@ -157,7 +157,16 @@ enum PaletteExtras {
         ) {
             HousekeepingWindow.show()
         }) }
-        if ExtremeSettings.isOn(.missionControl) { options.append(CommandOption(
+        if let board = TerminalWindows.controller(of: surfaceView.window) as? BoardController {
+            options.append(CommandOption(
+                title: "Agent Map",
+                description: "Where this project's agents are working, file by file",
+                symbols: ["⌃", "⌘", "M"],
+                leadingIcon: "map"
+            ) { [weak board] in
+                board?.showAgentMap()
+            })
+        } else if ExtremeSettings.isOn(.missionControl) { options.append(CommandOption(
             title: "Mission Control",
             description: "Every agent at a glance",
             symbols: ["⌃", "⌘", "M"],

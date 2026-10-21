@@ -133,13 +133,13 @@ enum BoardIntents {
             if let open = BoardController.all.first(where: { $0.workspace.id == entity.id }) { return open }
             throw GhosttyIntentError.boardNotFound
         }
-        return BoardController.all.first { $0.window?.isMainWindow == true } ?? BoardController.all.first ?? Board.newBoard(ghostty)
+        return BoardController.front ?? Board.newBoard(ghostty)
     }
 
     @MainActor
     static func bringForward(_ board: BoardController) {
         NSApp.activate(ignoringOtherApps: true)
-        board.window?.makeKeyAndOrderFront(nil)
+        board.show()
     }
 }
 

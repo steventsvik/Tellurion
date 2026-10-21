@@ -19,7 +19,7 @@ enum TerminalWindows {
     /// The window the user is in: the key one, the main one, or the last classic window used.
     static var front: BaseTerminalController? {
         controller(of: NSApp.keyWindow) ?? controller(of: NSApp.mainWindow)
-            ?? TerminalController.preferredParent ?? BoardController.all.first
+            ?? TerminalController.preferredParent ?? BoardController.front
     }
 
     /// The controller holding a terminal.
@@ -42,7 +42,7 @@ enum TerminalWindows {
         if let board = owner as? BoardController {
             guard let view = board.addTile(config: config, near: near) else { return nil }
             if let title { board.setTitle(title, for: view) }
-            board.window?.makeKeyAndOrderFront(nil)
+            board.show()
             return view
         }
         guard let controller = TerminalController.newTab(ghostty, from: owner?.window, withBaseConfig: config) else { return nil }

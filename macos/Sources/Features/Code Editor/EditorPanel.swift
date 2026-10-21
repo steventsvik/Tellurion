@@ -69,7 +69,8 @@ final class EditorPanel: ObservableObject {
     /// Opens this tab's editor, optionally on a specific folder.
     func show(from controller: BaseTerminalController?, folder: String? = nil) {
         guard ExtremeSettings.isOn(.editor) else { return }
-        guard let controller, !HermesSessions.shared.isHermes(controller) else { return }
+        // Boards are for managing agents; their Agent Map shows where agents are working.
+        guard let controller, !HermesSessions.shared.isHermes(controller), !(controller is BoardController) else { return }
         let session = session(for: controller)
         session.show(folder: folder)
         let id = ObjectIdentifier(controller)
@@ -167,9 +168,8 @@ final class EditorSession {
     private var isVisible = false
     /// Following an agent in the background, while the editor is closed.
     private(set) var isTracking = false
-    /// When the transcript was last looked up on disk (see `AgentTranscripts`).
-    private var lastLookup = Date.distantPast
-    private var foundTranscript: String?
+    /// Finds the agent's transcript on disk when its hooks didn't say (see `AgentTranscripts`).
+    private let transcripts = AgentTranscriptLookup()
     /// The transcript the editor last caught up with, so it only happens once per session.
     private var caughtUp: String?
     /// When the agent was last seen working; changes shortly after still animate.
@@ -275,7 +275,7 @@ final class EditorSession {
         peers.removeAll()
         watcher.stop()
         lastStatus = nil
-        foundTranscript = nil
+        transcripts.reset()
     }
 
     func close() {
@@ -314,44 +314,13 @@ final class EditorSession {
         return agentSurfaces.first ?? controller.focusedSurface
     }
 
-    /// The agent's transcript: the one its hooks reported, or else found on disk. Also moves
-    /// to a newer one when the reported transcript goes quiet while the agent works.
-    private func transcript(for info: VerticalTabAgentInfo, in folder: String?) -> String? {
-        if info.kind == .codex, let id = info.codexSessionID {
-            if let reported = info.transcriptPath, CodexTracking.metadata(reported)?.id == id { return reported }
-            if let found = foundTranscript, CodexTracking.metadata(found)?.id == id { return found }
-            if Date().timeIntervalSince(lastLookup) > 3 {
-                lastLookup = Date()
-                foundTranscript = CodexTracking.transcript(session: id)
-            }
-            return foundTranscript.flatMap { CodexTracking.metadata($0)?.id == id ? $0 : nil }
-        }
-        let reported = info.transcriptPath
-        guard let folder, info.kind == .claude || info.kind == .codex else { return reported }
-        let quiet = reported.map { !Self.recentlyModified($0, within: 20) } ?? true
-        if (reported == nil || (quiet && info.activity == .working)), Date().timeIntervalSince(lastLookup) > 3 {
-            lastLookup = Date()
-            if let reported {
-                foundTranscript = AgentTranscripts.newer(than: reported, kind: info.kind, folder: folder)
-            } else {
-                foundTranscript = AgentTranscripts.find(kind: info.kind, folder: folder)
-            }
-        }
-        return foundTranscript ?? reported
-    }
-
-    private static func recentlyModified(_ path: String, within seconds: TimeInterval) -> Bool {
-        let date = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
-        return date.map { Date().timeIntervalSince($0) < seconds } ?? false
-    }
-
     /// Shows this tab's agent pane: its folder in the Explorer, its agent in the panel.
     func follow() {
         guard isVisible || isTracking, hasWebView, let surface = agentSurface else { return }
         if let pwd = surface.pwd, pwd != webView.currentFolder { webView.openFolder(pwd) }
 
         let info = VerticalTabsAgents.shared.info(for: surface)
-        let transcriptPath = info.flatMap { transcript(for: $0, in: surface.pwd) }
+        let transcriptPath = info.flatMap { transcripts.transcript(for: $0, in: surface.pwd) }
         if let info, let path = transcriptPath { feed.follow(path: path, kind: info.kind) }
         if let info, info.kind != .hermes, let pwd = surface.pwd {
             if info.activity == .working || info.activity == .needsPermission { lastWorking = Date() }
@@ -549,7 +518,7 @@ final class EditorMenuTarget: NSObject, NSMenuItemValidation {
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        guard let controller = EditorPanel.frontController else { return false }
+        guard let controller = EditorPanel.frontController, !(controller is BoardController) else { return false }
         let open = EditorPanel.shared.isVisible(controller)
         menuItem.title = open ? "Close Code Editor" : "Open Code Editor"
         menuItem.state = .off

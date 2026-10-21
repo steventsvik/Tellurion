@@ -56,7 +56,7 @@ enum BoardTest {
     }
 
     private static var board: BoardController? {
-        BoardController.all.first { $0.window?.isKeyWindow == true } ?? BoardController.all.first
+        BoardController.all.first { $0.window?.isKeyWindow == true } ?? BoardController.front
     }
 
     private static func tile(_ n: String, of controller: BoardController) -> Ghostty.SurfaceView? {
@@ -81,6 +81,37 @@ enum BoardTest {
             return
         case "newboard":
             if let ghostty { Board.newBoard(ghostty) }
+            return
+        case "switchboard", "boardwindow":
+            // switchboard <name>: as clicking it in the list; boardwindow: Open in New Window.
+            let name = args.joined(separator: " ")
+            if let ghostty, let saved = BoardStore.all().first(where: { $0.name == name }) {
+                Board.reopen(ghostty, saved, newWindow: action == "boardwindow")
+            }
+            return
+        case "deleteboard":
+            let name = args.joined(separator: " ")
+            if let saved = BoardStore.all().first(where: { $0.name == name }), let front = BoardController.front {
+                Board.delete(saved, from: front)
+            }
+            return
+        case "sheetbutton":
+            // sheetbutton <title>: clicks a button on an open sheet (a confirmation).
+            let title = args.joined(separator: " ")
+            for window in NSApp.windows {
+                guard let sheet = window.attachedSheet else { continue }
+                let button = sheet.contentView?.descendants.compactMap { $0 as? NSButton }.first { $0.title == title }
+                DemoDirector.note("sheet \"\(sheet.title)\" button \(title): \(button == nil ? "missing" : "clicked")")
+                button?.performClick(nil)
+            }
+            return
+        case "boards":
+            for board in BoardController.all {
+                let window = board.window
+                DemoDirector.note("boards \"\(board.workspace.name)\" visible=\(window?.isVisible ?? false) key=\(window?.isKeyWindow ?? false) "
+                                  + "tabs=\(window?.tabGroup?.windows.count ?? 1) tabbar=\(window?.tabGroup?.isTabBarVisible ?? false) frame=\(window?.frame ?? .zero)")
+            }
+            DemoDirector.note("boards saved=\(BoardStore.all().map(\.name).sorted().joined(separator: ", "))")
             return
         case "state":
             state()
@@ -185,6 +216,12 @@ enum BoardTest {
             let height = window.contentView?.bounds.height ?? 0
             let center = surface.convert(CGPoint(x: surface.bounds.midX, y: surface.bounds.midY), to: nil)
             scroll(dy, at: CGPoint(x: center.x, y: height - center.y), in: window, command: false)
+        case "map":
+            controller.showAgentMap()
+        case "mapstate":
+            for card in controller.model.cards where card.kind == .map {
+                DemoDirector.note(controller.cardView(card.id)?.mapState ?? "map: no view")
+            }
         case "showtile":
             guard let surface = tile(args.first ?? "", of: controller), let frame = controller.model.frames[surface.id] else { return }
             controller.zoom(toFit: frame.insetBy(dx: -200, dy: -200), animated: false)
@@ -417,7 +454,7 @@ enum BoardTest {
     private static let keyCodes: [String: UInt16] = [
         "0": 29, "1": 18, "2": 19, "3": 20, "4": 21, "5": 23, "6": 22, "7": 26, "8": 28, "9": 25,
         "=": 24, "-": 27, "t": 17, "w": 13, "n": 45, "d": 2, "z": 6, "\\": 42,
-        "e": 14, "p": 35, "s": 1, "b": 11, "v": 9, "m": 46, "a": 0, "escape": 53,
+        "e": 14, "p": 35, "s": 1, "b": 11, "v": 9, "m": 46, "a": 0, "escape": 53, "return": 36,
     ]
 
     /// A key with modifiers, sent through the app as a real key press.
@@ -427,7 +464,7 @@ enum BoardTest {
             DemoDirector.note("board: can't press \(combo)")
             return
         }
-        let text = key == "escape" ? "\u{1b}" : key
+        let text = key == "escape" ? "\u{1b}" : key == "return" ? "\r" : key
         var flags: NSEvent.ModifierFlags = []
         for mod in parts.dropLast() {
             switch mod {

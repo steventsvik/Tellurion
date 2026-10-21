@@ -18,6 +18,7 @@ final class BoardCardView: BoardNodeView {
         case .note: content = NoteContent()
         case .checklist: content = ChecklistContent()
         case .kanban: content = KanbanContent()
+        case .map: content = AgentMapContent()
         }
         super.init(controller: controller, id: card.id)
         clip.wantsLayer = true
@@ -62,9 +63,14 @@ final class BoardCardView: BoardNodeView {
         if abs(state.zoom - zoom) > 0.001 { state.zoom = zoom }
         setZoom(zoom)
         overview.isHidden = zoom >= 0.45
-        let tint = card.kind == .note ? SketchStyle.color(card.color) : nil
+        // A note's color, or an Agent Map's project color.
+        let tint = card.kind == .note ? SketchStyle.color(card.color)
+            : card.folder.flatMap { controller?.model.colors[$0] }.map(BoardProjects.nsColor)
         clip.layer?.borderColor = (tint?.withAlphaComponent(0.6) ?? Extreme.chrome.lineStrong.nsColor).cgColor
     }
+
+    /// What an Agent Map shows, for tests.
+    var mapState: String? { (content as? AgentMapContent)?.testState }
 
     /// Puts the cursor where typing starts: the note, or the checklist's new-item field.
     func beginTyping() { content.beginTyping() }
@@ -95,9 +101,39 @@ final class BoardCardView: BoardNodeView {
                 controller?.updateCard(id) { $0.items.removeAll { $0.column == 2 } }
             })
         }
+        if card.kind == .map {
+            menu.addItem(mapProjectItem(controller))
+        }
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Close \(card.kind.title)", image: nil) { [weak controller] in controller?.removeCard(id) })
         return menu
+    }
+
+    /// Which project the map shows: one on the board, or any folder.
+    private func mapProjectItem(_ controller: BoardController) -> NSMenuItem {
+        let id = nodeID
+        let item = NSMenuItem(title: "Project", action: nil, keyEquivalent: "")
+        let menu = NSMenu()
+        for project in Set(controller.model.projects.values).sorted() {
+            let entry = ClosureMenuItem(BoardProjects.name(project), image: nil) { [weak controller] in
+                controller?.setMapFolder(id, to: project)
+            }
+            entry.state = project == card.folder ? .on : .off
+            menu.addItem(entry)
+        }
+        if !menu.items.isEmpty { menu.addItem(.separator()) }
+        menu.addItem(ClosureMenuItem("Choose Folder…", image: nil) { [weak controller, weak self] in
+            guard let controller, let window = self?.window else { return }
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.beginSheetModal(for: window) { response in
+                guard response == .OK, let url = panel.url else { return }
+                controller.setMapFolder(id, to: BoardProjects.project(of: url.path) ?? url.path)
+            }
+        })
+        item.submenu = menu
+        return item
     }
 
     /// A note goes to an agent as a whole: an item made from it.
@@ -135,6 +171,7 @@ final class BoardCardState: ObservableObject {
         case .note: summary = nil
         case .checklist: summary = card.items.isEmpty ? nil : "\(card.items.filter(\.done).count) of \(card.items.count)"
         case .kanban: summary = card.items.isEmpty ? nil : "\(card.items.filter { $0.column == 2 }.count) of \(card.items.count) done"
+        case .map: summary = "Agent Map"
         }
         if self.summary != summary { self.summary = summary }
         let tint = card.kind == .note ? SketchStyle.color(card.color) : nil

@@ -140,7 +140,6 @@ final class MenuBarStatus: NSObject, NSMenuDelegate {
         let item = ClosureMenuItem(name, image: Self.dot(NSColor(AgentStatusPill.color(agent.info.activity)))) { [weak surface = agent.surface] in
             guard let surface else { return }
             NSApp.activate(ignoringOtherApps: true)
-            surface.window?.makeKeyAndOrderFront(nil)
             TerminalWindows.show(surface)
         }
         // The task or question on a second line, like a notification.
@@ -174,9 +173,8 @@ final class MenuBarStatus: NSObject, NSMenuDelegate {
     /// The front board, opening one when there's none.
     private static func withBoard(_ body: @escaping (BoardController) -> Void) {
         withApp { ghostty in
-            let board = BoardController.all.first { $0.window?.isMainWindow == true } ?? BoardController.all.first
-                ?? Board.newBoard(ghostty)
-            board.window?.makeKeyAndOrderFront(nil)
+            let board = BoardController.front ?? Board.newBoard(ghostty)
+            board.show()
             DispatchQueue.main.async { body(board) }
         }
     }
