@@ -247,17 +247,8 @@ struct NewSketchIntent: AppIntent {
         guard await requestIntentPermission() else { throw GhosttyIntentError.permissionDenied }
         let controller = try BoardIntents.board(board)
         BoardIntents.bringForward(controller)
-        var elements: [SketchElement] = []
-        var x: CGFloat = 40
-        for file in pictures ?? [] {
-            guard let image = NSImage(data: file.data), let name = BoardSketchImages.store(image) else { continue }
-            let scale = min(1, 520 / max(image.size.width, image.size.height, 1))
-            var element = SketchElement(kind: .image)
-            element.image = name
-            element.frame = CGRect(x: x, y: 40, width: image.size.width * scale, height: image.size.height * scale)
-            x += element.frame.width + 20
-            elements.append(element)
-        }
+        let images = (pictures ?? []).compactMap { NSImage(data: $0.data) }
+        let elements = BoardSketchImages.elements(for: images, largest: 520, at: CGPoint(x: 40, y: 40))
         let id = controller.addSketch(elements: elements)
         guard let sketch = controller.model.sketches.first(where: { $0.id == id }) else { throw GhosttyIntentError.boardNotFound }
         return .result(value: SketchEntity(sketch, board: controller.model.name))

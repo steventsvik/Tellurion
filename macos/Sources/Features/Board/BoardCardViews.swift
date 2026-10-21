@@ -148,8 +148,7 @@ final class BoardCardView: BoardNodeView {
     override func nodeClose() { controller?.removeCard(nodeID) }
 
     override func nodeFocus() {
-        guard let controller, let frame = controller.model.frames[nodeID] else { return }
-        controller.zoom(toFit: frame.insetBy(dx: -40, dy: -40), animated: true)
+        controller?.zoom(toNode: nodeID)
         beginTyping()
     }
 
@@ -843,6 +842,7 @@ final class KanbanCard: NSView, NSTextFieldDelegate {
         layer?.shadowColor = NSColor.black.cgColor
         layer?.shadowRadius = 12
         layer?.shadowOffset = CGSize(width: 0, height: -4)
+        layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 7, cornerHeight: 7, transform: nil)
         layer?.shadowOpacity = up ? 0.35 : 0
         layer?.borderColor = (up ? NSColor.controlAccentColor : NSColor.separatorColor).cgColor
     }

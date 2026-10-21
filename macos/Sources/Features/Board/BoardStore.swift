@@ -80,7 +80,11 @@ enum BoardStore {
 
     /// "Board", or "Board 2" when that's taken.
     static func newName(_ base: String = "Board") -> String {
-        let taken = Set(all().map(\.name))
+        uniqueName(base, taken: Set(all().map(\.name)))
+    }
+
+    /// `base`, or "base 2" (3, …) when that's taken.
+    static func uniqueName(_ base: String, taken: Set<String>) -> String {
         if !taken.contains(base) { return base }
         var n = 2
         while taken.contains("\(base) \(n)") { n += 1 }

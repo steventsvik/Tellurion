@@ -297,7 +297,7 @@ private struct BoardSidebar: View {
                                        symbol: card.kind.symbol, empty: card.kind == .note ? "Note" : card.kind == .map ? "Agent Map" : "Empty")
                             .onTapGesture {
                                 controller.raise(id: card.id)
-                                if let frame = model.frames[card.id] { controller.zoom(toFit: frame.insetBy(dx: -40, dy: -40), animated: true) }
+                                controller.zoom(toNode: card.id)
                                 controller.cardView(card.id)?.beginTyping()
                             }
                             .contextMenu {
@@ -337,7 +337,10 @@ private struct BoardSidebar: View {
             reloadBoards()
         }
         .onChange(of: model.name) { name = $0 }
-        .onReceive(NotificationCenter.default.publisher(for: BoardController.boardsDidChange)) { _ in reloadBoards() }
+        .onReceive(NotificationCenter.default.publisher(for: BoardController.boardsDidChange)) { _ in
+            // Each board's list reads every saved board; boards out of sight catch up when shown.
+            if controller.window?.isVisible == true { reloadBoards() }
+        }
     }
 
     private func toolRow(all: Bool) -> some View {

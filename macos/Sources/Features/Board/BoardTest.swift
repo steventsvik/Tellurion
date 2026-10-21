@@ -108,7 +108,7 @@ enum BoardTest {
         case "boards":
             for board in BoardController.all {
                 let window = board.window
-                DemoDirector.note("boards \"\(board.workspace.name)\" visible=\(window?.isVisible ?? false) key=\(window?.isKeyWindow ?? false) "
+                DemoDirector.note("boards \"\(board.workspace.name)\" sketches=\(board.model.sketches.count) visible=\(window?.isVisible ?? false) key=\(window?.isKeyWindow ?? false) "
                                   + "tabs=\(window?.tabGroup?.windows.count ?? 1) tabbar=\(window?.tabGroup?.isTabBarVisible ?? false) frame=\(window?.frame ?? .zero)")
             }
             DemoDirector.note("boards saved=\(BoardStore.all().map(\.name).sorted().joined(separator: ", "))")
@@ -181,7 +181,7 @@ enum BoardTest {
             guard args.count == 3, let surface = tile(args[0], of: controller),
                   let frame = controller.model.frames[surface.id],
                   let dx = Double(args[1]), let dy = Double(args[2]) else { return }
-            controller.move(surface, to: frame.offsetBy(dx: dx, dy: dy))
+            controller.move(id: surface.id, to: frame.offsetBy(dx: dx, dy: dy))
             controller.tileDidSettle()
         case "dragtile", "resizetile":
             guard args.count == 3, let surface = tile(args[0], of: controller),
@@ -218,10 +218,13 @@ enum BoardTest {
             scroll(dy, at: CGPoint(x: center.x, y: height - center.y), in: window, command: false)
         case "map":
             controller.showAgentMap()
+        case "closemap":
+            if let card = controller.model.cards.last(where: { $0.kind == .map }) { controller.removeCard(card.id) }
         case "mapstate":
             for card in controller.model.cards where card.kind == .map {
                 DemoDirector.note(controller.cardView(card.id)?.mapState ?? "map: no view")
             }
+            if !controller.model.cards.contains(where: { $0.kind == .map }) { DemoDirector.note("map: none") }
         case "showtile":
             guard let surface = tile(args.first ?? "", of: controller), let frame = controller.model.frames[surface.id] else { return }
             controller.zoom(toFit: frame.insetBy(dx: -200, dy: -200), animated: false)
@@ -318,6 +321,8 @@ enum BoardTest {
             DemoDirector.note("menubar \(titles.joined(separator: " | "))")
         case "sketch":
             controller.addSketch()
+        case "closesketch":
+            if let sketch = controller.model.sketches.last { controller.removeSketch(sketch.id) }
         case "sketchtool":
             guard let view = sketch(controller), let tool = SketchCanvasView.Tool(rawValue: args.first ?? "") else { return }
             view.canvas.tool = tool

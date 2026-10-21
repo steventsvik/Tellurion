@@ -31,15 +31,26 @@ final class BoardTiles {
                           model.$zoom.map { _ in () }, model.$agentTick.map { _ in () }, model.$focused.map { _ in () })
             .merge(with: model.$titles.map { _ in () }, model.$projects.map { _ in () }, model.$colors.map { _ in () })
             .merge(with: model.$sketches.map { _ in () }, model.$focusedSketch.map { _ in () }, model.$cards.map { _ in () })
-            .receive(on: RunLoop.main)
-            .sink { [weak self] in self?.sync() }
+            .sink { [weak self] in self?.needsSync() }
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: ExtremeSettings.featuresDidChange)
-            .merge(with: NotificationCenter.default.publisher(for: NSWindow.didChangeOcclusionStateNotification))
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.sync() }
+            .merge(with: NotificationCenter.default.publisher(for: NSWindow.didChangeOcclusionStateNotification)
+                .filter { [weak controller] note in (note.object as? NSWindow) === controller?.window })
+            .sink { [weak self] _ in self?.needsSync() }
             .store(in: &cancellables)
         sync()
+    }
+
+    private var syncQueued = false
+
+    /// One sync for everything that changed this turn of the run loop.
+    private func needsSync() {
+        guard !syncQueued else { return }
+        syncQueued = true
+        DispatchQueue.main.async { [weak self] in
+            self?.syncQueued = false
+            self?.sync()
+        }
     }
 
     func sync() {
@@ -80,7 +91,7 @@ final class BoardTiles {
             }
             view.update(info: VerticalTabsAgents.shared.info(for: surface), name: model.titles[surface.id],
                         color: model.color(of: surface.id).map(BoardProjects.nsColor),
-                        focused: model.focused?.value === surface, zoom: model.zoom, motion: motion)
+                        focused: model.focused, zoom: model.zoom, motion: motion)
         }
         for sketch in model.sketches {
             guard let frame = model.frames[sketch.id] else { continue }
@@ -169,6 +180,7 @@ final class PassiveHostingView<Content: View>: NSHostingView<Content> {
 final class BoardTileView: BoardNodeView {
     let surface: Ghostty.SurfaceView
     private let state = BoardTileState()
+    private let focus = BoardTileFocus()
     private let clip = FlippedView()
     private let lights = FrameLights.View(frame: .zero)
     private var headerView: NSView!
@@ -188,7 +200,7 @@ final class BoardTileView: BoardNodeView {
         addSubview(clip)
 
         let header = PassiveHostingView(rootView: BoardTileHeader(surface: surface, state: state))
-        let body = NSHostingView(rootView: BoardTileTerminal(surface: surface, model: controller.model)
+        let body = NSHostingView(rootView: BoardTileTerminal(surface: surface, focus: focus)
             .environmentObject(controller.ghostty))
         let overview = PassiveHostingView(rootView: BoardTileOverview(surface: surface, state: state))
         // They take the size the tile gives them.
@@ -213,7 +225,11 @@ final class BoardTileView: BoardNodeView {
         lights.frame = bounds.insetBy(dx: -3, dy: -3)
     }
 
-    func update(info: VerticalTabAgentInfo?, name: String?, color: NSColor?, focused: Bool, zoom: CGFloat, motion: Bool) {
+    /// `focused` is the board's focused terminal (this one or another).
+    func update(info: VerticalTabAgentInfo?, name: String?, color: NSColor?, focused board: Weak<Ghostty.SurfaceView>?,
+                zoom: CGFloat, motion: Bool) {
+        if focus.last?.value !== board?.value { focus.last = board }
+        let focused = board?.value === surface
         if state.info != info { state.info = info }
         if state.name != name { state.name = name }
         if state.color != color { state.color = color }
@@ -258,6 +274,12 @@ final class BoardTileView: BoardNodeView {
 }
 
 /// What a tile's SwiftUI parts show.
+/// The board's focused terminal, for a tile's terminal view: it changes far less often than
+/// the board (which changes on every step of a drag).
+final class BoardTileFocus: ObservableObject {
+    @Published var last: Weak<Ghostty.SurfaceView>?
+}
+
 final class BoardTileState: ObservableObject {
     @Published var info: VerticalTabAgentInfo?
     /// The name given to the tile, if any.
@@ -313,13 +335,13 @@ private struct BoardTileHeader: View {
 /// app over its (idle) terminal.
 private struct BoardTileTerminal: View {
     let surface: Ghostty.SurfaceView
-    @ObservedObject var model: BoardModel
+    @ObservedObject var focus: BoardTileFocus
     @ObservedObject private var hermes = HermesSessions.shared
 
     var body: some View {
         ZStack {
             Ghostty.SurfaceWrapper(surfaceView: surface, isSplit: true)
-                .ghosttyLastFocusedSurface(model.focused)
+                .ghosttyLastFocusedSurface(focus.last)
             if let view = hermes.view(for: surface) {
                 HermesSessionContent(webView: view)
             }

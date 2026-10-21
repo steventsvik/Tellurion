@@ -11,22 +11,9 @@ extension BoardController {
     /// starts it with something (pictures dropped on the board).
     @discardableResult
     func addSketch(elements: [SketchElement] = [], at point: CGPoint? = nil) -> UUID {
-        let taken = Set(model.sketches.map(\.title))
-        var title = "Sketch"
-        var n = 2
-        while taken.contains(title) {
-            title = "Sketch \(n)"
-            n += 1
-        }
+        let title = BoardStore.uniqueName("Sketch", taken: Set(model.sketches.map(\.title)))
         let sketch = BoardSketch(id: UUID(), title: title, elements: elements)
-        let frame: CGRect
-        if let point {
-            frame = freeSpot(size: Self.sketchSize, near: nil, around: point)
-        } else {
-            let anchor = (focusedSurface ?? model.focused?.value).flatMap { model.frames[$0.id] }
-            frame = freeSpot(size: Self.sketchSize, near: anchor)
-        }
-        insertSketch(sketch, frame: frame)
+        insertSketch(sketch, frame: spot(for: Self.sketchSize, at: point))
         undoManager?.registerUndo(withTarget: self) { $0.removeSketch(sketch.id) }
         undoManager?.setActionName("New Sketch")
         DispatchQueue.main.async { [weak self] in self?.focusSketch(sketch.id) }
@@ -71,19 +58,8 @@ extension BoardController {
     }
 
     func promptSketchTitle(_ id: UUID) {
-        guard let window, let sketch = model.sketches.first(where: { $0.id == id }) else { return }
-        let alert = NSAlert()
-        alert.messageText = "Rename Sketch"
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
-        field.stringValue = sketch.title
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
-        alert.window.initialFirstResponder = field
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn else { return }
-            self?.renameSketch(id, to: field.stringValue)
-        }
+        guard let sketch = model.sketches.first(where: { $0.id == id }) else { return }
+        promptRename("Rename Sketch", current: sketch.title) { [weak self] text in self?.renameSketch(id, to: text) }
     }
 
     /// The sketch's view on the board.
@@ -93,9 +69,9 @@ extension BoardController {
 
     /// Zooms in on a sketch and puts the keyboard in it.
     func focusSketch(_ id: UUID) {
-        guard let frame = model.frames[id] else { return }
+        guard model.frames[id] != nil else { return }
         raise(id: id)
-        zoom(toFit: frame.insetBy(dx: -40, dy: -40), animated: true)
+        zoom(toNode: id)
         sketchView(id)?.focusCanvas()
     }
 
@@ -241,18 +217,7 @@ extension BoardController {
             opened = true
         }
         guard !pictures.isEmpty else { return opened }
-        var elements: [SketchElement] = []
-        var x: CGFloat = 40
-        for image in pictures {
-            guard let name = BoardSketchImages.store(image) else { continue }
-            let longest = max(image.size.width, image.size.height, 1)
-            let scale = min(1, 520 / longest)
-            var element = SketchElement(kind: .image)
-            element.image = name
-            element.frame = CGRect(x: x, y: 40, width: image.size.width * scale, height: image.size.height * scale)
-            x += element.frame.width + 20
-            elements.append(element)
-        }
+        let elements = BoardSketchImages.elements(for: pictures, largest: 520, at: CGPoint(x: 40, y: 40))
         guard !elements.isEmpty else { return opened }
         addSketch(elements: elements, at: point)
         return true

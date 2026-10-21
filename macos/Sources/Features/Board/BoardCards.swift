@@ -66,27 +66,13 @@ struct CardItem: Codable, Identifiable, Equatable {
 extension BoardController {
     @discardableResult
     func addCard(_ kind: BoardCard.Kind, at point: CGPoint? = nil) -> UUID {
-        let taken = Set(model.cards.map(\.title))
-        var title = kind.title
-        var n = 2
-        while taken.contains(title) {
-            title = "\(kind.title) \(n)"
-            n += 1
-        }
-        var card = BoardCard(id: UUID(), kind: kind, title: title)
+        var card = BoardCard(id: UUID(), kind: kind, title: BoardStore.uniqueName(kind.title, taken: Set(model.cards.map(\.title))))
         if kind == .checklist { card.items = [] }
         if kind == .map {
             card.folder = mapFolder(near: point)
             if let folder = card.folder { card.title = BoardProjects.name(folder) }
         }
-        let frame: CGRect
-        if let point {
-            frame = freeSpot(size: kind.size, near: nil, around: point)
-        } else {
-            let anchor = (focusedSurface ?? model.focused?.value).flatMap { model.frames[$0.id] }
-            frame = freeSpot(size: kind.size, near: anchor)
-        }
-        insertCard(card, frame: frame)
+        insertCard(card, frame: spot(for: kind.size, at: point))
         undoManager?.registerUndo(withTarget: self) { $0.removeCard(card.id) }
         undoManager?.setActionName("New \(kind.title)")
         DispatchQueue.main.async { [weak self] in
@@ -140,9 +126,9 @@ extension BoardController {
     func showAgentMap(for surface: Ghostty.SurfaceView? = nil) {
         let project = (surface ?? focusedSurface ?? model.focused?.value).flatMap { model.projects[$0.id] } ?? mapFolder(near: nil)
         if let card = model.cards.first(where: { $0.kind == .map && (project == nil || $0.folder == project) }),
-           let frame = model.frames[card.id] {
+           model.frames[card.id] != nil {
             raise(id: card.id)
-            zoom(toFit: frame.insetBy(dx: -40, dy: -40), animated: true)
+            zoom(toNode: card.id)
             return
         }
         let near = surface.flatMap { model.frames[$0.id] }.map { CGPoint(x: $0.maxX + BoardCard.Kind.map.size.width / 2, y: $0.midY) }
@@ -167,39 +153,22 @@ extension BoardController {
     }
 
     func promptCardTitle(_ id: UUID) {
-        guard let window, let card = model.cards.first(where: { $0.id == id }) else { return }
-        let alert = NSAlert()
-        alert.messageText = "Rename \(card.kind.title)"
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
-        field.stringValue = card.title
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
-        alert.window.initialFirstResponder = field
-        alert.beginSheetModal(for: window) { [weak self] response in
-            let title = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard response == .alertFirstButtonReturn, !title.isEmpty else { return }
+        guard let card = model.cards.first(where: { $0.id == id }) else { return }
+        promptRename("Rename \(card.kind.title)", current: card.title) { [weak self] text in
+            let title = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { return }
             self?.updateCard(id) { $0.title = title }
         }
     }
 
-    func cardView(_ id: UUID) -> BoardCardView? {
-        canvas?.documentView?.subviews.lazy.compactMap { $0 as? BoardCardView }.first { $0.nodeID == id }
+    /// Where a new sketch or card goes: around `point`, else beside the focused tile.
+    func spot(for size: CGSize, at point: CGPoint?) -> CGRect {
+        if let point { return freeSpot(size: size, near: nil, around: point) }
+        return freeSpot(size: size, near: (focusedSurface ?? model.focused?.value).flatMap { model.frames[$0.id] })
     }
 
-    /// Scrolls just enough to show a rect, keeping the zoom.
-    func revealRect(_ frame: CGRect) {
-        guard let canvas else { return }
-        let visible = canvas.documentVisibleRect
-        guard !visible.contains(frame) else { return }
-        let origin = CGPoint(x: frame.midX - visible.width / 2, y: frame.midY - visible.height / 2)
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.25
-            canvas.contentView.animator().setBoundsOrigin(origin)
-        } completionHandler: { [weak self] in
-            canvas.reflectScrolledClipView(canvas.contentView)
-            self?.updateVisibility()
-        }
+    func cardView(_ id: UUID) -> BoardCardView? {
+        canvas?.documentView?.subviews.lazy.compactMap { $0 as? BoardCardView }.first { $0.nodeID == id }
     }
 
     // MARK: Agents

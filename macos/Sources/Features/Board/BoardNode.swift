@@ -193,8 +193,11 @@ class BoardNodeView: NSView {
             edgeTimer?.invalidate()
             edgeTimer = nil
         } else if edgeTimer == nil {
-            let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.edgeScrollStep() }
+            let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
+                MainActor.assumeIsolated {
+                    guard let self else { return timer.invalidate() }
+                    self.edgeScrollStep()
+                }
             }
             RunLoop.main.add(timer, forMode: .common)
             edgeTimer = timer
@@ -234,6 +237,18 @@ class BoardNodeView: NSView {
         canvas.contentView.scroll(to: origin)
         canvas.reflectScrolledClipView(canvas.contentView)
         applyDrag()
+    }
+
+    /// Taken off the board mid-drag (its terminal exited): stop scrolling, give the cursor back.
+    override func viewWillMove(toSuperview newSuperview: NSView?) {
+        super.viewWillMove(toSuperview: newSuperview)
+        guard newSuperview == nil, drag != nil else { return }
+        edgeTimer?.invalidate()
+        edgeTimer = nil
+        if dragMoved, drag == .move { NSCursor.pop() }
+        controller?.groupsView?.showGuides([])
+        drag = nil
+        dragStart = nil
     }
 
     override func mouseUp(with event: NSEvent) {

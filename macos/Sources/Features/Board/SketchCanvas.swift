@@ -106,7 +106,7 @@ final class SketchCanvasView: NSView, NSTextViewDelegate, NSServicesMenuRequesto
     private let undo = UndoManager()
 
     init(elements: [SketchElement]) {
-        self.elements = elements
+        self.elements = elements.map(\.repaired)
         super.init(frame: .zero)
         wantsLayer = true
         registerForDraggedTypes([.fileURL, .png, .tiff, Self.pasteboardType])
@@ -703,7 +703,7 @@ final class SketchCanvasView: NSView, NSTextViewDelegate, NSServicesMenuRequesto
     func read(from pasteboard: NSPasteboard, at point: CGPoint?) -> Bool {
         let center = point ?? CGPoint(x: visibleRect.midX, y: visibleRect.midY)
         if let data = pasteboard.data(forType: Self.pasteboardType),
-           let pasted = try? JSONDecoder().decode([SketchElement].self, from: data), !pasted.isEmpty {
+           let pasted = (try? JSONDecoder().decode([SketchElement].self, from: data))?.map(\.repaired), !pasted.isEmpty {
             let first = pasted[0].bounds(in: pasted)
             let all = pasted.dropFirst().reduce(first) { $0.union($1.bounds(in: pasted)) }
             var copies: [SketchElement] = []
@@ -727,19 +727,7 @@ final class SketchCanvasView: NSView, NSTextViewDelegate, NSServicesMenuRequesto
         }
         if images.isEmpty, let image = NSImage(pasteboard: pasteboard) { images = [image] }
         if !images.isEmpty {
-            var placed: [SketchElement] = []
-            var x = center.x
-            for image in images {
-                guard let name = BoardSketchImages.store(image) else { continue }
-                let longest = max(image.size.width, image.size.height, 1)
-                let scale = min(1, 480 / longest)
-                let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-                var element = SketchElement(kind: .image, color: 0)
-                element.image = name
-                element.frame = CGRect(x: x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height)
-                placed.append(element)
-                x += size.width + 16
-            }
+            let placed = BoardSketchImages.elements(for: images, largest: 480, at: center, centered: true)
             insert(placed, action: images.count == 1 ? "Add Picture" : "Add Pictures")
             return !placed.isEmpty
         }
