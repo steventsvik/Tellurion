@@ -8,15 +8,22 @@ extension BoardController {
     static let sketchSize = CGSize(width: 960, height: 620)
 
     /// A new sketch beside the tile with the cursor, or in the middle of the view; `elements`
-    /// starts it with something (pictures dropped on the board).
+    /// starts it with something (pictures dropped on the board); `focus` gives it the keyboard.
     @discardableResult
-    func addSketch(elements: [SketchElement] = [], at point: CGPoint? = nil) -> UUID {
+    func addSketch(elements: [SketchElement] = [], at point: CGPoint? = nil, size: CGSize = BoardController.sketchSize, focus: Bool = true) -> UUID {
         let title = BoardStore.uniqueName("Sketch", taken: Set(model.sketches.map(\.title)))
         let sketch = BoardSketch(id: UUID(), title: title, elements: elements)
-        insertSketch(sketch, frame: spot(for: Self.sketchSize, at: point))
+        insertSketch(sketch, frame: spot(for: size, at: point))
         undoManager?.registerUndo(withTarget: self) { $0.removeSketch(sketch.id) }
         undoManager?.setActionName("New Sketch")
-        DispatchQueue.main.async { [weak self] in self?.focusSketch(sketch.id) }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if focus {
+                self.focusSketch(sketch.id)
+            } else if let frame = self.model.frames[sketch.id] {
+                self.revealRect(frame)
+            }
+        }
         return sketch.id
     }
 

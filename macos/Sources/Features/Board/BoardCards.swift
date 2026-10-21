@@ -65,7 +65,8 @@ struct CardItem: Codable, Identifiable, Equatable {
 
 extension BoardController {
     @discardableResult
-    func addCard(_ kind: BoardCard.Kind, at point: CGPoint? = nil) -> UUID {
+    /// `edit` puts the cursor in it (not when the board's agent adds one).
+    func addCard(_ kind: BoardCard.Kind, at point: CGPoint? = nil, edit: Bool = true) -> UUID {
         var card = BoardCard(id: UUID(), kind: kind, title: BoardStore.uniqueName(kind.title, taken: Set(model.cards.map(\.title))))
         if kind == .checklist { card.items = [] }
         if kind == .map {
@@ -79,7 +80,7 @@ extension BoardController {
             guard let self else { return }
             self.raise(id: card.id)
             if let frame = self.model.frames[card.id] { self.revealRect(frame) }
-            self.cardView(card.id)?.beginTyping()
+            if edit { self.cardView(card.id)?.beginTyping() }
         }
         return card.id
     }

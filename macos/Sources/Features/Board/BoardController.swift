@@ -31,6 +31,8 @@ final class BoardModel: ObservableObject {
     @Published var cards: [BoardCard] = []
     /// The sketch with the keyboard, if one has it.
     @Published var focusedSketch: UUID?
+    /// Tiles whose processes are stopped (see BoardPause).
+    @Published var paused: Set<UUID> = []
     /// The next change to `frames` slides the tiles there instead of jumping.
     var animateNextLayout = false
 
@@ -96,6 +98,10 @@ final class BoardController: BaseTerminalController {
     private var launchFolders: [UUID: String] = [:]
     /// Draws the groups and the snapping lines (set by BoardTiles).
     weak var groupsView: BoardGroupsView?
+    /// The board's own agent, in the bar at the bottom (see BoardAssistant).
+    private(set) lazy var assistant = BoardAssistant(controller: self)
+    /// The bar's text field, for ⌘L.
+    weak var assistantField: NSTextField?
 
     // MARK: Opening
 
@@ -277,6 +283,12 @@ final class BoardController: BaseTerminalController {
         let surfaces = Array(to)
         // Undo keeps a closed terminal alive; it isn't the board's focused tile any more.
         if let focused = model.focused?.value, !to.contains(focused) { model.focused = nil }
+        // A paused tile that closes is continued, so it can quit.
+        let gone = model.paused.subtracting(surfaces.map(\.id))
+        if !gone.isEmpty {
+            model.paused.subtract(gone)
+            BoardPause.queue.async { BoardPause.set(false, surfaces: gone) }
+        }
         let anchor = focusedSurface.flatMap { model.frames[$0.id] }
         for view in surfaces where model.frames[view.id] == nil {
             // A split, a new tab from a keybinding, or an undone close.
@@ -961,6 +973,7 @@ final class BoardController: BaseTerminalController {
     }
 
     override func windowWillClose(_ notification: Notification) {
+        setPaused(false)
         if deleteOnClose {
             BoardStore.delete(workspace.id)
         } else {

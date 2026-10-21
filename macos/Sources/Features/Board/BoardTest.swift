@@ -32,6 +32,10 @@ import GhosttyKit
 ///     session <kind>             a new session from the New menu (claude, codex, terminal, hermes)
 ///     tools                      log which tools are open and what they see
 ///     snapshot <file.png>        draw the window (or its sheet) into a PNG, frames in <file>.txt
+///     ask <text> | agentdo <reply JSON> | agentconfirm | agentcancel | agentlog | agentcontext
+///                                the board's agent (see BoardAssistant)
+///     pause|resume [n…] | procs <n>  pause tiles; log tile n's process states
+///     minsize                    log the window's minimum and fitting sizes
 @MainActor
 enum BoardTest {
     private static var started = false
@@ -307,6 +311,48 @@ enum BoardTest {
             guard let card = controller.model.cards.first(where: { $0.kind.rawValue == args.first }),
                   let frame = controller.model.frames[card.id] else { return }
             controller.zoom(toFit: frame.insetBy(dx: -30, dy: -30), animated: false)
+        case "ask":
+            // ask <text>: the board's bar, as if typed and sent (runs the real agent).
+            controller.assistant.send(args.joined(separator: " "))
+        case "agentdo":
+            // agentdo <reply JSON>: carries out a reply as if the board's agent had answered.
+            let context = controller.assistantContext(agents: BoardAgent.catalog)
+            guard let reply = BoardAssistantReply.decode(args.joined(separator: " ")) else {
+                DemoDirector.note("agent bad reply")
+                return
+            }
+            controller.assistant.apply(reply, handles: context.handles)
+        case "minsize":
+            guard let window = controller.window else { return }
+            DemoDirector.note("minsize window=\(window.minSize) content=\(window.contentMinSize) fitting=\(window.contentView?.fittingSize ?? .zero)")
+        case "agentconfirm":
+            controller.assistant.confirm()
+        case "agentcancel":
+            controller.assistant.cancel()
+        case "agentcontext":
+            DemoDirector.note("agent context\n" + controller.assistantContext(agents: BoardAgent.catalog).text)
+        case "agentlog":
+            let assistant = controller.assistant
+            DemoDirector.note("agent busy=\(assistant.busy) engine=\(assistant.engine?.rawValue ?? "-") engines=\(assistant.engines?.map(\.rawValue) ?? [])")
+            for message in assistant.messages {
+                DemoDirector.note("agent \(message.role): \(message.text) \(message.done)")
+            }
+            if let pending = assistant.pending { DemoDirector.note("agent pending \(pending.lines)") }
+        case "pause", "resume":
+            // pause|resume [tile numbers…]: all tiles without numbers.
+            let ids = args.isEmpty ? nil : args.compactMap { tile($0, of: controller)?.id }
+            controller.setPaused(action == "pause", ids)
+        case "procs":
+            // procs <n>: the state of tile n's processes (T = stopped).
+            guard let surface = tile(args.first ?? "", of: controller) else { return }
+            let pids = ProcessProbe.userPIDs().filter { ProcessProbe.environment($0, BoardPause.surfaceKey) == surface.id.uuidString }
+            guard !pids.isEmpty else {
+                DemoDirector.note("procs none paused=\(controller.model.paused.contains(surface.id))")
+                return
+            }
+            let result = ToolPath.run("/bin/ps", ["-o", "stat=,comm=", "-p", pids.map(String.init).joined(separator: ",")], in: "/")
+            let states = result.output.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+            DemoDirector.note("procs paused=\(controller.model.paused.contains(surface.id)) \(states.joined(separator: " | "))")
         case "cardstate":
             for card in controller.model.cards {
                 DemoDirector.note("card \(card.kind.rawValue) \(card.title) text=\(card.text.prefix(40)) items=\(card.items.count)")

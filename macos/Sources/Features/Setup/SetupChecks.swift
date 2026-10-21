@@ -338,7 +338,7 @@ final class SetupChecks: ObservableObject {
     }
 
     /// The login shell's PATH, found once.
-    private static let loginPath: [String] = {
+    static let loginPath: [String] = {
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         let fallback = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin",
                         NSHomeDirectory() + "/.local/bin", NSHomeDirectory() + "/.claude/local", NSHomeDirectory() + "/.bun/bin",

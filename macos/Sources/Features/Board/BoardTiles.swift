@@ -31,6 +31,7 @@ final class BoardTiles {
                           model.$zoom.map { _ in () }, model.$agentTick.map { _ in () }, model.$focused.map { _ in () })
             .merge(with: model.$titles.map { _ in () }, model.$projects.map { _ in () }, model.$colors.map { _ in () })
             .merge(with: model.$sketches.map { _ in () }, model.$focusedSketch.map { _ in () }, model.$cards.map { _ in () })
+            .merge(with: model.$paused.map { _ in () })
             .sink { [weak self] in self?.needsSync() }
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: ExtremeSettings.featuresDidChange)
@@ -92,6 +93,7 @@ final class BoardTiles {
             view.update(info: VerticalTabsAgents.shared.info(for: surface), name: model.titles[surface.id],
                         color: model.color(of: surface.id).map(BoardProjects.nsColor),
                         focused: model.focused, zoom: model.zoom, motion: motion)
+            view.paused = model.paused.contains(surface.id)
         }
         for sketch in model.sketches {
             guard let frame = model.frames[sketch.id] else { continue }
@@ -263,6 +265,12 @@ final class BoardTileView: BoardNodeView {
         lights.rebuild()
     }
 
+    /// Its processes are stopped (see BoardPause).
+    var paused: Bool {
+        get { state.paused }
+        set { if state.paused != newValue { state.paused = newValue } }
+    }
+
     override func nodeMenu() -> NSMenu? {
         guard let controller else { return nil }
         return BoardTileMenu.menu(for: surface, in: controller)
@@ -288,6 +296,7 @@ final class BoardTileState: ObservableObject {
     @Published var color: NSColor?
     @Published var focused = false
     @Published var zoom: CGFloat = 1
+    @Published var paused = false
 }
 
 /// The title bar's picture. Its buttons sit where `BoardTileView` expects clicks.
@@ -309,7 +318,11 @@ private struct BoardTileHeader: View {
                     .foregroundColor(state.color.map(Color.init(nsColor:)) ?? Extreme.dim).lineLimit(1)
             }
             Spacer(minLength: 4)
-            if let info = state.info { AgentStatusPill(activity: info.activity) }
+            if state.paused {
+                BoardPausedPill()
+            } else if let info = state.info {
+                AgentStatusPill(activity: info.activity)
+            }
             glyph("ellipsis")
             glyph("arrow.up.left.and.arrow.down.right")
             glyph("xmark")
@@ -366,7 +379,9 @@ private struct BoardTileOverview: View {
                     Text(folder).font(Extreme.font(11, weight: .semibold))
                         .foregroundColor(state.color.map(Color.init(nsColor:)) ?? Extreme.dim).lineLimit(1)
                 }
-                if let info = state.info {
+                if state.paused {
+                    BoardPausedPill()
+                } else if let info = state.info {
                     Text(info.activity.label).font(Extreme.font(11, weight: .semibold))
                         .foregroundColor(AgentStatusPill.color(info.activity))
                 }
@@ -380,6 +395,17 @@ private struct BoardTileOverview: View {
             .scaleEffect(min(1 / max(state.zoom, 0.08), geo.size.width / 220))
             .frame(width: geo.size.width, height: geo.size.height)
         }
+    }
+}
+
+/// A paused tile's badge, in place of its agent's status.
+struct BoardPausedPill: View {
+    var body: some View {
+        Label("Paused", systemImage: "pause.fill")
+            .font(Extreme.font(10.5, weight: .semibold))
+            .foregroundColor(Extreme.warn)
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(Capsule().fill(Extreme.warn.opacity(0.14)))
     }
 }
 

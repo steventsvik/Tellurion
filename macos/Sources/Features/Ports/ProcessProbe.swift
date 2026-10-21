@@ -91,24 +91,50 @@ enum ProcessProbe {
 
     /// The full command line, from the kernel's copy of the process's arguments.
     static func commandLine(_ pid: Int32) -> String? {
+        guard let arguments = procArgs(pid)?.arguments, !arguments.isEmpty else { return nil }
+        return arguments.joined(separator: " ")
+    }
+
+    /// One variable of the environment the process started with.
+    static func environment(_ pid: Int32, _ name: String) -> String? {
+        let prefix = name + "="
+        return procArgs(pid)?.environment.first { $0.hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)) }
+    }
+
+    /// The kernel's copy of the process's arguments and environment (`NAME=value` strings).
+    private static func procArgs(_ pid: Int32) -> (arguments: [String], environment: [String])? {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
         var size = 0
         guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return nil }
         var buffer = [UInt8](repeating: 0, count: size)
         guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0 else { return nil }
-        // Layout: argc, the executable path, padding NULs, then argc NUL-terminated arguments.
+        // Layout: argc, the executable path, padding NULs, argc NUL-terminated arguments, then
+        // the environment's strings up to an empty one.
         let argc = buffer.withUnsafeBytes { $0.load(as: Int32.self) }
         var index = MemoryLayout<Int32>.size
         while index < size && buffer[index] != 0 { index += 1 }
         while index < size && buffer[index] == 0 { index += 1 }
-        var arguments: [String] = []
-        while arguments.count < argc && index < size {
+        func next() -> String {
             let start = index
             while index < size && buffer[index] != 0 { index += 1 }
-            arguments.append(String(decoding: buffer[start..<index], as: UTF8.self))
-            index += 1
+            defer { index += 1 }
+            return String(bytes: buffer[start..<index], encoding: .utf8) ?? ""
         }
-        return arguments.isEmpty ? nil : arguments.joined(separator: " ")
+        var arguments: [String] = []
+        while arguments.count < argc && index < size { arguments.append(next()) }
+        var environment: [String] = []
+        while index < size && buffer[index] != 0 { environment.append(next()) }
+        return (arguments, environment)
+    }
+
+    /// The pids of every process this user runs.
+    static func userPIDs() -> [Int32] {
+        let uid = getuid()
+        let needed = proc_listpids(UInt32(PROC_UID_ONLY), uid, nil, 0)
+        guard needed > 0 else { return [] }
+        var pids = [Int32](repeating: 0, count: Int(needed) / MemoryLayout<Int32>.size + 64)
+        let filled = proc_listpids(UInt32(PROC_UID_ONLY), uid, &pids, Int32(pids.count * MemoryLayout<Int32>.size))
+        return pids.prefix(max(0, Int(filled)) / MemoryLayout<Int32>.size).filter { $0 > 0 }
     }
 
     static func isAlive(_ pid: Int32) -> Bool {

@@ -5,8 +5,9 @@ import SwiftUI
 // MARK: - Window
 
 /// A board window: the list of what's on the board, the board, and the panels a classic window
-/// has (Visual Fix, command history, the command palette). Boards have no code editor or
-/// Mission Control; an Agent Map tile shows where the agents are working.
+/// has (Visual Fix, command history, the command palette), and the board agent's bar at the
+/// bottom. Boards have no code editor or Mission Control; an Agent Map tile shows where the
+/// agents are working.
 struct BoardWindowView: View {
     let controller: BoardController
     @ObservedObject var model: BoardModel
@@ -38,6 +39,10 @@ struct BoardWindowView: View {
                         LocalhostToastLayer(controller: controller).padding(.top, 34)
                     }
                     BoardCornerOverlay(controller: controller)
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        BoardAssistantBar(controller: controller, assistant: controller.assistant, model: model)
+                    }
                 }
                 .padding(.leading, model.showSidebar ? Self.sidebarWidth + 1 : 0)
                 .padding(.trailing, panels.total)
