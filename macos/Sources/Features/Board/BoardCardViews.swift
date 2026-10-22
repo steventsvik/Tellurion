@@ -24,6 +24,7 @@ final class BoardCardView: BoardNodeView {
         case .orchestrator: content = OrchestratorContent()
         case .web: content = WebContent()
         case .document: content = DocumentContent()
+        case .media: content = MediaContent()
         }
         super.init(controller: controller, id: card.id)
         clip.wantsLayer = true
@@ -129,7 +130,7 @@ final class BoardCardView: BoardNodeView {
         }
         if card.kind == .kanban {
             menu.addItem(ClosureMenuItem("Clear Done", image: nil) { [weak controller] in
-                controller?.updateCard(id) { $0.items.removeAll { $0.column == 2 } }
+                controller?.updateCard(id) { $0.items.removeAll { $0.column == CardItem.done } }
             })
         }
         if card.kind == .map {
@@ -254,11 +255,12 @@ final class BoardCardState: ObservableObject {
         switch card.kind {
         case .note: summary = nil
         case .checklist: summary = card.items.isEmpty ? nil : "\(card.items.filter(\.done).count) of \(card.items.count)"
-        case .kanban: summary = card.items.isEmpty ? nil : "\(card.items.filter { $0.column == 2 }.count) of \(card.items.count) done"
+        case .kanban: summary = card.items.isEmpty ? nil : "\(card.items.filter { $0.column == CardItem.done }.count) of \(card.items.count) done"
         case .map: summary = "Agent Map"
         case .orchestrator: summary = nil
         case .web: summary = card.viewport
         case .document: summary = "Document"
+        case .media: summary = (card.tabs?.count ?? 0) > 1 ? "\((card.tab ?? 0) + 1) of \(card.tabs?.count ?? 0)" : "Now playing"
         }
         if self.summary != summary { self.summary = summary }
         let tint = card.kind == .note ? SketchStyle.color(card.color) : nil
@@ -637,7 +639,7 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        for column in 0..<3 {
+        for column in CardItem.columns.indices {
             let header = NSTextField(labelWithString: CardItem.columns[column])
             header.font = .systemFont(ofSize: 12, weight: .semibold)
             header.textColor = .secondaryLabelColor
@@ -662,7 +664,10 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    private var columnWidth: CGFloat { max((bounds.width - Self.pad * 4) / 3, 60) }
+    private var columnWidth: CGFloat {
+        let count = CGFloat(CardItem.columns.count)
+        return max((bounds.width - Self.pad * (count + 1)) / count, 60)
+    }
 
     private func columnRect(_ column: Int) -> CGRect {
         CGRect(x: Self.pad + CGFloat(column) * (columnWidth + Self.pad), y: Self.pad,
@@ -670,7 +675,7 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        for column in 0..<3 {
+        for column in CardItem.columns.indices {
             let rect = columnRect(column)
             let path = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
             (dropTarget?.column == column ? NSColor.controlAccentColor.withAlphaComponent(0.1)
@@ -681,7 +686,7 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
 
     override func layout() {
         super.layout()
-        for column in 0..<3 {
+        for column in CardItem.columns.indices {
             let rect = columnRect(column)
             let count = items.filter { $0.column == column }.count
             headers[column].stringValue = count > 0 ? "\(CardItem.columns[column])  \(count)" : CardItem.columns[column]
@@ -790,7 +795,7 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
         }
         view.frame.origin = CGPoint(x: point.x - current.offset.x, y: point.y - current.offset.y)
         // The column under the pointer, and the place among its cards.
-        let column = (0..<3).min { abs(columnRect($0).midX - point.x) < abs(columnRect($1).midX - point.x) } ?? 0
+        let column = CardItem.columns.indices.min { abs(columnRect($0).midX - point.x) < abs(columnRect($1).midX - point.x) } ?? 0
         let others = items.filter { $0.column == column && $0.id != current.id }.compactMap { cards[$0.id] }
         let index = others.firstIndex { point.y < $0.frame.midY } ?? others.count
         if dropTarget?.column != column || dropTarget?.index != index {
@@ -822,7 +827,7 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
             guard let from = card.items.firstIndex(where: { $0.id == current.id }) else { return }
             var item = card.items.remove(at: from)
             item.column = target.column
-            item.done = target.column == 2
+            item.done = target.column == CardItem.done
             let inColumn = card.items.enumerated().filter { $0.element.column == target.column }.map(\.offset)
             let at = target.index < inColumn.count ? inColumn[target.index] : (inColumn.last.map { $0 + 1 } ?? card.items.count)
             card.items.insert(item, at: at)
@@ -850,6 +855,36 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
             })
         }
         menu.addItem(move)
+        let due = NSMenuItem(title: "Due", action: nil, keyEquivalent: "")
+        due.submenu = NSMenu()
+        let today = Calendar.current.startOfDay(for: Date())
+        for (title, days) in [("Today", 0), ("Tomorrow", 1), ("In a Week", 7)] as [(String, Int)] {
+            due.submenu?.addItem(ClosureMenuItem(title, image: nil) { [weak self] in
+                self?.change { card in
+                    guard let i = card.items.firstIndex(where: { $0.id == id }) else { return }
+                    card.items[i].due = Calendar.current.date(byAdding: .day, value: days, to: today)
+                }
+            })
+        }
+        if item.due != nil {
+            due.submenu?.addItem(ClosureMenuItem("No Due Date", image: nil) { [weak self] in
+                self?.change { card in if let i = card.items.firstIndex(where: { $0.id == id }) { card.items[i].due = nil } }
+            })
+        }
+        menu.addItem(due)
+        let priority = NSMenuItem(title: "Priority", action: nil, keyEquivalent: "")
+        priority.submenu = NSMenu()
+        for (level, name) in CardItem.priorities.enumerated().reversed() {
+            let entry = ClosureMenuItem(name, image: nil) { [weak self] in
+                self?.change { card in if let i = card.items.firstIndex(where: { $0.id == id }) { card.items[i].priority = level } }
+            }
+            entry.state = item.priority == level ? .on : .off
+            priority.submenu?.addItem(entry)
+        }
+        priority.submenu?.addItem(ClosureMenuItem("None", image: nil) { [weak self] in
+            self?.change { card in if let i = card.items.firstIndex(where: { $0.id == id }) { card.items[i].priority = nil } }
+        })
+        menu.addItem(priority)
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Delete", image: nil) { [weak self] in
             self?.change { $0.items.removeAll { $0.id == id } }
@@ -865,6 +900,7 @@ final class KanbanCard: NSView, NSTextFieldDelegate {
     var itemID: UUID { item.id }
     private let label = NSTextField(wrappingLabelWithString: "")
     private let agent = NSTextField(labelWithString: "")
+    private let tags = NSTextField(labelWithString: "")
 
     init(item: CardItem) {
         self.item = item
@@ -882,6 +918,8 @@ final class KanbanCard: NSView, NSTextFieldDelegate {
         agent.font = .systemFont(ofSize: 11, weight: .medium)
         agent.isHidden = true
         addSubview(agent)
+        tags.isHidden = true
+        addSubview(tags)
         show(item)
     }
 
@@ -893,7 +931,33 @@ final class KanbanCard: NSView, NSTextFieldDelegate {
     func show(_ item: CardItem) {
         self.item = item
         if label.currentEditor() == nil { label.stringValue = item.text }
-        label.textColor = item.column == 2 ? .secondaryLabelColor : .labelColor
+        label.textColor = item.column == CardItem.done ? .secondaryLabelColor : .labelColor
+        showTags(item)
+    }
+
+    /// The due date and priority, as small chips under the text.
+    private func showTags(_ item: CardItem) {
+        var parts: [NSAttributedString] = []
+        let font = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+        if let due = item.due {
+            let calendar = Calendar.current
+            let late = due < calendar.startOfDay(for: Date()) && item.column != CardItem.done
+            let text = calendar.isDateInToday(due) ? "Today" : calendar.isDateInTomorrow(due) ? "Tomorrow"
+                : due.formatted(.dateTime.month(.abbreviated).day())
+            parts.append(NSAttributedString(string: "◷ " + text, attributes: [.font: font, .foregroundColor: late ? NSColor.systemRed : NSColor.secondaryLabelColor]))
+        }
+        if let priority = item.priority, CardItem.priorities.indices.contains(priority) {
+            let color: NSColor = [NSColor.systemGray, .systemOrange, .systemRed][priority]
+            parts.append(NSAttributedString(string: "● " + CardItem.priorities[priority], attributes: [.font: font, .foregroundColor: color]))
+        }
+        let line = NSMutableAttributedString()
+        for (index, part) in parts.enumerated() {
+            if index > 0 { line.append(NSAttributedString(string: "   ")) }
+            line.append(part)
+        }
+        tags.attributedStringValue = line
+        tags.isHidden = parts.isEmpty
+        needsLayout = true
     }
 
     func showAgent(_ line: (String, NSColor)?) {
@@ -904,7 +968,7 @@ final class KanbanCard: NSView, NSTextFieldDelegate {
 
     func height(for width: CGFloat) -> CGFloat {
         let text = label.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: width - 20, height: 1000)).height ?? 17
-        return max(text, 17) + 20 + (agent.isHidden ? 0 : 17)
+        return max(text, 17) + 20 + (agent.isHidden ? 0 : 17) + (tags.isHidden ? 0 : 17)
     }
 
     override func layout() {
@@ -912,6 +976,7 @@ final class KanbanCard: NSView, NSTextFieldDelegate {
         let text = label.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: bounds.width - 20, height: 1000)).height ?? 17
         label.frame = CGRect(x: 10, y: 10, width: bounds.width - 20, height: max(text, 17))
         agent.frame = CGRect(x: 10, y: label.frame.maxY + 3, width: bounds.width - 20, height: 14)
+        tags.frame = CGRect(x: 10, y: (agent.isHidden ? label.frame.maxY : agent.frame.maxY) + 3, width: bounds.width - 20, height: 14)
     }
 
     func beginEditing() {

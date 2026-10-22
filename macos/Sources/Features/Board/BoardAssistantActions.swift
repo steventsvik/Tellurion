@@ -214,6 +214,8 @@ extension BoardController {
             switch card.kind {
             case .note:
                 lines.append("- \(handle) note \"\(card.title)\": \(Self.clip(card.text, 300))")
+            case .media:
+                lines.append("- \(handle) media \"\(card.title)\"")
             case .document:
                 lines.append("- \(handle) document \"\(card.title)\"")
             case .web:
@@ -225,7 +227,7 @@ extension BoardController {
             case .checklist, .kanban:
                 lines.append("- \(handle) \(card.kind.rawValue) \"\(card.title)\":")
                 for (number, item) in card.items.enumerated() where !item.text.isEmpty {
-                    let state = card.kind == .kanban ? CardItem.columns[min(max(item.column, 0), 2)] : (item.done ? "done" : "not done")
+                    let state = card.kind == .kanban ? CardItem.columns[min(max(item.column, 0), CardItem.done)] : (item.done ? "done" : "not done")
                     let owner = item.agent.flatMap { id in model.surfaces.firstIndex { $0.id == id } }.map { ", with T\($0 + 1)" } ?? ""
                     lines.append("  \(number + 1). \(Self.clip(item.text, 120)) [\(state)\(owner)]")
                 }
@@ -474,8 +476,8 @@ extension BoardController {
                 if let title = action.title, !title.isEmpty { card.title = title }
                 card.items = (action.items ?? []).map { CardItem(text: $0) }
                 if kanban {
-                    card.items += (action.doing ?? []).map { CardItem(text: $0, column: 1) }
-                    card.items += (action.done ?? []).map { CardItem(text: $0, done: true, column: 2) }
+                    card.items += (action.doing ?? []).map { CardItem(text: $0, column: CardItem.doing) }
+                    card.items += (action.done ?? []).map { CardItem(text: $0, done: true, column: CardItem.done) }
                 }
             }
             return kanban ? "Added a kanban board" : "Added a checklist"

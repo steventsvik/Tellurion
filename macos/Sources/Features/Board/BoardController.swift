@@ -196,7 +196,7 @@ final class BoardController: BaseTerminalController {
             model.frames[sketch.id] = sketch.frame
             model.order.append(sketch.id)
         }
-        for card in workspace.cards ?? [] {
+        for card in (workspace.cards ?? []).map(BoardController.migrated) {
             model.cards.append(card)
             model.frames[card.id] = card.frame
             model.order.append(card.id)

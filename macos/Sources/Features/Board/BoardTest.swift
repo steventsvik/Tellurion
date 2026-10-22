@@ -528,6 +528,19 @@ enum BoardTest {
                 }
                 DispatchQueue.main.async { DemoDirector.note("tileenv \(args[0]) \(name)=\(Set(found).sorted())") }
             }
+        case "media":
+            // media <file…>: a media tile; "mediastate" logs it.
+            controller.addMedia(args.map { URL(fileURLWithPath: $0) })
+        case "mediaplay":
+            controller.window?.contentView?.descendants.compactMap { $0 as? MediaContent }.first?.play()
+        case "mediastate":
+            for content in controller.window?.contentView?.descendants.compactMap({ $0 as? MediaContent }) ?? [] {
+                DemoDirector.note("media \(content.testState)")
+            }
+        case "kanbanstate":
+            for card in controller.model.cards where card.kind == .kanban {
+                DemoDirector.note("kanban v\(card.kanbanVersion ?? 0) " + card.items.map { "\($0.text)@\(CardItem.columns[$0.column])" }.joined(separator: ", "))
+            }
         case "home":
             BoardHome.show()
         case "mission":
