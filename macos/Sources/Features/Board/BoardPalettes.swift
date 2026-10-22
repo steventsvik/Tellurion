@@ -225,6 +225,7 @@ struct BoardSidePalette: View {
             ForEach(BoardSidePalette.extras, id: \.title) { extra in
                 button(extra.symbol, extra.title) { extra.run(controller) }
             }
+            button("doc.richtext", "Documents") { controller.showDocuments() }
             button("folder", "Files and changes") { showFiles() }
             button("arrow.triangle.2.circlepath", "Review loop for the focused agent") { showLoops() }
         }

@@ -18,6 +18,7 @@ final class BoardModel: ObservableObject {
     /// The Group composer, from the bar's Group chip (prefilled when editing a preset).
     @Published var showGroupComposer = false
     @Published var showMissionMap = false
+    @Published var showDocuments = false
     var groupComposerPreset: BoardPreset?
     @Published var showSidebar = true
     @Published var name = ""
@@ -129,6 +130,8 @@ final class BoardController: BaseTerminalController {
     weak var assistantField: NSTextField?
     /// What orchestrators have yet to hear from their agents (see BoardTeams).
     let teamRelay = BoardTeamRelay()
+    /// The Documents panel (see StudioDocuments).
+    lazy var documents = StudioDocuments()
     /// Each orchestrator card's brain, made on first use.
     var orchestratorBrains: [UUID: OrchestratorBrain] = [:]
     /// Escape ends connecting (see startWiring).

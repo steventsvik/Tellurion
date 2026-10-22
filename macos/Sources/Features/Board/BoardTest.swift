@@ -454,6 +454,30 @@ enum BoardTest {
             page.evaluateJavaScript(args.joined(separator: " ")) { result, error in
                 DemoDirector.note("webeval \(result.map { "\($0)" } ?? "nil") \(error.map { "\($0.localizedDescription)" } ?? "")")
             }
+        case "docs":
+            // docs <project folder>: opens Documents on that project.
+            controller.showDocuments()
+            if let folder = args.first { controller.documents.project = folder; controller.documents.refresh() }
+        case "docsgen":
+            // docsgen <template id> <quick|balanced|thorough> [codex]: writes it (real run).
+            let docs = controller.documents
+            docs.template = StudioDocs.templates.first { $0.id == args.first } ?? docs.template
+            docs.effort = StudioDocs.Effort(rawValue: args.count > 1 ? args[1] : "quick") ?? .quick
+            docs.engine = args.count > 2 && args[2] == "codex" ? .codex : .claude
+            docs.generate()
+        case "docsstate":
+            let docs = controller.documents
+            let stats = MarkdownHTML.stats(docs.markdown)
+            DemoDirector.note("docs running=\(docs.running) phase=\(String(describing: docs.phase)) words=\(stats.words) title=\(MarkdownHTML.title(docs.markdown) ?? "-") file=\(docs.file?.lastPathComponent ?? "-") error=\(docs.error ?? "-") library=\(docs.library.count)")
+        case "docsplace":
+            if let file = controller.documents.file {
+                controller.model.showDocuments = false
+                controller.placeDocument(file)
+            }
+        case "docspdf":
+            // docspdf <out.pdf>: exports what's shown, without asking where.
+            guard let path = args.first else { return }
+            PDFExporter.shared.export(html: MarkdownHTML.page(controller.documents.markdown), to: URL(fileURLWithPath: path))
         case "mission":
             controller.model.showMissionMap = args.first != "off"
         case "orchnew":

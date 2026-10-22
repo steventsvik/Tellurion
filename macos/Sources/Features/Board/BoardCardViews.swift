@@ -23,6 +23,7 @@ final class BoardCardView: BoardNodeView {
         case .map: content = AgentMapContent()
         case .orchestrator: content = OrchestratorContent()
         case .web: content = WebContent()
+        case .document: content = DocumentContent()
         }
         super.init(controller: controller, id: card.id)
         clip.wantsLayer = true
@@ -137,6 +138,21 @@ final class BoardCardView: BoardNodeView {
         if card.kind == .orchestrator {
             for item in orchestratorItems(controller) { menu.addItem(item) }
         }
+        if card.kind == .document, let file = card.file {
+            let title = card.title
+            menu.addItem(ClosureMenuItem("Export PDF…", image: nil) { [weak controller] in
+                let markdown = (try? String(contentsOfFile: file, encoding: .utf8)) ?? ""
+                StudioDocs.exportPDF(markdown: markdown, title: title, from: controller?.window)
+            })
+            menu.addItem(ClosureMenuItem("Open in Documents", image: nil) { [weak controller] in
+                guard let controller else { return }
+                controller.showDocuments()
+                controller.documents.show(URL(fileURLWithPath: file))
+            })
+            menu.addItem(ClosureMenuItem("Show in Finder", image: nil) {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file)])
+            })
+        }
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Close \(card.kind.title)", image: nil) { [weak controller] in controller?.removeCard(id) })
         return menu
@@ -242,6 +258,7 @@ final class BoardCardState: ObservableObject {
         case .map: summary = "Agent Map"
         case .orchestrator: summary = nil
         case .web: summary = card.viewport
+        case .document: summary = "Document"
         }
         if self.summary != summary { self.summary = summary }
         let tint = card.kind == .note ? SketchStyle.color(card.color) : nil

@@ -6,7 +6,7 @@ import AppKit
 /// Codex tile), and then follows that agent: Doing while it works, Done when it finishes.
 struct BoardCard: Codable, Identifiable, Equatable {
     enum Kind: String, Codable, CaseIterable {
-        case note, checklist, kanban, map, orchestrator, web
+        case note, checklist, kanban, map, orchestrator, web, document
 
         var title: String {
             switch self {
@@ -16,6 +16,7 @@ struct BoardCard: Codable, Identifiable, Equatable {
             case .map: return "Agent Map"
             case .orchestrator: return "Orchestrator"
             case .web: return "Web"
+            case .document: return "Document"
             }
         }
 
@@ -27,6 +28,7 @@ struct BoardCard: Codable, Identifiable, Equatable {
             case .map: return "map"
             case .orchestrator: return "point.3.connected.trianglepath.dotted"
             case .web: return "globe"
+            case .document: return "doc.richtext"
             }
         }
 
@@ -38,6 +40,7 @@ struct BoardCard: Codable, Identifiable, Equatable {
             case .map: return CGSize(width: 980, height: 640)
             case .orchestrator: return CGSize(width: 380, height: 520)
             case .web: return BoardWeb.size
+            case .document: return CGSize(width: 620, height: 780)
             }
         }
     }
@@ -57,6 +60,8 @@ struct BoardCard: Codable, Identifiable, Equatable {
     var tabs: [String]?
     var tab: Int?
     var viewport: String?
+    /// A document card's markdown file.
+    var file: String?
     /// Where it sits on the board (kept in the board's frames while open).
     var frame: CGRect = .zero
 }

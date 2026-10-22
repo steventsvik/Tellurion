@@ -214,6 +214,8 @@ extension BoardController {
             switch card.kind {
             case .note:
                 lines.append("- \(handle) note \"\(card.title)\": \(Self.clip(card.text, 300))")
+            case .document:
+                lines.append("- \(handle) document \"\(card.title)\"")
             case .web:
                 lines.append("- \(handle) web tile \"\(card.title)\": " + (card.tabs ?? []).filter { !$0.isEmpty }.joined(separator: ", "))
             case .orchestrator:

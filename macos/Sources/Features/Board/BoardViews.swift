@@ -80,6 +80,10 @@ struct BoardWindowView: View {
                 // ⌘P / ⌘⇧P over the whole window, for the tile with the cursor.
                 BoardPaletteLayer(controller: controller, model: model)
                 BoardRadialMenu(controller: controller, model: model)
+                if model.showDocuments {
+                    StudioDocumentsView(controller: controller, model: model, docs: controller.documents)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
                 if model.showMissionMap {
                     MissionMapView(controller: controller, model: model)
                         .transition(.opacity.combined(with: .scale(scale: 0.98)))
@@ -335,8 +339,8 @@ private struct BoardSidebar: View {
                                        count: card.kind == .orchestrator ? controller.orchestrator(card.id).map { controller.wiredAgents($0).count } ?? 0
                                            : card.items.count,
                                        focused: false, symbol: card.kind.symbol,
-                                       empty: card.kind == .note ? "Note" : card.kind == .map ? "Agent Map"
-                                           : card.kind == .orchestrator ? "Nothing wired" : "Empty")
+                                       empty: card.kind == .orchestrator ? "Nothing wired"
+                                           : card.kind == .checklist || card.kind == .kanban ? "Empty" : card.kind.title)
                             .onTapGesture {
                                 controller.raise(id: card.id)
                                 controller.zoom(toNode: card.id)
