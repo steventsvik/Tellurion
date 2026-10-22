@@ -354,7 +354,9 @@ extension BoardController {
             var config = Ghostty.SurfaceConfiguration()
             config.workingDirectory = start
             config.initialInput = member.agent.map { $0.binary + "\n" }
+            let accounts = applyAccounts(&config)
             let view = Ghostty.SurfaceView(app, baseConfig: config)
+            if !accounts.isEmpty { model.tileAccounts[view.id] = accounts }
             model.frames[view.id] = CGRect(x: area.minX + CGFloat(col) * (size.width + Self.gap),
                                            y: area.minY + card.height + Self.gap * 4 + CGFloat(row) * (size.height + Self.gap),
                                            width: size.width, height: size.height)

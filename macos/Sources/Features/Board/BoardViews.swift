@@ -110,6 +110,9 @@ struct BoardWindowView: View {
         .sheet(isPresented: $model.showComposer) {
             BoardComposer(controller: controller, isPresented: $model.showComposer)
         }
+        .sheet(isPresented: $model.showAccounts) {
+            BoardAccountsView(controller: controller, isPresented: $model.showAccounts)
+        }
         .sheet(isPresented: $model.showOrchestratorComposer) {
             BoardOrchestratorComposer(controller: controller, isPresented: $model.showOrchestratorComposer)
         }

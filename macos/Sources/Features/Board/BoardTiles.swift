@@ -107,6 +107,7 @@ final class BoardTiles {
                         focused: model.focused, zoom: model.zoom, motion: motion)
             view.paused = model.paused.contains(surface.id)
             view.skipsPermissions = controller.skipsPermissions(surface.id)
+            view.account = controller.account(of: surface)?.initials
             if view.isHidden != collapsed.contains(surface.id) { view.isHidden = collapsed.contains(surface.id) }
             view.wire = wiringTeam.map { (BoardProjects.nsColor($0.color), wired.contains(surface.id)) }
         }
@@ -340,6 +341,12 @@ final class BoardTileView: BoardNodeView {
 
     override func nodeDuplicate() { controller?.duplicateTile(surface) }
 
+    /// The initials of the account profile its agent uses (not shown for your usual one).
+    var account: String? {
+        get { state.account }
+        set { if state.account != newValue { state.account = newValue } }
+    }
+
     /// Started with permission prompts skipped: a red badge says so.
     var skipsPermissions: Bool {
         get { state.skipsPermissions }
@@ -379,6 +386,7 @@ final class BoardTileState: ObservableObject {
     @Published var zoom: CGFloat = 1
     @Published var paused = false
     @Published var skipsPermissions = false
+    @Published var account: String?
 }
 
 /// A tile whose agent runs without asking permission.
@@ -417,6 +425,12 @@ private struct BoardTileHeader: View {
                 BoardPausedPill()
             } else if let info = state.info {
                 AgentStatusPill(activity: info.activity, caps: true)
+            }
+            if let account = state.account {
+                Text(account).font(Extreme.font(9.5, weight: .bold)).foregroundColor(Extreme.ink)
+                    .padding(.horizontal, 5).frame(height: 16)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(Extreme.core))
+                    .help("Signed in with another account")
             }
             if state.skipsPermissions { BoardSkipPill() }
             glyph("arrow.clockwise").help("Restart")

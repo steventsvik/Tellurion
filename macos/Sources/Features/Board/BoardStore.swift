@@ -15,6 +15,8 @@ struct BoardTile: Codable, Identifiable, Equatable {
     var command: String?
     /// The name given to the tile (by a tool, or by renaming it).
     var title: String?
+    /// The account profiles its agents use (provider → profile id; see BoardAccounts).
+    var accounts: [String: UUID]?
 }
 
 /// A board: its tiles, where you were looking, and its window. Saved as versioned JSON in

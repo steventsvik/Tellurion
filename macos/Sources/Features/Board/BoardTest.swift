@@ -499,6 +499,35 @@ enum BoardTest {
         case "diagramstate":
             DemoDirector.note("diagram drawing=\(controller.diagrams.drawing != nil) error=\(controller.diagrams.error ?? "-") sketches="
                               + controller.model.sketches.map { "\($0.title):\($0.elements.count)" }.joined(separator: ","))
+        case "accountadd":
+            // accountadd <claude|codex> <name…>: a profile, and a tile to sign it in.
+            guard let provider = BoardAccount.Provider(rawValue: args.first ?? "") else { return }
+            controller.connect(BoardAccounts.shared.add(provider, name: args.dropFirst().joined(separator: " ")))
+        case "accountuse":
+            // accountuse <claude|codex> <name…|usual>
+            guard let provider = BoardAccount.Provider(rawValue: args.first ?? "") else { return }
+            let name = args.dropFirst().joined(separator: " ")
+            BoardAccounts.shared.use(BoardAccounts.shared.accounts.first { $0.name == name }?.id, for: provider)
+        case "accountremove":
+            for account in BoardAccounts.shared.accounts where account.name == args.joined(separator: " ") { BoardAccounts.shared.remove(account.id) }
+        case "accountstate":
+            DemoDirector.note("accounts " + BoardAccounts.shared.accounts.map { "\($0.provider.rawValue):\($0.name)(\($0.initials)) signedIn=\($0.signedIn)" }.joined(separator: ", ")
+                              + " active=" + BoardAccounts.shared.active.map { "\($0.key.rawValue)=\(BoardAccounts.shared.account($0.value)?.name ?? "?")" }.joined(separator: ","))
+            for (index, surface) in controller.model.surfaces.enumerated() {
+                let chosen = controller.model.tileAccounts[surface.id] ?? [:]
+                DemoDirector.note("tile \(index + 1) accounts=" + chosen.map { "\($0.key.rawValue)=\(BoardAccounts.shared.account($0.value)?.name ?? "?")" }.joined(separator: ","))
+            }
+        case "tileenv":
+            // tileenv <n> <VAR>: the variable as tile n's processes have it.
+            guard args.count == 2, let surface = tile(args[0], of: controller) else { return }
+            let name = args[1], id = surface.id.uuidString
+            DispatchQueue.global().async {
+                let found = ProcessProbe.userPIDs().compactMap { pid -> String? in
+                    guard ProcessProbe.environment(pid, BoardPause.surfaceKey) == id else { return nil }
+                    return ProcessProbe.environment(pid, name).map { ($0 as NSString).abbreviatingWithTildeInPath }
+                }
+                DispatchQueue.main.async { DemoDirector.note("tileenv \(args[0]) \(name)=\(Set(found).sorted())") }
+            }
         case "mission":
             controller.model.showMissionMap = args.first != "off"
         case "orchnew":

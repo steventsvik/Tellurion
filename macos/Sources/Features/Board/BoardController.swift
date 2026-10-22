@@ -19,6 +19,9 @@ final class BoardModel: ObservableObject {
     @Published var showGroupComposer = false
     @Published var showMissionMap = false
     @Published var showDocuments = false
+    @Published var showAccounts = false
+    /// Which account profiles each tile's agents use (see BoardAccounts).
+    @Published var tileAccounts: [UUID: [BoardAccount.Provider: UUID]] = [:]
     var groupComposerPreset: BoardPreset?
     @Published var showSidebar = true
     @Published var name = ""
@@ -168,6 +171,12 @@ final class BoardController: BaseTerminalController {
                 var config = Ghostty.SurfaceConfiguration()
                 config.workingDirectory = tile.cwd ?? workspace.folder
                 if restoring, let line = BoardAgent.resumeCommand(for: tile) { config.initialInput = line }
+                // The same account profiles as before.
+                let chosen = Dictionary(uniqueKeysWithValues: (tile.accounts ?? [:]).compactMap { key, value in
+                    BoardAccount.Provider(rawValue: key).map { ($0, value) }
+                })
+                for (key, value) in BoardAccounts.shared.environment(chosen) { config.environmentVariables[key] = value }
+                if !chosen.isEmpty { model.tileAccounts[tile.id] = chosen }
                 let view = Ghostty.SurfaceView(app, baseConfig: config, uuid: tile.id)
                 if let last = tree.root?.leftmostLeaf(), let next = try? tree.inserting(view: view, at: last, direction: .right) {
                     tree = next
@@ -426,7 +435,11 @@ final class BoardController: BaseTerminalController {
             config.workingDirectory = (near ?? focusedSurface).flatMap(folder(of:)) ?? workspace.folder
         }
         if let command { config.initialInput = command }
+        // The active account profiles, unless it was given its own.
+        let own = BoardAccount.Provider.allCases.contains { config.environmentVariables[$0.variable] != nil }
+        let accounts = own ? [:] : applyAccounts(&config)
         let view = Ghostty.SurfaceView(app, baseConfig: config)
+        if !accounts.isEmpty { model.tileAccounts[view.id] = accounts }
         if let folder = config.workingDirectory { launchFolders[view.id] = folder }
         let anchor = (near ?? focusedSurface).flatMap { model.frames[$0.id] }
         model.frames[view.id] = frame ?? freeSpot(size: Self.tileSize, project: BoardProjects.project(of: config.workingDirectory), near: anchor)
@@ -478,7 +491,9 @@ final class BoardController: BaseTerminalController {
             var config = Ghostty.SurfaceConfiguration()
             config.workingDirectory = folder ?? workspace.folder
             config.initialInput = line.command.isEmpty ? nil : line.command
+            let accounts = applyAccounts(&config)
             let view = Ghostty.SurfaceView(app, baseConfig: config)
+            if !accounts.isEmpty { model.tileAccounts[view.id] = accounts }
             let col = index % columns, row = index / columns
             model.frames[view.id] = CGRect(x: area.minX + CGFloat(col) * (size.width + Self.gap),
                                            y: area.minY + CGFloat(row) * (size.height + Self.gap),
@@ -981,7 +996,10 @@ final class BoardController: BaseTerminalController {
                              agent: kind.flatMap { $0 == .unknown ? nil : $0.rawValue },
                              session: info.flatMap(ResumeAfterUpdate.session(for:)),
                              command: commands[view.id],
-                             title: model.titles[view.id])
+                             title: model.titles[view.id],
+                             accounts: model.tileAccounts[view.id].map { chosen in
+                                 Dictionary(uniqueKeysWithValues: chosen.map { ($0.key.rawValue, $0.value) })
+                             })
         }
         workspace.colors = model.colors.isEmpty ? nil : model.colors
         workspace.teams = model.teams.isEmpty ? nil : model.teams

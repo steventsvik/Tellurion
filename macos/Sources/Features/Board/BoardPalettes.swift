@@ -232,6 +232,7 @@ struct BoardSidePalette: View {
                     StudioDiagramsPanel(diagrams: controller.diagrams) { showDiagrams = false }
                 }
             button("folder", "Files and changes") { showFiles() }
+            button("person.2.circle", "Accounts") { model.showAccounts = true }
             button("arrow.triangle.2.circlepath", "Review loop for the focused agent") { showLoops() }
         }
         .padding(5)

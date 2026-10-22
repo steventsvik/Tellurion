@@ -75,12 +75,30 @@ enum BoardTileMenu {
         }
         list.append(nil)
         list.append(contentsOf: groupActions(for: surface.id, in: board))
+        list.append(contentsOf: accountActions(for: surface, in: board))
         list.append(contentsOf: BoardTeamMenu.actions(for: surface.id, in: board))
         list.append(contentsOf: undoActions(for: surface))
         list.append(nil)
         list.append(Action(title: "Copy Working Directory", enabled: pwd != nil) { VerticalTabsActions.copy(pwd ?? "") })
         list.append(nil)
         list.append(Action(title: "Close Tile") { [weak board] in board?.close(surface) })
+        return list
+    }
+
+    /// Starting the tile's agent on another account.
+    private static func accountActions(for surface: Ghostty.SurfaceView, in board: BoardController) -> [Action?] {
+        guard let kind = VerticalTabsAgents.shared.info(for: surface)?.kind,
+              let provider = BoardAccount.Provider.allCases.first(where: { $0.kind == kind }) else { return [] }
+        let profiles = BoardAccounts.shared.accounts.filter { $0.provider == provider }
+        guard !profiles.isEmpty else { return [] }
+        let current = board.model.tileAccounts[surface.id]?[provider]
+        var list: [Action?] = []
+        if current != nil {
+            list.append(Action(title: "Use Your Usual Sign-in") { [weak board] in board?.switchAccount(surface, to: nil, provider: provider) })
+        }
+        for profile in profiles where profile.id != current {
+            list.append(Action(title: "Use \(profile.name)") { [weak board] in board?.switchAccount(surface, to: profile, provider: provider) })
+        }
         return list
     }
 
