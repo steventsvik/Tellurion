@@ -130,6 +130,7 @@ final class BoardAccounts: ObservableObject {
 extension BoardController {
     /// Points a new tile's agents at the active profiles, and remembers which they were.
     func applyAccounts(_ config: inout Ghostty.SurfaceConfiguration, chosen: [BoardAccount.Provider: UUID]? = nil) -> [BoardAccount.Provider: UUID] {
+        guard ExtremeSettings.isOn(.accounts) else { return [:] }
         let chosen = chosen ?? BoardAccounts.shared.active
         for (key, value) in BoardAccounts.shared.environment(chosen) { config.environmentVariables[key] = value }
         return chosen
@@ -137,7 +138,7 @@ extension BoardController {
 
     /// The profile a tile's running agent signed in with, if not your usual one.
     func account(of surface: Ghostty.SurfaceView) -> BoardAccount? {
-        guard let kind = VerticalTabsAgents.shared.info(for: surface)?.kind,
+        guard ExtremeSettings.isOn(.accounts), let kind = VerticalTabsAgents.shared.info(for: surface)?.kind,
               let provider = BoardAccount.Provider.allCases.first(where: { $0.kind == kind }) else { return nil }
         return BoardAccounts.shared.account(model.tileAccounts[surface.id]?[provider])
     }

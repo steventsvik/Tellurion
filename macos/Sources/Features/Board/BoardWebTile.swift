@@ -113,6 +113,7 @@ enum BoardWeb {
 extension BoardController {
     /// A web tile around a board point (from the radial menu).
     func addWebTile(at point: CGPoint, url: String? = nil) {
+        guard ExtremeSettings.isOn(.webTiles) else { return }
         let id = addCard(.web, at: point, edit: false)
         updateCard(id) { card in
             card.tabs = [url ?? ""]
@@ -122,6 +123,7 @@ extension BoardController {
 
     /// A web tile of a box dragged out with the web tool.
     func finishWebBox(from start: CGPoint, to end: CGPoint) {
+        guard ExtremeSettings.isOn(.webTiles) else { return }
         hideWebBox()
         model.tool = .select
         var rect = CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))

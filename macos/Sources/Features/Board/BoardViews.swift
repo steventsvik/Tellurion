@@ -218,7 +218,9 @@ private struct BoardToolbar: View {
                     Button { controller.addCard(.kanban) } label: { Label("Kanban", systemImage: "rectangle.split.3x1") }
                     Divider()
                     Button { controller.showAgentMap() } label: { Label("Agent Map", systemImage: "map") }
-                    Button { controller.chooseMedia() } label: { Label("Video or Music…", systemImage: "play.rectangle") }
+                    if ExtremeSettings.isOn(.media) {
+                        Button { controller.chooseMedia() } label: { Label("Video or Music…", systemImage: "play.rectangle") }
+                    }
                     Button { model.showOrchestratorComposer = true } label: {
                         Label("Orchestrator…", systemImage: BoardCard.Kind.orchestrator.symbol)
                     }

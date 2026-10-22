@@ -53,6 +53,15 @@ enum BoardTool: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Off when its feature is turned off in Settings.
+    var available: Bool {
+        switch self {
+        case .pen, .eraser, .text: return ExtremeSettings.isOn(.ink)
+        case .web: return ExtremeSettings.isOn(.webTiles)
+        default: return true
+        }
+    }
+
     /// Stays on after use (drawing); the others go back to Select.
     var sticky: Bool { self == .pen || self == .eraser }
 }
@@ -60,6 +69,7 @@ enum BoardTool: String, CaseIterable, Identifiable {
 extension BoardController {
     /// Picks a tool. Actions (group, image, fit) run at once; placing tools wait for a click.
     func choose(_ tool: BoardTool) {
+        guard tool.available else { return }
         switch tool {
         case .group:
             model.groupComposerPreset = nil
@@ -142,11 +152,12 @@ extension BoardController {
 struct BoardToolPalette: View {
     let controller: BoardController
     @ObservedObject var model: BoardModel
+    @ObservedObject private var settings = ExtremeSettings.shared
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(spacing: 2) {
-                ForEach(BoardTool.allCases) { tool in
+                ForEach(BoardTool.allCases.filter(\.available)) { tool in
                     if tool == .text || tool == .web || tool == .fit {
                         Rectangle().fill(Extreme.line).frame(width: 18, height: 1).padding(.vertical, 3)
                     }
@@ -212,6 +223,7 @@ struct BoardToolPalette: View {
 struct BoardSidePalette: View {
     let controller: BoardController
     @ObservedObject var model: BoardModel
+    @ObservedObject private var settings = ExtremeSettings.shared
     @State private var showLayers = false
     @State private var showDiagrams = false
 
@@ -220,19 +232,27 @@ struct BoardSidePalette: View {
             button("square.3.layers.3d", "Layers") { showLayers.toggle() }
                 .popover(isPresented: $showLayers, arrowEdge: .leading) { BoardLayersList(controller: controller, model: model) }
             button("checklist", "Tasks") { showTasks() }
-            button("point.3.filled.connected.trianglepath.dotted", "Mission Map") {
-                withAnimation(.easeOut(duration: 0.18)) { model.showMissionMap = true }
+            if ExtremeSettings.isOn(.missionMap) {
+                button("point.3.filled.connected.trianglepath.dotted", "Mission Map") {
+                    withAnimation(.easeOut(duration: 0.18)) { model.showMissionMap = true }
+                }
             }
             ForEach(BoardSidePalette.extras, id: \.title) { extra in
                 button(extra.symbol, extra.title) { extra.run(controller) }
             }
-            button("doc.richtext", "Documents") { controller.showDocuments() }
-            button("flowchart", "Diagrams") { showDiagrams.toggle() }
-                .popover(isPresented: $showDiagrams, arrowEdge: .leading) {
-                    StudioDiagramsPanel(diagrams: controller.diagrams) { showDiagrams = false }
-                }
+            if ExtremeSettings.isOn(.documents) {
+                button("doc.richtext", "Documents") { controller.showDocuments() }
+            }
+            if ExtremeSettings.isOn(.diagrams) {
+                button("flowchart", "Diagrams") { showDiagrams.toggle() }
+                    .popover(isPresented: $showDiagrams, arrowEdge: .leading) {
+                        StudioDiagramsPanel(diagrams: controller.diagrams) { showDiagrams = false }
+                    }
+            }
             button("folder", "Files and changes") { showFiles() }
-            button("person.2.circle", "Accounts") { model.showAccounts = true }
+            if ExtremeSettings.isOn(.accounts) {
+                button("person.2.circle", "Accounts") { model.showAccounts = true }
+            }
             button("house", "Home: every project and board") { BoardHome.show() }
             button("arrow.triangle.2.circlepath", "Review loop for the focused agent") { showLoops() }
         }
@@ -352,6 +372,7 @@ private struct BoardLayersList: View {
 struct BoardRadialMenu: View {
     let controller: BoardController
     @ObservedObject var model: BoardModel
+    @ObservedObject private var settings = ExtremeSettings.shared
 
     private struct Item {
         let symbol: String
@@ -359,7 +380,9 @@ struct BoardRadialMenu: View {
         let run: (BoardController, CGPoint) -> Void
     }
 
-    private static let items: [Item] = [
+    private static var items: [Item] { allItems.filter { $0.title != "Web" || ExtremeSettings.isOn(.webTiles) } }
+
+    private static let allItems: [Item] = [
         Item(symbol: "square.grid.2x2", title: "Group…") { board, _ in board.choose(.group) },
         Item(symbol: "sparkle", title: "Agent") { board, point in
             board.model.tool = .agent

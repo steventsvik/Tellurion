@@ -87,7 +87,7 @@ enum BoardTileMenu {
 
     /// Starting the tile's agent on another account.
     private static func accountActions(for surface: Ghostty.SurfaceView, in board: BoardController) -> [Action?] {
-        guard let kind = VerticalTabsAgents.shared.info(for: surface)?.kind,
+        guard ExtremeSettings.isOn(.accounts), let kind = VerticalTabsAgents.shared.info(for: surface)?.kind,
               let provider = BoardAccount.Provider.allCases.first(where: { $0.kind == kind }) else { return [] }
         let profiles = BoardAccounts.shared.accounts.filter { $0.provider == provider }
         guard !profiles.isEmpty else { return [] }

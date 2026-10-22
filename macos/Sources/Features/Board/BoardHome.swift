@@ -74,6 +74,7 @@ struct BoardTopBar: View {
     @ObservedObject var model: BoardModel
     @ObservedObject private var index = BoardProjectsIndex.shared
     @ObservedObject private var usage = UsageMonitor.shared
+    @ObservedObject private var settings = ExtremeSettings.shared
 
     var body: some View {
         let key = BoardProjectsIndex.key(of: controller.workspace)
@@ -102,7 +103,7 @@ struct BoardTopBar: View {
             Rectangle().fill(Extreme.line).frame(width: 1, height: 18).padding(.horizontal, 2)
             live
             if let reset = soonestReset {
-                pill { model.showAccounts = true } label: {
+                pill { if ExtremeSettings.isOn(.accounts) { model.showAccounts = true } } label: {
                     Label("resets \(Self.time(reset))", systemImage: "clock").font(Extreme.font(11.5))
                 }
                 .help("When your usage limit resets next. Click for accounts.")

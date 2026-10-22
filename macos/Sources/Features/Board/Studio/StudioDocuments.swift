@@ -251,6 +251,7 @@ extension BoardController {
     }
 
     func showDocuments() {
+        guard ExtremeSettings.isOn(.documents) else { return }
         documents.open(project: documentsProject)
         withAnimation(.easeOut(duration: 0.18)) { model.showDocuments = true }
     }

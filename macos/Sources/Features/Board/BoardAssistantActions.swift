@@ -513,7 +513,7 @@ extension BoardController {
             arrangeByProject()
             return "Grouped the tiles by project"
         case "show":
-            if action.target?.lowercased() == "mission_map" {
+            if action.target?.lowercased() == "mission_map", ExtremeSettings.isOn(.missionMap) {
                 model.showMissionMap = true
                 return "Opened the Mission Map"
             }
