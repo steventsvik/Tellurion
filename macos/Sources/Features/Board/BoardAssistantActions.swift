@@ -112,7 +112,8 @@ enum BoardAssistantPrompt {
     - agent_map {folder?}: a live map of the project's files with its agents moving through them.
     - remove_card {card}: close a card or sketch (C# or S#).
     - arrange {}: group the tiles by project.
-    - show {target?}: zoom to a tile, card or sketch; no target shows everything.
+    - show {target?}: zoom to a tile, card or sketch; no target shows everything; target \
+    "mission_map" opens the Mission Map (who runs whom, and every agent's status).
     - rename_board {title}
     - create_orchestrator {members: [{agent, role}], folder?, task?}: an orchestrator card \
     wired to new agents, each with a role (Coder, Reviewer, Tester…; up to 8). An \
@@ -508,6 +509,10 @@ extension BoardController {
             arrangeByProject()
             return "Grouped the tiles by project"
         case "show":
+            if action.target?.lowercased() == "mission_map" {
+                model.showMissionMap = true
+                return "Opened the Mission Map"
+            }
             if let id = handles.id(action.target ?? action.tile ?? action.card), model.frames[id] != nil {
                 zoom(toNode: id)
             } else {

@@ -454,6 +454,8 @@ enum BoardTest {
             page.evaluateJavaScript(args.joined(separator: " ")) { result, error in
                 DemoDirector.note("webeval \(result.map { "\($0)" } ?? "nil") \(error.map { "\($0.localizedDescription)" } ?? "")")
             }
+        case "mission":
+            controller.model.showMissionMap = args.first != "off"
         case "orchnew":
             // orchnew [tile n…]: an orchestrator wired to those tiles.
             let tiles = args.compactMap { tile($0, of: controller)?.id }

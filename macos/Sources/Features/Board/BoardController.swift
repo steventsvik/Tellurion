@@ -17,6 +17,7 @@ final class BoardModel: ObservableObject {
     @Published var showOrchestratorComposer = false
     /// The Group composer, from the bar's Group chip (prefilled when editing a preset).
     @Published var showGroupComposer = false
+    @Published var showMissionMap = false
     var groupComposerPreset: BoardPreset?
     @Published var showSidebar = true
     @Published var name = ""

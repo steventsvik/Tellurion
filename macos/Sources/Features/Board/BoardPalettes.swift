@@ -219,6 +219,9 @@ struct BoardSidePalette: View {
             button("square.3.layers.3d", "Layers") { showLayers.toggle() }
                 .popover(isPresented: $showLayers, arrowEdge: .leading) { BoardLayersList(controller: controller, model: model) }
             button("checklist", "Tasks") { showTasks() }
+            button("point.3.filled.connected.trianglepath.dotted", "Mission Map") {
+                withAnimation(.easeOut(duration: 0.18)) { model.showMissionMap = true }
+            }
             ForEach(BoardSidePalette.extras, id: \.title) { extra in
                 button(extra.symbol, extra.title) { extra.run(controller) }
             }

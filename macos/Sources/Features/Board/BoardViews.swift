@@ -80,6 +80,10 @@ struct BoardWindowView: View {
                 // ⌘P / ⌘⇧P over the whole window, for the tile with the cursor.
                 BoardPaletteLayer(controller: controller, model: model)
                 BoardRadialMenu(controller: controller, model: model)
+                if model.showMissionMap {
+                    MissionMapView(controller: controller, model: model)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
             }
         }
         .ignoresSafeArea()
