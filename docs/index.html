@@ -137,6 +137,12 @@ h2 { font-size: clamp(32px, 4.4vw, 54px); line-height: 1.05; letter-spacing: -.0
 .section-intro strong { color: var(--text); }
 h3 { font-size: 22px; font-weight: 650; margin: 0 0 10px; color: #EDE3CD; }
 
+/* ---------- boards ---------- */
+#boards .film { margin-top: 0; }
+.bfacts { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px 28px; margin: 34px 0 0; padding: 0; list-style: none; }
+.bfacts li { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line); padding-top: 12px; }
+.bfacts strong { display: block; color: var(--text); font-weight: 650; margin-bottom: 4px; }
+
 /* ---------- the roster ---------- */
 .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
 .fbtn { font: 600 11px var(--mono); letter-spacing: .12em; color: var(--muted); background: var(--raised); border: 1px solid var(--line); border-radius: 999px; padding: 7px 15px; cursor: pointer; transition: all .2s ease; }
@@ -880,6 +886,7 @@ footer.site nav a { color: var(--text); font-size: 14.5px; }
     </a>
     <nav aria-label="Site">
       <a href="#film">Watch</a>
+      <a href="#boards">Boards</a>
       <a href="#roster">Features</a>
       <a href="#story">Tour</a>
       <a href="#compare">VS mode</a>
@@ -927,6 +934,30 @@ footer.site nav a { color: var(--text); font-size: 14.5px; }
     </div>
   </div>
 </div>
+
+<!-- ======================= boards ======================= -->
+<section id="boards" class="tinted">
+  <div class="wrap">
+    <p class="eyebrow rv">NEW IN 1.8</p>
+    <h2 class="rv">Boards.</h2>
+    <p class="section-intro rv" style="--i:1">Your agents, on one board you can see, steer and hand work to.
+    Pick <strong>Board</strong> when you first open Tellurion, or any time in <strong>Settings → Edition</strong>.
+    Classic stays the default.</p>
+    <div class="film rv" style="--i:2">
+      <video id="boardsvid" src="assets/boards.mp4" poster="assets/img/boards-poster.webp" muted loop playsinline preload="none" tabindex="0"
+        aria-label="A 54-second tour of Tellurion Boards: twelve agent tiles in four projects, flying in to a tile and back out, answering a Claude Code permission prompt, spawning a team from a preset, wiring agents to an orchestrator card, the Mission Map, a web tile, the Agent Map and a kanban card moving to Done"></video>
+      <p class="filmcap">54 seconds · Claude Code and Codex are real, most background tiles are stand-ins <span class="pausehint" id="boardshint">click to play</span> <span class="pausehint"><a href="assets/boards.mp4">open the video</a></span></p>
+    </div>
+    <ul class="bfacts rv" style="--i:3">
+      <li><strong>Every terminal is a tile</strong>A full terminal, so Vim and every agent work as in a tab. Zoom, pan, and double-click a tile to fly to it.</li>
+      <li><strong>See who needs you</strong>Tile edges breathe while agents work and pulse when they need you. Allow and Deny from the list.</li>
+      <li><strong>Spin up a team</strong>Up to 12 agents at once from the Group composer or a preset, with one first task for all of them.</li>
+      <li><strong>Orchestrator</strong>A card that runs a group for you. Tap Connect, wire in agents, give it a command. Mission Map shows who runs whom.</li>
+      <li><strong>The board's agent</strong>Ask in plain words and it sets the board up. Type @ to message one agent or a whole group.</li>
+      <li><strong>And more</strong>Web tiles, the Agent Map, kanban you hand to agents, sketches and diagrams, and Pause all to freeze every agent mid-turn.</li>
+    </ul>
+  </div>
+</section>
 
 <!-- ======================= character select ======================= -->
 <section id="roster">
@@ -2495,6 +2526,32 @@ Running the tests…
           new IntersectionObserver(function (es) {
             es.forEach(function (en) { if (!en.isIntersecting) film.pause(); else if (hint && hint.textContent === "click to pause") film.play().catch(function () {}); });
           }, { threshold: .15 }).observe(film);
+        }
+      }
+    }
+  } catch (e) {}
+
+  /* ---------- the boards film: plays only once it's on screen ---------- */
+  try {
+    var bv = document.getElementById("boardsvid"), bh = document.getElementById("boardshint");
+    if (bv) {
+      if (reduced) { bv.setAttribute("controls", ""); if (bh) bh.hidden = true; }
+      else {
+        var bwant = true;
+        var btoggle = function () {
+          bwant = bv.paused;
+          if (bwant) { bv.play().catch(function () {}); } else { bv.pause(); }
+          if (bh) bh.textContent = bwant ? "click to pause" : "paused · click to play";
+        };
+        bv.addEventListener("click", btoggle);
+        bv.addEventListener("keydown", function (e) { if (e.key === " " || e.key === "Enter") { e.preventDefault(); btoggle(); } });
+        if ("IntersectionObserver" in window) {
+          new IntersectionObserver(function (es) {
+            es.forEach(function (en) {
+              if (!en.isIntersecting) bv.pause();
+              else if (bwant) { bv.play().then(function () { if (bh) bh.textContent = "click to pause"; }).catch(function () {}); }
+            });
+          }, { threshold: .35 }).observe(bv);
         }
       }
     }
