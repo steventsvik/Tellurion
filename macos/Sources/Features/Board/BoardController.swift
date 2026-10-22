@@ -132,6 +132,12 @@ final class BoardController: BaseTerminalController {
     let teamRelay = BoardTeamRelay()
     /// The Documents panel (see StudioDocuments).
     lazy var documents = StudioDocuments()
+    /// Diagrams drawn from the project (see StudioDiagrams).
+    lazy var diagrams: StudioDiagrams = {
+        let diagrams = StudioDiagrams()
+        diagrams.board = self
+        return diagrams
+    }()
     /// Each orchestrator card's brain, made on first use.
     var orchestratorBrains: [UUID: OrchestratorBrain] = [:]
     /// Escape ends connecting (see startWiring).

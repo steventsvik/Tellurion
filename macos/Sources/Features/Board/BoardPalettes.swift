@@ -213,6 +213,7 @@ struct BoardSidePalette: View {
     let controller: BoardController
     @ObservedObject var model: BoardModel
     @State private var showLayers = false
+    @State private var showDiagrams = false
 
     var body: some View {
         VStack(spacing: 2) {
@@ -226,6 +227,10 @@ struct BoardSidePalette: View {
                 button(extra.symbol, extra.title) { extra.run(controller) }
             }
             button("doc.richtext", "Documents") { controller.showDocuments() }
+            button("flowchart", "Diagrams") { showDiagrams.toggle() }
+                .popover(isPresented: $showDiagrams, arrowEdge: .leading) {
+                    StudioDiagramsPanel(diagrams: controller.diagrams) { showDiagrams = false }
+                }
             button("folder", "Files and changes") { showFiles() }
             button("arrow.triangle.2.circlepath", "Review loop for the focused agent") { showLoops() }
         }

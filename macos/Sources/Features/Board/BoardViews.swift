@@ -31,6 +31,11 @@ struct BoardWindowView: View {
                     BoardCanvasRepresentable(controller: controller)
                     BoardToolbar(controller: controller, model: model)
                         .padding(.top, 8)
+                    VStack {
+                        StudioDrawingPill(diagrams: controller.diagrams)
+                        Spacer()
+                    }
+                    .padding(.top, 52)
                     if let wiring = model.wiring {
                         VStack {
                             OrchestratorWiringBanner(controller: controller, id: wiring)
@@ -39,7 +44,8 @@ struct BoardWindowView: View {
                         .padding(.top, 52)
                     }
                     // Out of the way while drawing or placing things.
-                    if model.surfaces.isEmpty && model.tool == .select && model.cards.isEmpty && model.labels.isEmpty && model.ink.isEmpty {
+                    if model.surfaces.isEmpty && model.tool == .select && model.cards.isEmpty && model.sketches.isEmpty
+                        && model.labels.isEmpty && model.ink.isEmpty {
                         BoardEmptyState(controller: controller)
                     }
                     // "Your app is live" when a localhost session starts listening.

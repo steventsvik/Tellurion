@@ -96,7 +96,29 @@ final class SketchCanvasView: NSView, NSTextViewDelegate, NSServicesMenuRequesto
     var onChange: (([SketchElement]) -> Void)?
     var onToolChange: (() -> Void)?
 
-    private var selection: Set<UUID> = [] { didSet { if selection != oldValue { needsDisplay = true } } }
+    private var selection: Set<UUID> = [] {
+        didSet {
+            guard selection != oldValue else { return }
+            needsDisplay = true
+            onSelectionChange?()
+        }
+    }
+    /// The selection changed (the style panel follows it).
+    var onSelectionChange: (() -> Void)?
+
+    var selectedElements: [SketchElement] { elements.filter { selection.contains($0.id) } }
+
+    /// Changes the selected elements' style as one undoable step.
+    func styleSelection(_ action: String, _ change: (inout SketchElement) -> Void) {
+        guard !selection.isEmpty else { return }
+        let old = elements
+        for index in elements.indices where selection.contains(elements[index].id) { change(&elements[index]) }
+        commit(from: old, action)
+    }
+
+    func bringForward() { restack(front: true) }
+    func sendBackward() { restack(front: false) }
+    func deleteSelected() { deleteSelection() }
     private var gesture: Gesture?
     /// The elements before the current gesture, for undoing it as one step.
     private var undoBase: [SketchElement] = []

@@ -478,6 +478,27 @@ enum BoardTest {
             // docspdf <out.pdf>: exports what's shown, without asking where.
             guard let path = args.first else { return }
             PDFExporter.shared.export(html: MarkdownHTML.page(controller.documents.markdown), to: URL(fileURLWithPath: path))
+        case "diagramgen":
+            // diagramgen <project folder> <preset title…>: draws it (real run).
+            guard args.count >= 2 else { return }
+            controller.setFolder(args[0])
+            let title = args.dropFirst().joined(separator: " ")
+            guard let preset = StudioDiagram.presets.first(where: { $0.title == title }) else { return }
+            controller.diagrams.generate(preset.ask, title: preset.title)
+        case "diagramstarter":
+            // diagramstarter <name…> [colorful]
+            controller.diagrams.ink = args.last != "colorful"
+            controller.diagrams.starter(args.filter { $0 != "colorful" }.joined(separator: " "))
+        case "diagramjson":
+            // diagramjson <file.json> [colorful]: draws a diagram spec without a model.
+            guard let path = args.first, let data = FileManager.default.contents(atPath: path),
+                  let spec = try? JSONDecoder().decode(StudioDiagram.Spec.self, from: data) else { return }
+            let drawn = StudioDiagram.elements(spec, ink: args.last != "colorful")
+            let id = controller.addSketch(elements: drawn.elements, at: nil, size: drawn.size, focus: false)
+            controller.renameSketch(id, to: spec.title ?? "Diagram")
+        case "diagramstate":
+            DemoDirector.note("diagram drawing=\(controller.diagrams.drawing != nil) error=\(controller.diagrams.error ?? "-") sketches="
+                              + controller.model.sketches.map { "\($0.title):\($0.elements.count)" }.joined(separator: ","))
         case "mission":
             controller.model.showMissionMap = args.first != "off"
         case "orchnew":
