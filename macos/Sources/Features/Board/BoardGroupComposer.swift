@@ -133,8 +133,18 @@ struct BoardGroupComposer: View {
     }
 
     private func fillAll(_ installed: [BoardAgent]) -> some View {
-        HStack(spacing: 6) {
-            Text("Fill all").font(Extreme.font(10.5)).foregroundColor(Extreme.dim)
+        // Wraps: with many agents installed, one row would be wider than the composer.
+        HStack(alignment: .top, spacing: 6) {
+            Text("Fill all").font(Extreme.font(10.5)).foregroundColor(Extreme.dim).frame(height: 24)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 24, maximum: 24), spacing: 6)], alignment: .leading, spacing: 6) {
+                fillButtons(installed)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func fillButtons(_ installed: [BoardAgent]) -> some View {
+        Group {
             ForEach(installed) { agent in
                 Button { slots = slots.map { _ in Slot(agent: agent.binary) } } label: {
                     VerticalTabAgentLogo(kind: agent.kind, tint: Extreme.text).frame(width: 14, height: 14)

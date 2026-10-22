@@ -4,6 +4,12 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Fixed:** on macOS 27, **Pause all** let the shell take its terminal back ("suspended"), and **Resume all** then left the agents stopped. Pausing now stops each tile's shell first again, so agents pause and resume where they were.
+- **Fixed:** with the board zoomed out, buttons and menus on orchestrator cards and web tiles (Connect, Done, the screen size menu, tabs and the address row) missed clicks. They now work at any zoom.
+- **Fixed:** the group composer was cut off on its left side when many agents are installed. Its **Fill all** buttons now wrap onto more rows.
+
 ## 1.8.0
 
 - **Board edition.** Tellurion can now show your terminals as tiles on a board instead of tabs. Pick **Board** when you first open Tellurion, or any time in **Settings → Edition**; Classic stays the default and nothing changes unless you switch.

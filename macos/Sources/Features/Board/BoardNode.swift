@@ -62,6 +62,7 @@ class BoardNodeView: NSView {
         guard abs(self.zoom - zoom) > 0.001 else { return }
         self.zoom = zoom
         window?.invalidateCursorRects(for: self)
+        for case let view as BoardZoomAware in descendants { view.zoomChanged() }
     }
 
     override func layout() {

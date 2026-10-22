@@ -24,6 +24,19 @@ enum BoardPause {
             parents[pid] = info.ppid
             if let surface = ProcessProbe.environment(pid, surfaceKey), wanted.contains(surface) { found.append(pid) }
         }
+        // macOS hides the environment of its own programs (/bin/zsh, /bin/bash), so a tile's
+        // shell isn't found by its tag. It's the untagged parent of what's tagged, up to the
+        // root-owned login, which isn't one of ours.
+        var tagged = Set(found)
+        for pid in found {
+            var current = pid
+            while let parent = parents[current], parents[parent] != nil, !tagged.contains(parent),
+                  ProcessProbe.procArgs(parent)?.environment.isEmpty != false {
+                found.append(parent)
+                tagged.insert(parent)
+                current = parent
+            }
+        }
         let mine = Set(found)
         // How many of a process's ancestors are in the tile: 0 for the shell.
         func depth(_ pid: Int32) -> Int {

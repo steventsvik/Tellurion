@@ -208,7 +208,7 @@ final class WebContent: CardContent, WKNavigationDelegate, WKUIDelegate {
 
     private func attach() {
         guard chrome == nil, board != nil else { return }
-        let host = NSHostingView(rootView: WebTileChrome(state: state, actions: WebTileActions(
+        let host = BoardZoomHost(rootView: WebTileChrome(state: state, actions: WebTileActions(
             back: { [weak self] in self?.current?.goBack() },
             forward: { [weak self] in self?.current?.goForward() },
             reload: { [weak self] in
@@ -230,7 +230,6 @@ final class WebContent: CardContent, WKNavigationDelegate, WKUIDelegate {
             closeTab: { [weak self] index in self?.closeTab(index) },
             inspect: { [weak self] in self?.inspect() },
             viewport: { [weak self] name in self?.setViewport(name) })))
-        host.sizingOptions = []
         addSubview(host)
         chrome = host
     }

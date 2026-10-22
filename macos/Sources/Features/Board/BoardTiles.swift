@@ -218,6 +218,80 @@ final class PassiveHostingView<Content: View>: NSHostingView<Content> {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
+/// SwiftUI controls on the zoomed board. SwiftUI places a click by its distance from the
+/// hosting view in window points, without the board's zoom, so its buttons and menus are hit
+/// off target (and below about 90% miss). This keeps the hosting view in window points (the
+/// container's bounds are scaled back up) and draws the content at the board's zoom with
+/// SwiftUI's own scale effect, which hit-tests correctly. It looks the same as before.
+protocol BoardZoomAware: AnyObject {
+    func zoomChanged()
+}
+
+final class BoardZoomHost<Content: View>: NSView, BoardZoomAware {
+    private final class Geometry: ObservableObject {
+        @Published var size = CGSize.zero
+        @Published var scale: CGFloat = 1
+    }
+
+    private struct Scaled: View {
+        @ObservedObject var geometry: Geometry
+        let content: Content
+
+        var body: some View {
+            content
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .scaleEffect(geometry.scale, anchor: .topLeading)
+                .frame(width: geometry.size.width * geometry.scale, height: geometry.size.height * geometry.scale,
+                       alignment: .topLeading)
+        }
+    }
+
+    private let geometry = Geometry()
+    private let host: NSHostingView<Scaled>
+    private var pending: DispatchWorkItem?
+
+    init(rootView: Content) {
+        host = NSHostingView(rootView: Scaled(geometry: geometry, content: rootView))
+        host.sizingOptions = []
+        super.init(frame: .zero)
+        addSubview(host)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func layout() {
+        super.layout()
+        fit()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        fit()
+    }
+
+    /// Fits again once the zoom settles. Until then the content scales with the board like
+    /// any view; only clicks need the new fit.
+    func zoomChanged() {
+        pending?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.fit() }
+        pending = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+    }
+
+    private func fit() {
+        guard window != nil, let superview, frame.width > 0, frame.height > 0 else { return }
+        // Window points per board point.
+        let scale = max(superview.convert(NSSize(width: 1, height: 1), to: nil).width, 0.05)
+        let size = frame.size
+        let scaled = CGSize(width: size.width * scale, height: size.height * scale)
+        if bounds.size != scaled { bounds = CGRect(origin: .zero, size: scaled) }
+        if host.frame != bounds { host.frame = bounds }
+        if geometry.size != size { geometry.size = size }
+        if abs(geometry.scale - scale) > 0.0001 { geometry.scale = scale }
+    }
+}
+
 /// One terminal on the board: the title bar, the terminal and its status lights. Moving,
 /// resizing and the title bar's buttons are BoardNodeView's.
 final class BoardTileView: BoardNodeView {
