@@ -15,6 +15,8 @@ struct BoardTile: Codable, Identifiable, Equatable {
     var command: String?
     /// The name given to the tile (by a tool, or by renaming it).
     var title: String?
+    /// The account profiles its agents use (provider → profile id; see BoardAccounts).
+    var accounts: [String: UUID]?
 }
 
 /// A board: its tiles, where you were looking, and its window. Saved as versioned JSON in
@@ -38,6 +40,14 @@ struct BoardWorkspace: Codable, Identifiable, Equatable {
     var colors: [String: Int]?
     var sketches: [BoardSketch]?
     var cards: [BoardCard]?
+    /// Leads and the tiles they run (see BoardTeams).
+    var teams: [BoardTeam]?
+    /// Groups you made (see BoardNamedGroups).
+    var groups: [BoardGroupNode]?
+    /// Big text on the board (see BoardLabels).
+    var labels: [BoardLabelNode]?
+    /// Ink drawn on the board (see BoardInk).
+    var ink: [BoardInkStroke]?
     /// Open when Tellurion last quit; reopened at launch.
     var open = true
     var updated = Date()

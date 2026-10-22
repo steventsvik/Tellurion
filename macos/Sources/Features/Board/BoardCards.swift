@@ -6,7 +6,7 @@ import AppKit
 /// Codex tile), and then follows that agent: Doing while it works, Done when it finishes.
 struct BoardCard: Codable, Identifiable, Equatable {
     enum Kind: String, Codable, CaseIterable {
-        case note, checklist, kanban, map
+        case note, checklist, kanban, map, orchestrator, web, document, media
 
         var title: String {
             switch self {
@@ -14,6 +14,10 @@ struct BoardCard: Codable, Identifiable, Equatable {
             case .checklist: return "Checklist"
             case .kanban: return "Kanban"
             case .map: return "Agent Map"
+            case .orchestrator: return "Orchestrator"
+            case .web: return "Web"
+            case .document: return "Document"
+            case .media: return "Media"
             }
         }
 
@@ -23,6 +27,10 @@ struct BoardCard: Codable, Identifiable, Equatable {
             case .checklist: return "checklist"
             case .kanban: return "rectangle.split.3x1"
             case .map: return "map"
+            case .orchestrator: return "point.3.connected.trianglepath.dotted"
+            case .web: return "globe"
+            case .document: return "doc.richtext"
+            case .media: return "play.rectangle"
             }
         }
 
@@ -30,8 +38,12 @@ struct BoardCard: Codable, Identifiable, Equatable {
             switch self {
             case .note: return CGSize(width: 340, height: 300)
             case .checklist: return CGSize(width: 380, height: 420)
-            case .kanban: return CGSize(width: 900, height: 520)
+            case .kanban: return CGSize(width: 1120, height: 540)
             case .map: return CGSize(width: 980, height: 640)
+            case .orchestrator: return CGSize(width: 380, height: 520)
+            case .web: return BoardWeb.size
+            case .document: return CGSize(width: 620, height: 780)
+            case .media: return BoardMedia.size
             }
         }
     }
@@ -46,6 +58,16 @@ struct BoardCard: Codable, Identifiable, Equatable {
     var items: [CardItem] = []
     /// An Agent Map's project folder.
     var folder: String?
+    /// 2: kanban columns are Backlog, To Do, In Progress, Done (nil: an older card with To Do,
+    /// Doing, Done, moved over when the board opens).
+    var kanbanVersion: Int?
+    /// A web tile's tabs (their addresses; empty for the start page), the one shown, and its
+    /// viewport preset.
+    var tabs: [String]?
+    var tab: Int?
+    var viewport: String?
+    /// A document card's markdown file.
+    var file: String?
     /// Where it sits on the board (kept in the board's frames while open).
     var frame: CGRect = .zero
 }
@@ -55,18 +77,25 @@ struct CardItem: Codable, Identifiable, Equatable {
     var id = UUID()
     var text: String
     var done = false
-    /// Kanban column: 0 To Do, 1 Doing, 2 Done.
-    var column = 0
+    /// Kanban column (see `columns`); new cards go in To Do.
+    var column = CardItem.todo
     /// The tile whose agent is working on it.
     var agent: UUID?
+    /// When it's due, and how much it matters (0 low, 1 medium, 2 high).
+    var due: Date?
+    var priority: Int?
 
-    static let columns = ["To Do", "Doing", "Done"]
+    static let columns = ["Backlog", "To Do", "In Progress", "Done"]
+    static let backlog = 0, todo = 1, doing = 2, done = 3
+    static let priorities = ["Low", "Med", "High"]
 }
 
 extension BoardController {
     @discardableResult
-    func addCard(_ kind: BoardCard.Kind, at point: CGPoint? = nil) -> UUID {
+    /// `edit` puts the cursor in it (not when the board's agent adds one).
+    func addCard(_ kind: BoardCard.Kind, at point: CGPoint? = nil, edit: Bool = true) -> UUID {
         var card = BoardCard(id: UUID(), kind: kind, title: BoardStore.uniqueName(kind.title, taken: Set(model.cards.map(\.title))))
+        if kind == .kanban { card.kanbanVersion = 2 }
         if kind == .checklist { card.items = [] }
         if kind == .map {
             card.folder = mapFolder(near: point)
@@ -79,7 +108,7 @@ extension BoardController {
             guard let self else { return }
             self.raise(id: card.id)
             if let frame = self.model.frames[card.id] { self.revealRect(frame) }
-            self.cardView(card.id)?.beginTyping()
+            if edit { self.cardView(card.id)?.beginTyping() }
         }
         return card.id
     }
@@ -91,15 +120,22 @@ extension BoardController {
         scheduleSave()
     }
 
-    /// Closes a card; ⌘Z brings it back.
+    /// Closes a card; ⌘Z brings it back (an orchestrator with its wiring).
     func removeCard(_ id: UUID) {
         guard let index = model.cards.firstIndex(where: { $0.id == id }) else { return }
         let card = model.cards[index]
         let frame = model.frames[id] ?? .zero
+        let team = orchestrator(id)
         model.cards.remove(at: index)
         model.order.removeAll { $0 == id }
+        if team != nil {
+            model.teams.removeAll { $0.id == id }
+            orchestratorBrains.removeValue(forKey: id)?.stop(quietly: true)
+            if model.wiring == id { endWiring() }
+        }
         undoManager?.registerUndo(withTarget: self) { board in
             board.insertCard(card, frame: frame)
+            if let team { board.model.teams.append(team) }
             board.undoManager?.registerUndo(withTarget: board) { $0.removeCard(id) }
         }
         undoManager?.setActionName("Close \(card.kind.title)")
@@ -226,7 +262,7 @@ extension BoardController {
             guard let index = card.items.firstIndex(where: { $0.id == itemID }) else { return }
             card.items[index].agent = surface
             card.items[index].done = false
-            if card.kind == .kanban { Self.move(&card.items, index, toColumn: 1) }
+            if card.kind == .kanban { Self.move(&card.items, index, toColumn: CardItem.doing) }
         }
     }
 
@@ -238,10 +274,10 @@ extension BoardController {
                 for index in card.items.indices where card.items[index].agent == surface.id {
                     switch activity {
                     case .working:
-                        if card.kind == .kanban, card.items[index].column != 1 { Self.move(&card.items, index, toColumn: 1) }
+                        if card.kind == .kanban, card.items[index].column != CardItem.doing { Self.move(&card.items, index, toColumn: CardItem.doing) }
                     case .done:
                         card.items[index].done = true
-                        if card.kind == .kanban, card.items[index].column != 2 { Self.move(&card.items, index, toColumn: 2) }
+                        if card.kind == .kanban, card.items[index].column != CardItem.done { Self.move(&card.items, index, toColumn: CardItem.done) }
                     default:
                         break
                     }
@@ -250,11 +286,20 @@ extension BoardController {
         }
     }
 
+    /// Kanbans from before Backlog: To Do, Doing and Done move one column right.
+    static func migrated(_ card: BoardCard) -> BoardCard {
+        guard card.kind == .kanban, card.kanbanVersion == nil else { return card }
+        var card = card
+        for index in card.items.indices { card.items[index].column = min(card.items[index].column + 1, CardItem.done) }
+        card.kanbanVersion = 2
+        return card
+    }
+
     /// Moves a kanban card to the end of a column.
     static func move(_ items: inout [CardItem], _ index: Int, toColumn column: Int) {
         var item = items.remove(at: index)
         item.column = column
-        item.done = column == 2
+        item.done = column == CardItem.done
         let last = items.lastIndex { $0.column == column }.map { $0 + 1 } ?? items.count
         items.insert(item, at: last)
     }

@@ -71,6 +71,9 @@ The sidebar and chrome are in every tab's window, so small costs multiply.
 - Agent and localhost events are terminal escape sequences signed with a per-launch
   token (`EventToken.swift`). Any new event must be verified the same way.
 - The editor's web view only loads its own `ghostty-editor://` pages.
+- Board web tiles may load any http(s) site, sandboxed (`BoardWebTile.swift`): their own website
+  data store, no script message handlers, downloads refused, new windows kept in the tile,
+  camera and microphone denied. Keep it that way; never add a bridge into the app there.
 - The Backend view runs providers' own CLIs, read-only, and never reads credentials or
   env values (names only).
 - Never commit paths into the maintainer's home folder, tokens or personal data;

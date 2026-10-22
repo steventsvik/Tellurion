@@ -14,6 +14,15 @@ final class BoardModel: ObservableObject {
     /// The zoom once a pinch or zoom animation has settled (not every step of it).
     @Published var zoom: CGFloat = 1
     @Published var showComposer = false
+    @Published var showOrchestratorComposer = false
+    /// The Group composer, from the bar's Group chip (prefilled when editing a preset).
+    @Published var showGroupComposer = false
+    @Published var showMissionMap = false
+    @Published var showDocuments = false
+    @Published var showAccounts = false
+    /// Which account profiles each tile's agents use (see BoardAccounts).
+    @Published var tileAccounts: [UUID: [BoardAccount.Provider: UUID]] = [:]
+    var groupComposerPreset: BoardPreset?
     @Published var showSidebar = true
     @Published var name = ""
     /// Bumped when an agent on this board changes, so the list and tiles refresh.
@@ -31,6 +40,27 @@ final class BoardModel: ObservableObject {
     @Published var cards: [BoardCard] = []
     /// The sketch with the keyboard, if one has it.
     @Published var focusedSketch: UUID?
+    /// Tiles whose processes are stopped (see BoardPause).
+    @Published var paused: Set<UUID> = []
+    /// Orchestrators and what's wired to them (see BoardTeams).
+    @Published var teams: [BoardTeam] = []
+    /// Groups you made (see BoardNamedGroups).
+    @Published var groups: [BoardGroupNode] = []
+    /// Big text on the board, and ink drawn on it.
+    @Published var labels: [BoardLabelNode] = []
+    @Published var ink: [BoardInkStroke] = []
+    /// What a click on the board does (see BoardPalettes).
+    @Published var tool: BoardTool = .select
+    @Published var inkColor = UserDefaults.standard.integer(forKey: "BoardInkColor") {
+        didSet { UserDefaults.standard.set(inkColor, forKey: "BoardInkColor") }
+    }
+    @Published var inkWidth: CGFloat = UserDefaults.standard.object(forKey: "BoardInkWidth") as? CGFloat ?? 2.5 {
+        didSet { UserDefaults.standard.set(inkWidth, forKey: "BoardInkWidth") }
+    }
+    /// The radial menu: where it opened in the window (SwiftUI points) and on the board.
+    @Published var radial: (window: CGPoint, board: CGPoint)?
+    /// The orchestrator that clicks on tiles and groups wire to, while connecting.
+    @Published var wiring: UUID?
     /// The next change to `frames` slides the tiles there instead of jumping.
     var animateNextLayout = false
 
@@ -38,7 +68,7 @@ final class BoardModel: ObservableObject {
     func color(of id: UUID) -> Int? { projects[id].flatMap { colors[$0] } }
 
     /// Every tile on the board: terminals and sketches.
-    var nodeIDs: [UUID] { surfaces.map(\.id) + sketches.map(\.id) + cards.map(\.id) }
+    var nodeIDs: [UUID] { surfaces.map(\.id) + sketches.map(\.id) + cards.map(\.id) + labels.map(\.id) }
 
     var stacked: [Ghostty.SurfaceView] {
         surfaces.sorted { (order.firstIndex(of: $0.id) ?? -1) < (order.firstIndex(of: $1.id) ?? -1) }
@@ -80,7 +110,8 @@ final class BoardController: BaseTerminalController {
     weak var canvas: BoardCanvasView?
 
     /// The line each tile was opened with, started again after a relaunch.
-    private var commands: [UUID: String] = [:]
+    /// The line each tile was started with, to start it again after a relaunch.
+    private(set) var commands: [UUID: String] = [:]
     /// Tiles where an agent has reported status. When its status goes away, the agent quit
     /// and isn't started again.
     private var agentSeen: Set<UUID> = []
@@ -96,6 +127,38 @@ final class BoardController: BaseTerminalController {
     private var launchFolders: [UUID: String] = [:]
     /// Draws the groups and the snapping lines (set by BoardTiles).
     weak var groupsView: BoardGroupsView?
+    /// The board's own agent, in the bar at the bottom (see BoardAssistant).
+    private(set) lazy var assistant = BoardAssistant(controller: self)
+    /// The bar's text field, for ⌘L.
+    weak var assistantField: NSTextField?
+    /// What orchestrators have yet to hear from their agents (see BoardTeams).
+    let teamRelay = BoardTeamRelay()
+    /// The Documents panel (see StudioDocuments).
+    lazy var documents = StudioDocuments()
+    /// Diagrams drawn from the project (see StudioDiagrams).
+    lazy var diagrams: StudioDiagrams = {
+        let diagrams = StudioDiagrams()
+        diagrams.board = self
+        return diagrams
+    }()
+    /// Each orchestrator card's brain, made on first use.
+    var orchestratorBrains: [UUID: OrchestratorBrain] = [:]
+    /// Escape ends connecting (see startWiring).
+    var wiringMonitor: Any?
+    /// The tool keys (see installToolKeys).
+    var toolKeyMonitor: Any?
+    /// The board's cursor follows the tool, however it changed.
+    var toolCursor: AnyCancellable?
+    /// Tile labels, built once per run-loop turn (a redraw asks for them many times).
+    var tileLabelCache: (key: [UUID], titles: [UUID: String], labels: [(id: UUID, label: String, surface: Ghostty.SurfaceView)])?
+    /// What a closed tile belonged to, so undoing the close puts it back.
+    private var closedTiles: [UUID: ClosedTile] = [:]
+
+    private struct ClosedTile {
+        var group: BoardGroupNode?
+        var ink: [BoardInkStroke]
+        var teams: [(team: UUID, member: BoardTeam.Member)]
+    }
 
     // MARK: Opening
 
@@ -120,6 +183,12 @@ final class BoardController: BaseTerminalController {
                 var config = Ghostty.SurfaceConfiguration()
                 config.workingDirectory = tile.cwd ?? workspace.folder
                 if restoring, let line = BoardAgent.resumeCommand(for: tile) { config.initialInput = line }
+                // The same account profiles as before.
+                let chosen = Dictionary(uniqueKeysWithValues: (tile.accounts ?? [:]).compactMap { key, value in
+                    BoardAccount.Provider(rawValue: key).map { ($0, value) }
+                })
+                for (key, value) in BoardAccounts.shared.environment(chosen) { config.environmentVariables[key] = value }
+                if !chosen.isEmpty { model.tileAccounts[tile.id] = chosen }
                 let view = Ghostty.SurfaceView(app, baseConfig: config, uuid: tile.id)
                 if let last = tree.root?.leftmostLeaf(), let next = try? tree.inserting(view: view, at: last, direction: .right) {
                     tree = next
@@ -139,11 +208,19 @@ final class BoardController: BaseTerminalController {
             model.frames[sketch.id] = sketch.frame
             model.order.append(sketch.id)
         }
-        for card in workspace.cards ?? [] {
+        for card in (workspace.cards ?? []).map(BoardController.migrated) {
             model.cards.append(card)
             model.frames[card.id] = card.frame
             model.order.append(card.id)
         }
+        model.groups = workspace.groups ?? []
+        model.labels = workspace.labels ?? []
+        for label in model.labels {
+            model.frames[label.id] = label.frame
+            model.order.append(label.id)
+        }
+        model.ink = workspace.ink ?? []
+        model.teams = (workspace.teams ?? []).filter { team in model.cards.contains { $0.id == team.id } }
         model.name = workspace.name
         model.colors = workspace.colors ?? [:]
         self.model = model
@@ -156,9 +233,13 @@ final class BoardController: BaseTerminalController {
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: VerticalTabsAgents.didChange, object: nil, queue: .main) { [weak self] note in
             guard let self, let surface = note.object as? Ghostty.SurfaceView, self.surfaceTree.contains(surface) else { return }
-            if VerticalTabsAgents.shared.info(for: surface) != nil { self.agentSeen.insert(surface.id) }
+            if VerticalTabsAgents.shared.info(for: surface) != nil {
+                self.agentSeen.insert(surface.id)
+                self.nameAgentIfNeeded(surface)
+            }
             self.model.agentTick &+= 1
             self.cardsAgentChanged(surface)
+            self.teamMemberChanged(surface)
             self.scheduleSave()
         })
         observers.append(center.addObserver(forName: Ghostty.Notification.ghosttyNewTab, object: nil, queue: .main) { [weak self] note in
@@ -170,6 +251,7 @@ final class BoardController: BaseTerminalController {
             // Another tool showing a tile (Mission Control, a notification, the palette):
             // the board moves to it too.
             guard let self, let surface = note.object as? Ghostty.SurfaceView, self.surfaceTree.contains(surface) else { return }
+            self.expandGroup(containing: surface.id)
             self.raise(surface)
             self.reveal(surface)
         })
@@ -227,6 +309,7 @@ final class BoardController: BaseTerminalController {
         if let first = surfaceTree.root?.leftmostLeaf() {
             Ghostty.moveFocus(to: first)
         }
+        installToolKeys()
         BoardTest.startIfRequested(self)
     }
 
@@ -277,16 +360,56 @@ final class BoardController: BaseTerminalController {
         let surfaces = Array(to)
         // Undo keeps a closed terminal alive; it isn't the board's focused tile any more.
         if let focused = model.focused?.value, !to.contains(focused) { model.focused = nil }
+        // A paused tile that closes is continued, so it can quit.
+        let gone = model.paused.subtracting(surfaces.map(\.id))
+        if !gone.isEmpty {
+            model.paused.subtract(gone)
+            BoardPause.queue.async { BoardPause.set(false, surfaces: gone) }
+        }
         let anchor = focusedSurface.flatMap { model.frames[$0.id] }
         for view in surfaces where model.frames[view.id] == nil {
             // A split, a new tab from a keybinding, or an undone close.
             model.frames[view.id] = freeSpot(size: Self.tileSize, near: anchor)
         }
         for view in surfaces where !model.order.contains(view.id) { model.order.append(view.id) }
+        let before = Set(from.map(\.id)), after = Set(surfaces.map(\.id))
+        for id in before.subtracting(after) {
+            closedTiles[id] = ClosedTile(
+                group: model.groups.first { $0.tiles.contains(id) },
+                ink: model.ink.filter { $0.anchor == id },
+                teams: model.teams.compactMap { team in team.members.first { $0.tile == id }.map { (team.id, $0) } })
+        }
         model.surfaces = surfaces
+        for id in after.subtracting(before) {
+            if let closed = closedTiles.removeValue(forKey: id) { restore(closed, tile: id) }
+        }
+        // Closed tiles come unwired.
+        if !model.teams.isEmpty { pruneTeams() }
+        if !model.groups.isEmpty { pruneGroups() }
+        if !model.ink.isEmpty { pruneInk() }
         watchProjects()
         updateVisibility()
         scheduleSave()
+    }
+
+    /// An undone close: back into its group (made again if it had gone), with its ink and wires.
+    private func restore(_ closed: ClosedTile, tile id: UUID) {
+        if let group = closed.group {
+            if let index = model.groups.firstIndex(where: { $0.id == group.id }) {
+                if !model.groups[index].tiles.contains(id) { model.groups[index].tiles.append(id) }
+            } else if model.groups.allSatisfy({ !$0.tiles.contains(id) }) {
+                var group = group
+                group.tiles = [id]
+                model.groups.append(group)
+            }
+        }
+        let inked = Set(model.ink.map(\.id))
+        model.ink += closed.ink.filter { !inked.contains($0.id) }
+        for (team, member) in closed.teams {
+            guard let index = model.teams.firstIndex(where: { $0.id == team }),
+                  !model.teams[index].members.contains(where: { $0.tile == id }) else { continue }
+            model.teams[index].members.append(member)
+        }
     }
 
     // MARK: Projects
@@ -344,9 +467,10 @@ final class BoardController: BaseTerminalController {
 
     /// A new terminal tile beside the other tiles of its project, next to `near` or in the
     /// middle of the view.
+    /// `focus` false leaves the keyboard where it is (tiles an orchestrator opens).
     @discardableResult
     func addTile(config: Ghostty.SurfaceConfiguration? = nil, command: String? = nil,
-                 near: Ghostty.SurfaceView? = nil, frame: CGRect? = nil) -> Ghostty.SurfaceView? {
+                 near: Ghostty.SurfaceView? = nil, frame: CGRect? = nil, focus: Bool = true) -> Ghostty.SurfaceView? {
         guard let app = ghostty.app else { return nil }
         var config = config ?? Ghostty.SurfaceConfiguration()
         // A tile opened a moment ago may not know its folder yet; the one it was opened in counts.
@@ -354,13 +478,17 @@ final class BoardController: BaseTerminalController {
             config.workingDirectory = (near ?? focusedSurface).flatMap(folder(of:)) ?? workspace.folder
         }
         if let command { config.initialInput = command }
+        // The active account profiles, unless it was given its own.
+        let own = BoardAccount.Provider.allCases.contains { config.environmentVariables[$0.variable] != nil }
+        let accounts = own ? [:] : applyAccounts(&config)
         let view = Ghostty.SurfaceView(app, baseConfig: config)
+        if !accounts.isEmpty { model.tileAccounts[view.id] = accounts }
         if let folder = config.workingDirectory { launchFolders[view.id] = folder }
         let anchor = (near ?? focusedSurface).flatMap { model.frames[$0.id] }
         model.frames[view.id] = frame ?? freeSpot(size: Self.tileSize, project: BoardProjects.project(of: config.workingDirectory), near: anchor)
         if let command { commands[view.id] = command }
-        insert([view], undoAction: "New Terminal")
-        reveal(view)
+        insert([view], undoAction: "New Terminal", focus: focus)
+        if focus { reveal(view) }
         return view
     }
 
@@ -373,7 +501,7 @@ final class BoardController: BaseTerminalController {
         return addTile(config: config, near: oldView)
     }
 
-    private func insert(_ views: [Ghostty.SurfaceView], undoAction: String) {
+    func insert(_ views: [Ghostty.SurfaceView], undoAction: String, focus: Bool = true) {
         var tree = surfaceTree
         for view in views {
             if let last = tree.root?.leftmostLeaf(), let next = try? tree.inserting(view: view, at: last, direction: .right) {
@@ -382,12 +510,14 @@ final class BoardController: BaseTerminalController {
                 tree = SplitTree(view: view)
             }
         }
-        replaceSurfaceTree(tree, moveFocusTo: views.first, moveFocusFrom: focusedSurface, undoAction: undoAction)
+        replaceSurfaceTree(tree, moveFocusTo: focus ? views.first : nil, moveFocusFrom: focus ? focusedSurface : nil, undoAction: undoAction)
     }
 
     /// Starts agents and shells from the composer as a block of tiles, then shows them all.
-    func launch(_ lines: [(agent: BoardAgent?, command: String)], folder: String?) {
-        guard let app = ghostty.app, !lines.isEmpty else { return }
+    /// `skip`: the agents were started without permission prompts (kept for their restarts).
+    @discardableResult
+    func launch(_ lines: [(agent: BoardAgent?, command: String)], folder: String?, skip: Bool = false) -> [Ghostty.SurfaceView] {
+        guard let app = ghostty.app, !lines.isEmpty else { return [] }
         if let folder { workspace.folder = folder }
         let n = lines.count
         let columns = n <= 3 ? n : Int(ceil(Double(n).squareRoot()))
@@ -404,18 +534,29 @@ final class BoardController: BaseTerminalController {
             var config = Ghostty.SurfaceConfiguration()
             config.workingDirectory = folder ?? workspace.folder
             config.initialInput = line.command.isEmpty ? nil : line.command
+            let accounts = applyAccounts(&config)
             let view = Ghostty.SurfaceView(app, baseConfig: config)
+            if !accounts.isEmpty { model.tileAccounts[view.id] = accounts }
             let col = index % columns, row = index / columns
             model.frames[view.id] = CGRect(x: area.minX + CGFloat(col) * (size.width + Self.gap),
                                            y: area.minY + CGFloat(row) * (size.height + Self.gap),
                                            width: size.width, height: size.height)
             // Started again plainly after a relaunch (Claude Code and Codex resume instead).
-            commands[view.id] = line.agent.map { $0.binary + "\n" } ?? nil
+            commands[view.id] = line.agent.map { agent in
+                agent.binary + (skip ? agent.skipFlag.map { " " + $0 } ?? "" : "") + "\n"
+            } ?? nil
             views.append(view)
         }
         insert(views, undoAction: n == 1 ? "Launch Agent" : "Launch Agents")
         zoom(toFit: area, animated: true)
+        return views
     }
+
+    /// The folder new tiles start in, from now on.
+    func setFolder(_ folder: String) { workspace.folder = folder }
+
+    /// The line a tile is started with again after a relaunch.
+    func setCommand(_ line: String, for id: UUID) { commands[id] = line }
 
     func close(_ view: Ghostty.SurfaceView) {
         closeSurface(view, withConfirmation: view.needsConfirmQuit)
@@ -498,8 +639,10 @@ final class BoardController: BaseTerminalController {
     }
 
     /// A tile dropped mostly over another slides to the nearest free spot.
-    func settleDrop(id: UUID) {
+    /// `from`: where the drag began, so ⌘Z after a drop that changed its group puts it back.
+    func settleDrop(id: UUID, from: CGRect? = nil) {
         defer { tileDidSettle() }
+        if !model.groups.isEmpty { regroup(after: id, from: from) }
         guard let frame = model.frames[id] else { return }
         let others = model.nodeIDs.filter { $0 != id }.compactMap { model.frames[$0] }
         let covers = others.contains { other in
@@ -624,7 +767,8 @@ final class BoardController: BaseTerminalController {
     }
 
     /// A sheet with one field to rename a tile, sketch or card.
-    func promptRename(_ title: String, info: String? = nil, current: String, done: @escaping (String) -> Void) {
+    func promptRename(_ title: String, info: String? = nil, current: String, button: String = "Rename",
+                      done: @escaping (String) -> Void) {
         guard let window else { return }
         let alert = NSAlert()
         alert.messageText = title
@@ -632,7 +776,7 @@ final class BoardController: BaseTerminalController {
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
         field.stringValue = current
         alert.accessoryView = field
-        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: button)
         alert.addButton(withTitle: "Cancel")
         alert.window.initialFirstResponder = field
         alert.beginSheetModal(for: window) { response in
@@ -767,6 +911,7 @@ final class BoardController: BaseTerminalController {
 
     /// Zooms in on the tile at full size and puts the cursor in it.
     func focusTile(_ view: Ghostty.SurfaceView) {
+        expandGroup(containing: view.id)
         raise(view)
         zoom(toNode: view.id)
         Ghostty.moveFocus(to: view)
@@ -853,9 +998,10 @@ final class BoardController: BaseTerminalController {
         guard let canvas else { return }
         let windowVisible = window?.occlusionState.contains(.visible) ?? false
         let view = canvas.documentVisibleRect.insetBy(dx: -80, dy: -80)
+        let collapsed = collapsedTiles
         for surfaceView in surfaceTree {
             guard let surface = surfaceView.surface, let frame = model.frames[surfaceView.id] else { continue }
-            let on = windowVisible && frame.intersects(view)
+            let on = windowVisible && frame.intersects(view) && !collapsed.contains(surfaceView.id)
             if visible[surfaceView.id] != on {
                 visible[surfaceView.id] = on
                 ghostty_surface_set_occlusion(surface, on)
@@ -894,9 +1040,20 @@ final class BoardController: BaseTerminalController {
                              agent: kind.flatMap { $0 == .unknown ? nil : $0.rawValue },
                              session: info.flatMap(ResumeAfterUpdate.session(for:)),
                              command: commands[view.id],
-                             title: model.titles[view.id])
+                             title: model.titles[view.id],
+                             accounts: model.tileAccounts[view.id].map { chosen in
+                                 Dictionary(uniqueKeysWithValues: chosen.map { ($0.key.rawValue, $0.value) })
+                             })
         }
         workspace.colors = model.colors.isEmpty ? nil : model.colors
+        workspace.teams = model.teams.isEmpty ? nil : model.teams
+        workspace.groups = model.groups.isEmpty ? nil : model.groups
+        workspace.labels = model.labels.isEmpty ? nil : model.labels.map { label in
+            var label = label
+            label.frame = model.frames[label.id] ?? label.frame
+            return label
+        }
+        workspace.ink = model.ink.isEmpty ? nil : model.ink
         workspace.cards = model.cards.isEmpty ? nil : model.cards.map { card in
             var card = card
             card.frame = model.frames[card.id] ?? card.frame
@@ -961,6 +1118,15 @@ final class BoardController: BaseTerminalController {
     }
 
     override func windowWillClose(_ notification: Notification) {
+        setPaused(false)
+        for brain in orchestratorBrains.values { brain.stop(quietly: true) }
+        // Headless runs end with the board.
+        assistant.stop()
+        documents.stop()
+        diagrams.cancel()
+        endWiring()
+        if let toolKeyMonitor { NSEvent.removeMonitor(toolKeyMonitor) }
+        toolKeyMonitor = nil
         if deleteOnClose {
             BoardStore.delete(workspace.id)
         } else {

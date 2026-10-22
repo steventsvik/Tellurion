@@ -137,6 +137,26 @@ final class VerticalTabsAgents {
         return true
     }
 
+    /// A transcript's path from a "transcript" event: the path itself, or (when it was too
+    /// long to send) a Claude Code session id, found in ~/.claude/projects.
+    static func transcriptPath(_ detail: String, agent: String?) -> String? {
+        if detail.hasPrefix("/") { return detail }
+        guard agent == "claude", (8...64).contains(detail.count),
+              detail.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }) else { return nil }
+        if let known = sessionPaths[detail] { return known }
+        let root = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/projects", isDirectory: true)
+        for folder in (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? [] {
+            let path = root.appendingPathComponent(folder).appendingPathComponent(detail + ".jsonl").path
+            if FileManager.default.fileExists(atPath: path) {
+                sessionPaths[detail] = path
+                return path
+            }
+        }
+        return nil
+    }
+
+    private static var sessionPaths: [String: String] = [:]
+
     private func apply(_ event: Event, to surface: Ghostty.SurfaceView) {
         if event.agent == "codex", let session = event.session {
             let existing = states.object(forKey: surface)?.info
@@ -161,7 +181,7 @@ final class VerticalTabsAgents {
             return
         }
         if event.event == "transcript" {
-            guard let path = event.detail, !path.isEmpty else { return }
+            guard let path = event.detail.flatMap({ Self.transcriptPath($0, agent: event.agent) }) else { return }
             if let box = states.object(forKey: surface) {
                 box.info.transcriptPath = path
             } else {

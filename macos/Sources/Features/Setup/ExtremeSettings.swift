@@ -26,6 +26,13 @@ enum ExtremeFeature: String, CaseIterable, Identifiable {
     case phone
     case localModels
     case menuBar
+    case webTiles
+    case ink
+    case documents
+    case diagrams
+    case accounts
+    case missionMap
+    case media
 
     var id: String { rawValue }
 
@@ -51,6 +58,13 @@ enum ExtremeFeature: String, CaseIterable, Identifiable {
         case .phone: return "Phone"
         case .localModels: return "Local models"
         case .menuBar: return "Menu bar"
+        case .webTiles: return "Web tiles"
+        case .ink: return "Draw on boards"
+        case .documents: return "Documents"
+        case .diagrams: return "Diagrams"
+        case .accounts: return "Accounts"
+        case .missionMap: return "Mission Map"
+        case .media: return "Media tiles"
         }
     }
 
@@ -76,6 +90,13 @@ enum ExtremeFeature: String, CaseIterable, Identifiable {
         case .phone: return "Use your terminal from your phone over your own private Tailscale network"
         case .localModels: return "Chat with a model on this Mac (Ollama), offline: open it from the sidebar, or drag it under a chat"
         case .menuBar: return "Which agents need you, from the menu bar, with your boards and a new sketch a click away"
+        case .webTiles: return "Any website or your dev server in a tile on a board, sandboxed, at real device sizes"
+        case .ink: return "A pen and labels straight on a board, over tiles and empty space"
+        case .documents: return "Project overviews, guides and references your CLI writes from the code, read-only, with PDF export"
+        case .diagrams: return "Architecture and flow diagrams your CLI draws from the project, as editable sketches"
+        case .accounts: return "More than one Claude Code or Codex sign-in, and which one each tile uses"
+        case .missionMap: return "Who runs whom on a board: orchestrators, groups and every agent's status"
+        case .media: return "Video and music files playing in a tile on a board"
         }
     }
 
@@ -94,7 +115,8 @@ enum ExtremeFeature: String, CaseIterable, Identifiable {
         case .memory: return "Y"
         case .skills: return "U"
         case .environment: return "N"
-        case .undo, .usage, .ports, .git, .sharedMemory, .phone, .localModels, .menuBar: return nil
+        case .undo, .usage, .ports, .git, .sharedMemory, .phone, .localModels, .menuBar,
+             .webTiles, .ink, .documents, .diagrams, .accounts, .missionMap, .media: return nil
         }
     }
 
@@ -256,7 +278,17 @@ final class ExtremeSettings: ObservableObject {
             if PhoneServer.shared.running { PhoneServer.shared.turnOff() }
         case .localModels:
             AgentToolWindows.close(id: LocalModelsWindow.windowID)
-        case .races, .undo, .usage, .git, .sharedMemory, .menuBar:
+        case .ink:
+            for board in BoardController.all where board.model.tool == .pen || board.model.tool == .eraser { board.model.tool = .select }
+        case .webTiles:
+            for board in BoardController.all where board.model.tool == .web { board.model.tool = .select }
+        case .documents:
+            for board in BoardController.all { board.model.showDocuments = false }
+        case .missionMap:
+            for board in BoardController.all { board.model.showMissionMap = false }
+        case .accounts:
+            for board in BoardController.all { board.model.showAccounts = false }
+        case .races, .undo, .usage, .git, .sharedMemory, .menuBar, .diagrams, .media:
             break
         }
     }

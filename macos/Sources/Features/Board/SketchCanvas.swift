@@ -96,7 +96,37 @@ final class SketchCanvasView: NSView, NSTextViewDelegate, NSServicesMenuRequesto
     var onChange: (([SketchElement]) -> Void)?
     var onToolChange: (() -> Void)?
 
-    private var selection: Set<UUID> = [] { didSet { if selection != oldValue { needsDisplay = true } } }
+    private var selection: Set<UUID> = [] {
+        didSet {
+            guard selection != oldValue else { return }
+            needsDisplay = true
+            onSelectionChange?()
+        }
+    }
+    /// The selection changed (the style panel follows it).
+    var onSelectionChange: (() -> Void)?
+
+    var selectedElements: [SketchElement] { elements.filter { selection.contains($0.id) } }
+
+    /// Changes the selected elements' style as one undoable step.
+    func styleSelection(_ action: String, _ change: (inout SketchElement) -> Void) {
+        guard !selection.isEmpty else { return }
+        let old = elements
+        for index in elements.indices where selection.contains(elements[index].id) {
+            change(&elements[index])
+            // A text's box follows its new font and size.
+            if elements[index].kind == .text {
+                let element = elements[index]
+                elements[index].frame.size.height = textHeight(element.text ?? "", width: element.frame.width,
+                                                               font: SketchStyle.font(element, label: false))
+            }
+        }
+        commit(from: old, action)
+    }
+
+    func bringForward() { restack(front: true) }
+    func sendBackward() { restack(front: false) }
+    func deleteSelected() { deleteSelection() }
     private var gesture: Gesture?
     /// The elements before the current gesture, for undoing it as one step.
     private var undoBase: [SketchElement] = []
@@ -400,7 +430,9 @@ final class SketchCanvasView: NSView, NSTextViewDelegate, NSServicesMenuRequesto
                     let aspect = element.frame.height > 0 ? element.frame.width / element.frame.height : 1
                     frame.size.height = frame.width / aspect
                 }
-                if element.kind == .text { frame.size.height = textHeight(element.text ?? "", width: frame.width) }
+                if element.kind == .text {
+                    frame.size.height = textHeight(element.text ?? "", width: frame.width, font: SketchStyle.font(element, label: false))
+                }
                 element.frame = frame
             } else {
                 element.scalePoints(from: bounds, to: rect)
@@ -491,8 +523,8 @@ final class SketchCanvasView: NSView, NSTextViewDelegate, NSServicesMenuRequesto
         beginEditing(element.id)
     }
 
-    private func textHeight(_ text: String, width: CGFloat) -> CGFloat {
-        let string = NSAttributedString(string: text.isEmpty ? " " : text, attributes: [.font: SketchStyle.textFont])
+    private func textHeight(_ text: String, width: CGFloat, font: NSFont = SketchStyle.textFont) -> CGFloat {
+        let string = NSAttributedString(string: text.isEmpty ? " " : text, attributes: [.font: font])
         return ceil(string.boundingRect(with: CGSize(width: max(width, 1), height: .greatestFiniteMagnitude),
                                         options: [.usesLineFragmentOrigin, .usesFontLeading]).height) + 4
     }
@@ -507,7 +539,7 @@ final class SketchCanvasView: NSView, NSTextViewDelegate, NSServicesMenuRequesto
             return CGRect(x: (a.x + b.x) / 2 - 90, y: (a.y + b.y) / 2 - 12, width: 180, height: 24)
         default:
             let inner = element.frame.insetBy(dx: 10, dy: 8)
-            let height = min(inner.height, textHeight(element.text ?? "", width: inner.width))
+            let height = min(inner.height, textHeight(element.text ?? "", width: inner.width, font: SketchStyle.font(element, label: true)))
             return CGRect(x: inner.minX, y: inner.midY - height / 2, width: inner.width, height: height)
         }
     }
@@ -527,9 +559,9 @@ final class SketchCanvasView: NSView, NSTextViewDelegate, NSServicesMenuRequesto
         text.isHorizontallyResizable = false
         text.isVerticallyResizable = true
         let isText = element.kind == .text
-        text.font = isText ? SketchStyle.textFont : SketchStyle.labelFont(element.kind.isConnector ? 13 : 15)
+        text.font = element.kind.isConnector ? SketchStyle.labelFont(13) : SketchStyle.font(element, label: !isText)
         text.textColor = isText ? SketchStyle.color(element.color) : .labelColor
-        text.alignment = isText ? .left : .center
+        text.alignment = element.alignment(default: isText ? .left : .center)
         text.insertionPointColor = .controlAccentColor
         text.string = element.text ?? ""
         text.selectAll(nil)
@@ -544,10 +576,10 @@ final class SketchCanvasView: NSView, NSTextViewDelegate, NSServicesMenuRequesto
         guard let editor, let id = editing, let index = elements.firstIndex(where: { $0.id == id }) else { return }
         if elements[index].kind == .text {
             // A text grows as you type, up to a column, then wraps.
-            let line = NSAttributedString(string: editor.string, attributes: [.font: SketchStyle.textFont])
-                .size().width + 8
+            let font = SketchStyle.font(elements[index], label: false)
+            let line = NSAttributedString(string: editor.string, attributes: [.font: font]).size().width + 8
             let width = min(max(line, 40), max(elements[index].frame.width, 420))
-            elements[index].frame.size = CGSize(width: width, height: textHeight(editor.string, width: width))
+            elements[index].frame.size = CGSize(width: width, height: textHeight(editor.string, width: width, font: font))
             editor.frame = elements[index].frame
         } else {
             var element = elements[index]

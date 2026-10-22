@@ -15,6 +15,8 @@ final class BoardTiles {
     private var views: [UUID: BoardTileView] = [:]
     private var sketchViews: [UUID: BoardSketchView] = [:]
     private var cardViews: [UUID: BoardCardView] = [:]
+    private var labelViews: [UUID: BoardLabelView] = [:]
+    private let ink: BoardInkView
     private var cancellables: Set<AnyCancellable> = []
 
     init(controller: BoardController, document: NSView) {
@@ -25,12 +27,19 @@ final class BoardTiles {
         groups.autoresizingMask = [.width, .height]
         document.addSubview(groups, positioned: .below, relativeTo: nil)
         controller.groupsView = groups
+        ink = BoardInkView(frame: document.bounds)
+        ink.controller = controller
+        ink.autoresizingMask = [.width, .height]
+        document.addSubview(ink)
         let model = controller.model
         // Batched to the next turn of the run loop: several of these change together.
         Publishers.Merge6(model.$surfaces.map { _ in () }, model.$frames.map { _ in () }, model.$order.map { _ in () },
                           model.$zoom.map { _ in () }, model.$agentTick.map { _ in () }, model.$focused.map { _ in () })
             .merge(with: model.$titles.map { _ in () }, model.$projects.map { _ in () }, model.$colors.map { _ in () })
             .merge(with: model.$sketches.map { _ in () }, model.$focusedSketch.map { _ in () }, model.$cards.map { _ in () })
+            .merge(with: model.$paused.map { _ in () }, model.$teams.map { _ in () }, model.$wiring.map { _ in () })
+            .merge(with: model.$groups.map { _ in () }, model.$labels.map { _ in () }, model.$ink.map { _ in () },
+                   model.$tool.map { _ in () })
             .sink { [weak self] in self?.needsSync() }
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: ExtremeSettings.featuresDidChange)
@@ -76,6 +85,10 @@ final class BoardTiles {
         let animate = model.animateNextLayout && motion
         model.animateNextLayout = false
         var moves: [(NSView, CGRect)] = []
+        // While an orchestrator is connecting: what's wired to it, in its color.
+        let wiringTeam = model.wiring.flatMap { controller.orchestrator($0) }
+        let wired = Set(wiringTeam.map { controller.wiredAgents($0).map(\.surface.id) } ?? [])
+        let collapsed = controller.collapsedTiles
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for surface in model.surfaces {
@@ -92,6 +105,11 @@ final class BoardTiles {
             view.update(info: VerticalTabsAgents.shared.info(for: surface), name: model.titles[surface.id],
                         color: model.color(of: surface.id).map(BoardProjects.nsColor),
                         focused: model.focused, zoom: model.zoom, motion: motion)
+            view.paused = model.paused.contains(surface.id)
+            view.skipsPermissions = controller.skipsPermissions(surface.id)
+            view.account = controller.account(of: surface)?.initials
+            if view.isHidden != collapsed.contains(surface.id) { view.isHidden = collapsed.contains(surface.id) }
+            view.wire = wiringTeam.map { (BoardProjects.nsColor($0.color), wired.contains(surface.id)) }
         }
         for sketch in model.sketches {
             guard let frame = model.frames[sketch.id] else { continue }
@@ -106,6 +124,23 @@ final class BoardTiles {
             }
             view.update(title: sketch.title, focused: model.focusedSketch == sketch.id, zoom: model.zoom)
         }
+        let labelIDs = Set(model.labels.map(\.id))
+        for (id, view) in labelViews where !labelIDs.contains(id) {
+            view.removeFromSuperview()
+            labelViews[id] = nil
+        }
+        for label in model.labels {
+            guard let frame = model.frames[label.id] else { continue }
+            let view = labelViews[label.id] ?? {
+                let view = BoardLabelView(controller: controller, label: label)
+                document.addSubview(view)
+                labelViews[label.id] = view
+                return view
+            }()
+            if !view.isEditing, view.frame != frame { view.frame = frame }
+            view.apply(label)
+        }
+        ink.update(model.ink)
         for card in model.cards {
             guard let frame = model.frames[card.id] else { continue }
             let view = cardViews[card.id] ?? {
@@ -127,15 +162,22 @@ final class BoardTiles {
                 for (view, frame) in moves { view.animator().frame = frame }
             }
         }
-        groups.update(groups: Self.groups(model), zoom: model.zoom)
+        groups.update(groups: Self.groups(model), zoom: model.zoom,
+                      wiring: wiringTeam.map { (BoardProjects.nsColor($0.color), Set($0.groups)) })
+        groups.update(links: controller.teamLinks(), zoom: model.zoom, motion: motion)
+        groups.update(named: controller.namedGroupDisplays(), zoom: model.zoom,
+                      wiring: wiringTeam.map { (BoardProjects.nsColor($0.color), Set($0.groups)) })
         // Back to front, without removing anything (that would take a terminal's focus).
         let order = Dictionary(model.order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         let nodes: [(UUID, NSView)] = views.map { ($0, $1) } + sketchViews.map { ($0, $1) } + cardViews.map { ($0, $1) }
+            + labelViews.map { ($0, $1) }
         var rank: [ObjectIdentifier: Int] = Dictionary(nodes.map { (ObjectIdentifier($1), order[$0] ?? -1) },
                                                        uniquingKeysWith: { a, _ in a })
         rank[ObjectIdentifier(groups)] = Int.min
-        let current = document.subviews.compactMap { $0 as? BoardNodeView }.map { rank[ObjectIdentifier($0)] ?? -1 }
-        if current != current.sorted() || document.subviews.first !== groups {
+        // Ink over everything.
+        rank[ObjectIdentifier(ink)] = Int.max
+        let current = document.subviews.filter { $0 is BoardNodeView || $0 is BoardLabelView }.map { rank[ObjectIdentifier($0)] ?? -1 }
+        if current != current.sorted() || document.subviews.first !== groups || document.subviews.last !== ink {
             withUnsafePointer(to: rank) { pointer in
                 document.sortSubviews({ a, b, context in
                     guard let ranks = context?.assumingMemoryBound(to: [ObjectIdentifier: Int].self).pointee else { return .orderedSame }
@@ -149,7 +191,8 @@ final class BoardTiles {
     /// Each project's tiles that sit together.
     static func groups(_ model: BoardModel) -> [BoardGroup] {
         var byProject: [String: [(id: UUID, frame: CGRect)]] = [:]
-        for surface in model.surfaces {
+        let grouped = Set(model.groups.flatMap(\.tiles))
+        for surface in model.surfaces where !grouped.contains(surface.id) {
             guard let project = model.projects[surface.id], let frame = model.frames[surface.id] else { continue }
             byProject[project, default: []].append((surface.id, frame))
         }
@@ -183,6 +226,8 @@ final class BoardTileView: BoardNodeView {
     private let focus = BoardTileFocus()
     private let clip = FlippedView()
     private let lights = FrameLights.View(frame: .zero)
+    /// Around it while an orchestrator is connecting: solid when wired, faint when not.
+    private let wireRing = CALayer()
     private var headerView: NSView!
     private var bodyView: NSView!
     private var overview: NSView!
@@ -214,6 +259,10 @@ final class BoardTileView: BoardNodeView {
         overview.isHidden = true
         addSubview(lights)
         lights.isHidden = true
+        wireRing.isHidden = true
+        wireRing.cornerRadius = 13
+        wireRing.cornerCurve = .continuous
+        layer?.addSublayer(wireRing)
     }
 
     override func layout() {
@@ -223,6 +272,10 @@ final class BoardTileView: BoardNodeView {
         bodyView.frame = CGRect(x: 0, y: Self.header, width: bounds.width, height: max(0, bounds.height - Self.header))
         overview.frame = clip.bounds
         lights.frame = bounds.insetBy(dx: -3, dy: -3)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        wireRing.frame = bounds.insetBy(dx: -5, dy: -5)
+        CATransaction.commit()
     }
 
     /// `focused` is the board's focused terminal (this one or another).
@@ -263,6 +316,59 @@ final class BoardTileView: BoardNodeView {
         lights.rebuild()
     }
 
+    /// The connecting orchestrator's color, and whether this tile is wired to it.
+    var wire: (color: NSColor, on: Bool)? {
+        didSet {
+            guard wire?.color != oldValue?.color || wire?.on != oldValue?.on else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            wireRing.isHidden = wire == nil
+            if let wire {
+                wireRing.borderColor = wire.color.withAlphaComponent(wire.on ? 0.95 : 0.3).cgColor
+                wireRing.borderWidth = (wire.on ? 3 : 1.5) / max(zoom, 0.25)
+                wireRing.backgroundColor = wire.color.withAlphaComponent(wire.on ? 0.08 : 0).cgColor
+            }
+            CATransaction.commit()
+            window?.invalidateCursorRects(for: self)
+        }
+    }
+
+    override var wirable: Bool { true }
+
+    /// The ring stays the same width on screen at any zoom.
+    override func setZoom(_ zoom: CGFloat) {
+        super.setZoom(zoom)
+        guard let wire, !wireRing.isHidden else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        wireRing.borderWidth = (wire.on ? 3 : 1.5) / max(self.zoom, 0.25)
+        CATransaction.commit()
+    }
+
+    override var tileButtons: Bool { true }
+
+    override func nodeRestart() { controller?.restartTile(surface) }
+
+    override func nodeDuplicate() { controller?.duplicateTile(surface) }
+
+    /// The initials of the account profile its agent uses (not shown for your usual one).
+    var account: String? {
+        get { state.account }
+        set { if state.account != newValue { state.account = newValue } }
+    }
+
+    /// Started with permission prompts skipped: a red badge says so.
+    var skipsPermissions: Bool {
+        get { state.skipsPermissions }
+        set { if state.skipsPermissions != newValue { state.skipsPermissions = newValue } }
+    }
+
+    /// Its processes are stopped (see BoardPause).
+    var paused: Bool {
+        get { state.paused }
+        set { if state.paused != newValue { state.paused = newValue } }
+    }
+
     override func nodeMenu() -> NSMenu? {
         guard let controller else { return nil }
         return BoardTileMenu.menu(for: surface, in: controller)
@@ -288,6 +394,22 @@ final class BoardTileState: ObservableObject {
     @Published var color: NSColor?
     @Published var focused = false
     @Published var zoom: CGFloat = 1
+    @Published var paused = false
+    @Published var skipsPermissions = false
+    @Published var account: String?
+}
+
+/// A tile whose agent runs without asking permission.
+struct BoardSkipPill: View {
+    var body: some View {
+        Label("NO PROMPTS", systemImage: "exclamationmark.shield.fill")
+            .font(Extreme.font(9.5, weight: .bold))
+            .foregroundColor(.red)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Capsule().fill(Color.red.opacity(0.14)))
+            .fixedSize()
+            .help("Started with permission prompts skipped: it runs commands and edits files without asking.")
+    }
 }
 
 /// The title bar's picture. Its buttons sit where `BoardTileView` expects clicks.
@@ -309,7 +431,20 @@ private struct BoardTileHeader: View {
                     .foregroundColor(state.color.map(Color.init(nsColor:)) ?? Extreme.dim).lineLimit(1)
             }
             Spacer(minLength: 4)
-            if let info = state.info { AgentStatusPill(activity: info.activity) }
+            if state.paused {
+                BoardPausedPill()
+            } else if let info = state.info {
+                AgentStatusPill(activity: info.activity, caps: true)
+            }
+            if let account = state.account {
+                Text(account).font(Extreme.font(9.5, weight: .bold)).foregroundColor(Extreme.ink)
+                    .padding(.horizontal, 5).frame(height: 16)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(Extreme.core))
+                    .help("Signed in with another account")
+            }
+            if state.skipsPermissions { BoardSkipPill() }
+            glyph("arrow.clockwise").help("Restart")
+            glyph("plus.square.on.square").help("Duplicate")
             glyph("ellipsis")
             glyph("arrow.up.left.and.arrow.down.right")
             glyph("xmark")
@@ -366,7 +501,9 @@ private struct BoardTileOverview: View {
                     Text(folder).font(Extreme.font(11, weight: .semibold))
                         .foregroundColor(state.color.map(Color.init(nsColor:)) ?? Extreme.dim).lineLimit(1)
                 }
-                if let info = state.info {
+                if state.paused {
+                    BoardPausedPill()
+                } else if let info = state.info {
                     Text(info.activity.label).font(Extreme.font(11, weight: .semibold))
                         .foregroundColor(AgentStatusPill.color(info.activity))
                 }
@@ -380,6 +517,17 @@ private struct BoardTileOverview: View {
             .scaleEffect(min(1 / max(state.zoom, 0.08), geo.size.width / 220))
             .frame(width: geo.size.width, height: geo.size.height)
         }
+    }
+}
+
+/// A paused tile's badge, in place of its agent's status.
+struct BoardPausedPill: View {
+    var body: some View {
+        Label("Paused", systemImage: "pause.fill")
+            .font(Extreme.font(10.5, weight: .semibold))
+            .foregroundColor(Extreme.warn)
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(Capsule().fill(Extreme.warn.opacity(0.14)))
     }
 }
 

@@ -16,7 +16,7 @@ class BoardNodeView: NSView {
     /// The board's zoom, kept by `setZoom`.
     private(set) var zoom: CGFloat = 1
 
-    private enum Drag { case move, resize, close, zoom, menu }
+    private enum Drag { case move, resize, close, zoom, menu, restart, duplicate }
     private var drag: Drag?
     private var dragStart: (point: CGPoint, window: CGPoint, frame: CGRect)?
     private var dragMoved = false
@@ -49,6 +49,11 @@ class BoardNodeView: NSView {
     func nodeFocus() {}
     /// A click on the title bar that didn't move it.
     func nodeClick() {}
+    /// Can be wired to an orchestrator: while one is connecting, a click anywhere on it
+    /// (but its buttons) wires or unwires it (see BoardController.startWiring).
+    var wirable: Bool { false }
+
+    private var wiring: UUID? { wirable ? controller?.model.wiring : nil }
 
     /// Zoomed this far out, the tile's content is too small to use: the whole tile is a handle.
     var isHandle: Bool { zoom < 0.45 }
@@ -75,6 +80,19 @@ class BoardNodeView: NSView {
 
     var menuRect: CGRect { zoomRect.offsetBy(dx: -(Self.button + 8), dy: 0) }
 
+    /// Has Restart and Duplicate buttons in its title bar (terminals).
+    var tileButtons: Bool { false }
+
+    var duplicateRect: CGRect { tileButtons ? menuRect.offsetBy(dx: -(Self.button + 8), dy: 0) : .null }
+
+    var restartRect: CGRect { tileButtons ? duplicateRect.offsetBy(dx: -(Self.button + 8), dy: 0) : .null }
+
+    /// The title bar's leftmost button.
+    private var firstButton: CGRect { tileButtons ? restartRect : menuRect }
+
+    func nodeRestart() {}
+    func nodeDuplicate() {}
+
     /// About 16 points on screen whatever the zoom, and never more than a third of the tile.
     var cornerRect: CGRect {
         let size = min(max(Self.corner, Self.corner / max(zoom, 0.08)), bounds.width / 3, bounds.height / 3)
@@ -91,11 +109,15 @@ class BoardNodeView: NSView {
     }
 
     override func resetCursorRects() {
+        if wiring != nil {
+            addCursorRect(bounds, cursor: .pointingHand)
+            return
+        }
         if isHandle {
             addCursorRect(bounds, cursor: .openHand)
             return
         }
-        addCursorRect(CGRect(x: 0, y: 0, width: menuRect.minX - 4, height: Self.header), cursor: .openHand)
+        addCursorRect(CGRect(x: 0, y: 0, width: firstButton.minX - 4, height: Self.header), cursor: .openHand)
         addCursorRect(cornerRect, cursor: .crosshair)
     }
 
@@ -123,6 +145,10 @@ class BoardNodeView: NSView {
             drag = .zoom
         } else if menuRect.contains(local) {
             drag = .menu
+        } else if duplicateRect.contains(local) {
+            drag = .duplicate
+        } else if restartRect.contains(local) {
+            drag = .restart
         } else if cornerRect.contains(local) {
             drag = .resize
         } else {
@@ -167,6 +193,8 @@ class BoardNodeView: NSView {
             CATransaction.commit()
         }
         controller.groupsView?.showGuides(guides)
+        // Orchestrators' wires follow straight away too.
+        if !controller.model.teams.isEmpty { controller.groupsView?.update(links: controller.teamLinks(), zoom: controller.model.zoom) }
     }
 
     /// Lifted while dragged: a soft shadow under the tile.
@@ -269,11 +297,15 @@ class BoardNodeView: NSView {
             nodeFocus()
         case .menu where menuRect.contains(local):
             nodeMenu()?.popUp(positioning: nil, at: CGPoint(x: menuRect.minX, y: menuRect.maxY + 4), in: self)
+        case .restart where restartRect.contains(local):
+            nodeRestart()
+        case .duplicate where duplicateRect.contains(local):
+            nodeDuplicate()
         case .move where !dragMoved:
             // Zoomed out, a click goes to the tile.
             if isHandle { nodeFocus() } else { nodeClick() }
         case .move:
-            controller.settleDrop(id: nodeID)
+            controller.settleDrop(id: nodeID, from: dragStart?.frame)
         case .resize:
             controller.tileDidSettle()
         default:

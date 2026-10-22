@@ -5,8 +5,9 @@ import SwiftUI
 // MARK: - Window
 
 /// A board window: the list of what's on the board, the board, and the panels a classic window
-/// has (Visual Fix, command history, the command palette). Boards have no code editor or
-/// Mission Control; an Agent Map tile shows where the agents are working.
+/// has (Visual Fix, command history, the command palette), and the board agent's bar at the
+/// bottom. Boards have no code editor or Mission Control; an Agent Map tile shows where the
+/// agents are working.
 struct BoardWindowView: View {
     let controller: BoardController
     @ObservedObject var model: BoardModel
@@ -30,7 +31,21 @@ struct BoardWindowView: View {
                     BoardCanvasRepresentable(controller: controller)
                     BoardToolbar(controller: controller, model: model)
                         .padding(.top, 8)
-                    if model.surfaces.isEmpty {
+                    VStack {
+                        StudioDrawingPill(diagrams: controller.diagrams)
+                        Spacer()
+                    }
+                    .padding(.top, 52)
+                    if let wiring = model.wiring {
+                        VStack {
+                            OrchestratorWiringBanner(controller: controller, id: wiring)
+                            Spacer()
+                        }
+                        .padding(.top, 52)
+                    }
+                    // Out of the way while drawing or placing things.
+                    if model.surfaces.isEmpty && model.tool == .select && model.cards.isEmpty && model.sketches.isEmpty
+                        && model.labels.isEmpty && model.ink.isEmpty {
                         BoardEmptyState(controller: controller)
                     }
                     // "Your app is live" when a localhost session starts listening.
@@ -38,6 +53,25 @@ struct BoardWindowView: View {
                         LocalhostToastLayer(controller: controller).padding(.top, 34)
                     }
                     BoardCornerOverlay(controller: controller)
+                    VStack {
+                        Spacer()
+                        HStack {
+                            BoardGitChip(controller: controller)
+                            Spacer()
+                        }
+                        .padding(.leading, 14).padding(.bottom, 14)
+                    }
+                    HStack(alignment: .center) {
+                        BoardToolPalette(controller: controller, model: model)
+                        Spacer()
+                        BoardSidePalette(controller: controller, model: model)
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(maxHeight: .infinity)
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        BoardAssistantBar(controller: controller, assistant: controller.assistant, model: model)
+                    }
                 }
                 .padding(.leading, model.showSidebar ? Self.sidebarWidth + 1 : 0)
                 .padding(.trailing, panels.total)
@@ -59,6 +93,15 @@ struct BoardWindowView: View {
                 }
                 // ⌘P / ⌘⇧P over the whole window, for the tile with the cursor.
                 BoardPaletteLayer(controller: controller, model: model)
+                BoardRadialMenu(controller: controller, model: model)
+                if model.showDocuments {
+                    StudioDocumentsView(controller: controller, model: model, docs: controller.documents)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
+                if model.showMissionMap {
+                    MissionMapView(controller: controller, model: model)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
             }
         }
         .ignoresSafeArea()
@@ -74,6 +117,12 @@ struct BoardWindowView: View {
         }
         .sheet(isPresented: $model.showComposer) {
             BoardComposer(controller: controller, isPresented: $model.showComposer)
+        }
+        .sheet(isPresented: $model.showAccounts) {
+            BoardAccountsView(controller: controller, isPresented: $model.showAccounts)
+        }
+        .sheet(isPresented: $model.showOrchestratorComposer) {
+            BoardOrchestratorComposer(controller: controller, isPresented: $model.showOrchestratorComposer)
         }
     }
 
@@ -152,7 +201,13 @@ private struct BoardToolbar: View {
                 Spacer().frame(width: 70)
                 button("sidebar.left", "Show the list") { model.showSidebar = true }
             }
-            Spacer()
+            // Home, the project and its boards, live agents and usage, as far as there's room.
+            ViewThatFits(in: .horizontal) {
+                BoardTopBar(controller: controller, model: model)
+                Color.clear.frame(width: 0, height: 0)
+            }
+            .padding(.leading, 12)
+            Spacer(minLength: 8)
             HStack(spacing: 2) {
                 button("plus", "New terminal (⌘T)") { controller.addTile() }
                 button("sparkles", "Launch agents…") { model.showComposer = true }
@@ -163,6 +218,12 @@ private struct BoardToolbar: View {
                     Button { controller.addCard(.kanban) } label: { Label("Kanban", systemImage: "rectangle.split.3x1") }
                     Divider()
                     Button { controller.showAgentMap() } label: { Label("Agent Map", systemImage: "map") }
+                    if ExtremeSettings.isOn(.media) {
+                        Button { controller.chooseMedia() } label: { Label("Video or Music…", systemImage: "play.rectangle") }
+                    }
+                    Button { model.showOrchestratorComposer = true } label: {
+                        Label("Orchestrator…", systemImage: BoardCard.Kind.orchestrator.symbol)
+                    }
                 } label: {
                     Image(systemName: "rectangle.stack.badge.plus").font(.system(size: 12, weight: .medium))
                         .foregroundColor(Extreme.text.opacity(0.85))
@@ -171,7 +232,7 @@ private struct BoardToolbar: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .frame(width: 26, height: 22)
-                .help("Add a sketch, note, checklist, kanban board or Agent Map")
+                .help("Add a sketch, note, checklist, kanban board, Agent Map or orchestrator")
                 button("rectangle.3.group", "Arrange by project") { controller.arrangeByProject() }
                 divider
                 button("minus.magnifyingglass", "Zoom out (⌥⌘-)") { controller.zoom(by: 1 / 1.4) }
@@ -225,6 +286,8 @@ private struct BoardEmptyState: View {
             HStack(spacing: 8) {
                 Button("New terminal") { controller.addTile() }
                     .buttonStyle(ExtremeButtonStyle())
+                Button("New orchestrator…") { controller.model.showOrchestratorComposer = true }
+                    .buttonStyle(ExtremeButtonStyle())
                 Button("Launch agents…") { controller.model.showComposer = true }
                     .buttonStyle(ExtremeButtonStyle(prominent: true))
             }
@@ -251,6 +314,11 @@ private struct BoardSidebar: View {
     private struct Row: Identifiable {
         let surface: Ghostty.SurfaceView
         let info: VerticalTabAgentInfo?
+        /// In a group or wired to an orchestrator: listed under it, with a line in its color.
+        var wireColor: Color?
+        /// The first of a group's or an orchestrator's: its name above the row.
+        var heading: String?
+        var headingSymbol = BoardCard.Kind.orchestrator.symbol
         var id: UUID { surface.id }
     }
 
@@ -293,8 +361,12 @@ private struct BoardSidebar: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(model.cards) { card in
-                        BoardSketchRow(title: card.title, count: card.items.count, focused: false,
-                                       symbol: card.kind.symbol, empty: card.kind == .note ? "Note" : card.kind == .map ? "Agent Map" : "Empty")
+                        BoardSketchRow(title: card.title,
+                                       count: card.kind == .orchestrator ? controller.orchestrator(card.id).map { controller.wiredAgents($0).count } ?? 0
+                                           : card.items.count,
+                                       focused: false, symbol: card.kind.symbol,
+                                       empty: card.kind == .orchestrator ? "Nothing wired"
+                                           : card.kind == .checklist || card.kind == .kanban ? "Empty" : card.kind.title)
                             .onTapGesture {
                                 controller.raise(id: card.id)
                                 controller.zoom(toNode: card.id)
@@ -319,8 +391,22 @@ private struct BoardSidebar: View {
                             }
                     }
                     ForEach(rows) { row in
+                        if let heading = row.heading {
+                            HStack(spacing: 6) {
+                                Image(systemName: row.headingSymbol).font(.system(size: 9.5, weight: .semibold))
+                                Text(heading.uppercased()).font(Extreme.font(10, weight: .bold)).tracking(0.6).lineLimit(1)
+                            }
+                            .foregroundColor(row.wireColor ?? Extreme.muted)
+                            .padding(.horizontal, 8).padding(.top, 10).padding(.bottom, 2)
+                        }
                         BoardSidebarRow(board: controller, surface: row.surface, info: row.info, name: model.titles[row.surface.id],
                                         color: model.color(of: row.surface.id).map(BoardProjects.color))
+                            .padding(.leading, row.wireColor == nil ? 0 : 16)
+                            .overlay(alignment: .leading) {
+                                if let wire = row.wireColor {
+                                    Rectangle().fill(wire.opacity(0.7)).frame(width: 2).padding(.leading, 6)
+                                }
+                            }
                             .onTapGesture { controller.focusTile(row.surface) }
                             .contextMenu { BoardTileContextMenu(surface: row.surface, board: controller) }
                     }
@@ -397,8 +483,34 @@ private struct BoardSidebar: View {
         func key(_ row: Row) -> (Int, Int, Int) {
             (rank(row.info), model.color(of: row.id) ?? .max, index[row.id] ?? 0)
         }
-        return model.surfaces.map { Row(surface: $0, info: VerticalTabsAgents.shared.info(for: $0)) }
+        let sorted = model.surfaces.map { Row(surface: $0, info: VerticalTabsAgents.shared.info(for: $0)) }
             .sorted { key($0) < key($1) }
+        guard !model.teams.isEmpty || !model.groups.isEmpty else { return sorted }
+        // Each group's tiles under its name, then each orchestrator's agents under its name,
+        // after the rest (a tile once, under the first).
+        let byID = Dictionary(sorted.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var placed = Set<UUID>()
+        var wired: [Row] = []
+        for group in model.groups {
+            let tiles = group.tiles.filter { byID[$0] != nil && placed.insert($0).inserted }
+            for (index, id) in tiles.enumerated() {
+                guard var row = byID[id] else { continue }
+                row.wireColor = Color(nsColor: group.nsColor)
+                row.heading = index == 0 ? group.name : nil
+                row.headingSymbol = "square.grid.2x2.fill"
+                wired.append(row)
+            }
+        }
+        for team in model.teams {
+            let agents = controller.wiredAgents(team).filter { placed.insert($0.surface.id).inserted }
+            for (index, agent) in agents.enumerated() {
+                guard var row = byID[agent.surface.id] else { continue }
+                row.wireColor = BoardProjects.color(team.color)
+                row.heading = index == 0 ? controller.orchestratorName(team.id) : nil
+                wired.append(row)
+            }
+        }
+        return sorted.filter { !placed.contains($0.id) } + wired
     }
 
     private func rank(_ info: VerticalTabAgentInfo?) -> Int {

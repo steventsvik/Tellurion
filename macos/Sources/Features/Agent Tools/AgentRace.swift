@@ -657,10 +657,12 @@ struct AgentDiffView: View {
 struct AgentStatusPill: View {
     let activity: VerticalTabAgentActivity?
     var closed = false
+    /// "WORKING", for title bars.
+    var caps = false
 
     var body: some View {
-        Text(label)
-            .font(Extreme.font(10.5))
+        Text(caps ? label.uppercased() : label)
+            .font(Extreme.font(caps ? 9.5 : 10.5, weight: caps ? .bold : .regular))
             .foregroundColor(color)
             .padding(.horizontal, 7).padding(.vertical, 2)
             .background(Rectangle().fill(color.opacity(0.15)))

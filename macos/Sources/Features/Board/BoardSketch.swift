@@ -40,6 +40,28 @@ struct SketchElement: Codable, Identifiable, Equatable {
     /// The boxes a connector's ends are attached to; they follow the boxes.
     var start: UUID?
     var end: UUID?
+    /// Text style (nil: the defaults): "sans", "mono", "hand" or "serif"; size 0…3 (S…XL);
+    /// alignment "left", "center" or "right".
+    var font: String?
+    var fontSize: Int?
+    var align: String?
+    /// 0…1 (nil: opaque).
+    var opacity: Double?
+    /// A dashed outline or line.
+    var dashed: Bool?
+    /// A box's second line, smaller and dimmer ("lib/queries.ts").
+    var subtitle: String?
+    /// Drawn by hand: wobbly lines, like a whiteboard.
+    var hand: Bool?
+
+    func alignment(default fallback: NSTextAlignment) -> NSTextAlignment {
+        switch align {
+        case "left": return .left
+        case "center": return .center
+        case "right": return .right
+        default: return fallback
+        }
+    }
 
     /// A connector always has two ends; ones from a damaged file or another app get them.
     var repaired: SketchElement {
@@ -65,6 +87,22 @@ enum SketchStyle {
     static let widths: [(name: String, width: CGFloat)] = [("Fine", 1.5), ("Medium", 2.5), ("Bold", 5)]
 
     static func labelFont(_ size: CGFloat = 15) -> NSFont { .systemFont(ofSize: size, weight: .medium) }
+
+    static let fonts: [(id: String, name: String)] = [("sans", "Sans"), ("hand", "Hand"), ("mono", "Mono"), ("serif", "Serif")]
+    static let sizes = ["S", "M", "L", "XL"]
+
+    /// An element's face and size: box labels a little smaller than free text.
+    static func font(_ element: SketchElement, label: Bool) -> NSFont {
+        let scale: [CGFloat] = [0.8, 1, 1.35, 1.8]
+        let base: CGFloat = label ? 15 : 17
+        let size = base * scale[min(max(element.fontSize ?? 1, 0), 3)]
+        switch element.font {
+        case "hand": return NSFont(name: "Noteworthy-Bold", size: size) ?? NSFont(name: "Marker Felt", size: size) ?? .systemFont(ofSize: size)
+        case "mono": return .monospacedSystemFont(ofSize: size, weight: .medium)
+        case "serif": return NSFont(name: "New York", size: size) ?? NSFont(name: "Georgia", size: size) ?? .systemFont(ofSize: size)
+        default: return label ? .systemFont(ofSize: size, weight: .medium) : .systemFont(ofSize: size, weight: .regular)
+        }
+    }
     static let textFont = NSFont.systemFont(ofSize: 17, weight: .regular)
 
     static func paragraph(_ alignment: NSTextAlignment) -> NSParagraphStyle {
@@ -196,6 +234,9 @@ enum SketchRenderer {
         defer { context.restoreGState() }
         context.setLineCap(.round)
         context.setLineJoin(.round)
+        if let opacity = element.opacity { context.setAlpha(CGFloat(min(max(opacity, 0.05), 1))) }
+        if element.dashed == true { context.setLineDash(phase: 0, lengths: [element.width * 3, element.width * 2.5]) }
+        let hand = element.hand == true
         switch element.kind {
         case .pen, .highlighter:
             let highlighter = element.kind == .highlighter
@@ -219,8 +260,12 @@ enum SketchRenderer {
             let head = max(10, element.width * 4)
             // The line stops at the arrowhead's base, so its round cap doesn't poke through.
             let tip = element.kind == .arrow ? CGPoint(x: b.x - cos(angle) * head * 0.6, y: b.y - sin(angle) * head * 0.6) : b
-            context.move(to: a)
-            context.addLine(to: tip)
+            if hand {
+                context.addPath(handLine(a, tip, seed: Self.seed(element.id)))
+            } else {
+                context.move(to: a)
+                context.addLine(to: tip)
+            }
             context.strokePath()
             if element.kind == .arrow {
                 let spread: CGFloat = .pi / 7
@@ -236,20 +281,29 @@ enum SketchRenderer {
         case .rectangle, .ellipse, .diamond, .database:
             let path = shapePath(element.kind, element.frame)
             context.addPath(path)
-            context.setFillColor(color.withAlphaComponent(0.14).cgColor)
+            context.setFillColor(color.withAlphaComponent(hand ? 0.08 : 0.14).cgColor)
             context.fillPath()
-            context.addPath(path)
+            if hand {
+                // Two wobbly passes, like a marker going round twice.
+                context.addPath(handShape(element.kind, element.frame, seed: Self.seed(element.id)))
+                context.addPath(handShape(element.kind, element.frame, seed: Self.seed(element.id) &+ 7))
+            } else {
+                context.addPath(path)
+            }
             if element.kind == .database { context.addPath(databaseLid(element.frame)) }
             context.setStrokeColor(color.cgColor)
-            context.setLineWidth(element.width)
+            context.setLineWidth(hand ? element.width * 0.8 : element.width)
             context.strokePath()
+            context.setLineDash(phase: 0, lengths: [])
             if !hideText, let text = element.text, !text.isEmpty {
-                drawText(text, in: element.frame.insetBy(dx: 10, dy: element.kind == .database ? 14 : 8),
-                         font: SketchStyle.labelFont(), color: .labelColor, in: context, centered: true)
+                let inner = element.frame.insetBy(dx: 10, dy: element.kind == .database ? 14 : 8)
+                drawText(text, in: inner, font: SketchStyle.font(element, label: true), color: .labelColor, in: context,
+                         centered: true, align: element.alignment(default: .center), subtitle: element.subtitle)
             }
         case .text:
             if !hideText {
-                drawText(element.text ?? "", in: element.frame, font: SketchStyle.textFont, color: color, in: context, centered: false)
+                drawText(element.text ?? "", in: element.frame, font: SketchStyle.font(element, label: false), color: color, in: context,
+                         centered: false, align: element.alignment(default: .left))
             }
         case .image:
             if let name = element.image, let image = images(name) {
@@ -265,6 +319,58 @@ enum SketchRenderer {
                 context.fill(element.frame)
             }
         }
+    }
+
+    // MARK: Drawn by hand
+
+    /// A small, repeatable wobble: the same element always wobbles the same way.
+    private static func jitter(_ seed: Int, _ index: Int, _ amount: CGFloat) -> CGFloat {
+        var x = UInt64(bitPattern: Int64(seed)) &+ UInt64(index) &* 0x9E3779B97F4A7C15
+        x = (x ^ (x >> 30)) &* 0xBF58476D1CE4E5B9
+        x = (x ^ (x >> 27)) &* 0x94D049BB133111EB
+        x ^= x >> 31
+        return (CGFloat(x % 10_000) / 10_000 - 0.5) * 2 * amount
+    }
+
+    /// The same number for the same element on every launch (hashValue changes per launch).
+    static func seed(_ id: UUID) -> Int {
+        withUnsafeBytes(of: id.uuid) { bytes in bytes.reduce(0) { ($0 &* 31) &+ Int($1) } }
+    }
+
+    /// A line that bows a little and overshoots its ends, like a marker.
+    static func handLine(_ a: CGPoint, _ b: CGPoint, seed: Int) -> CGPath {
+        let length = hypot(b.x - a.x, b.y - a.y)
+        let wobble = min(max(length * 0.015, 0.8), 3)
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: a.x + jitter(seed, 1, wobble), y: a.y + jitter(seed, 2, wobble)))
+        let mid = CGPoint(x: (a.x + b.x) / 2 + jitter(seed, 3, wobble * 1.6), y: (a.y + b.y) / 2 + jitter(seed, 4, wobble * 1.6))
+        path.addQuadCurve(to: CGPoint(x: b.x + jitter(seed, 5, wobble), y: b.y + jitter(seed, 6, wobble)), control: mid)
+        return path
+    }
+
+    /// A box's outline drawn by hand: each side its own wobbly line (round shapes sampled).
+    static func handShape(_ kind: SketchElement.Kind, _ rect: CGRect, seed: Int) -> CGPath {
+        let path = CGMutablePath()
+        switch kind {
+        case .rectangle:
+            let corners = [CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY),
+                           CGPoint(x: rect.maxX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.maxY)]
+            for index in 0..<4 { path.addPath(handLine(corners[index], corners[(index + 1) % 4], seed: seed &+ index * 13)) }
+        case .diamond:
+            let corners = [CGPoint(x: rect.midX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.midY),
+                           CGPoint(x: rect.midX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.midY)]
+            for index in 0..<4 { path.addPath(handLine(corners[index], corners[(index + 1) % 4], seed: seed &+ index * 13)) }
+        default:
+            // Ellipses (and the database's body) by points round the edge.
+            let steps = 28
+            for step in 0...steps {
+                let angle = CGFloat(step) / CGFloat(steps) * 2 * .pi + jitter(seed, 0, 0.08)
+                let wobble = 1 + jitter(seed, step, 0.025)
+                let point = CGPoint(x: rect.midX + cos(angle) * rect.width / 2 * wobble, y: rect.midY + sin(angle) * rect.height / 2 * wobble)
+                if step == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+        }
+        return path
     }
 
     /// A stroke through `points`, smoothed by curving through their midpoints.
@@ -334,13 +440,20 @@ enum SketchRenderer {
         CGAffineTransform(translationX: rect.midX, y: centerY).scaledBy(x: rect.width / 2, y: height / 2)
     }
 
-    static func attributes(_ font: NSFont, _ color: NSColor, centered: Bool) -> [NSAttributedString.Key: Any] {
-        [.font: font, .foregroundColor: color, .paragraphStyle: SketchStyle.paragraph(centered ? .center : .left)]
+    static func attributes(_ font: NSFont, _ color: NSColor, centered: Bool, align: NSTextAlignment? = nil) -> [NSAttributedString.Key: Any] {
+        [.font: font, .foregroundColor: color, .paragraphStyle: SketchStyle.paragraph(align ?? (centered ? .center : .left))]
     }
 
-    /// Text in a rect (flipped context), centered vertically when `centered`.
-    static func drawText(_ text: String, in rect: CGRect, font: NSFont, color: NSColor, in context: CGContext, centered: Bool) {
-        let string = NSAttributedString(string: text, attributes: attributes(font, color, centered: centered))
+    /// Text in a rect (flipped context), centered vertically when `centered`; a subtitle
+    /// goes under it, smaller and dimmer.
+    static func drawText(_ text: String, in rect: CGRect, font: NSFont, color: NSColor, in context: CGContext, centered: Bool,
+                         align: NSTextAlignment? = nil, subtitle: String? = nil) {
+        let string = NSMutableAttributedString(string: text, attributes: attributes(font, color, centered: centered, align: align))
+        if let subtitle, !subtitle.isEmpty {
+            let small = NSFont(descriptor: font.fontDescriptor, size: max(font.pointSize * 0.72, 10)) ?? font
+            string.append(NSAttributedString(string: "\n" + subtitle,
+                                             attributes: attributes(small, color.withAlphaComponent(0.6), centered: centered, align: align)))
+        }
         let size = string.boundingRect(with: CGSize(width: max(rect.width, 1), height: .greatestFiniteMagnitude),
                                        options: [.usesLineFragmentOrigin, .usesFontLeading]).size
         let y = centered ? rect.midY - size.height / 2 : rect.minY

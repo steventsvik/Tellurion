@@ -269,6 +269,12 @@ final class SketchToolbar: NSView {
         colorButton.heightAnchor.constraint(equalToConstant: 28).isActive = true
         stack.addArrangedSubview(colorButton)
         stack.setVisibilityPriority(.mustHold, for: colorButton)
+        let style = symbolButton("textformat", "Style the selection: font, size, alignment, opacity, order") { [weak self] in
+            guard let self, let button = self.lastButton else { return }
+            self.showStyle(from: button)
+        }
+        stack.addArrangedSubview(style)
+        stack.setVisibilityPriority(.mustHold, for: style)
         stack.addArrangedSubview(separator())
         let picture = symbolButton("photo", "Insert picture…") { [weak self] in self?.canvas?.choosePicture() }
         let share = symbolButton("square.and.arrow.up", "Share…") { [weak self] in
@@ -329,6 +335,14 @@ final class SketchToolbar: NSView {
             NSBezierPath(roundedRect: CGRect(x: 5, y: rect.midY - bar / 2, width: 8, height: bar), xRadius: bar / 2, yRadius: bar / 2).fill()
             return true
         }
+    }
+
+    private func showStyle(from button: NSView) {
+        guard let canvas else { return }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.contentViewController = NSHostingController(rootView: SketchStylePanel(canvas: canvas))
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
     }
 
     @objc private func showColors(_ sender: NSButton) {
@@ -423,6 +437,117 @@ enum BoardSketchMenu {
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Close Sketch", image: nil) { [weak board] in board?.removeSketch(id) })
         return menu
+    }
+}
+#endif
+
+#if os(macOS)
+/// Styles the selected elements of a sketch: text color, font, size, alignment, opacity,
+/// dashes, the hand-drawn look, and their order.
+struct SketchStylePanel: View {
+    let canvas: SketchCanvasView
+    @StateObject private var selection = Selection()
+    /// The opacity while the slider is dragged; set once when it's let go.
+    @State private var dragging: Double?
+
+    /// Redraws the panel when the canvas's selection (or the selected elements) change.
+    final class Selection: ObservableObject {
+        @Published var tick = 0
+    }
+
+    private var first: SketchElement? {
+        _ = selection.tick
+        return canvas.selectedElements.first
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if first == nil {
+                Text("Select something in the sketch to style it.").font(Extreme.font(12)).foregroundColor(Extreme.muted)
+            } else {
+                label("Color")
+                HStack(spacing: 6) {
+                    ForEach(SketchStyle.colors.indices, id: \.self) { index in
+                        Button { apply("Change Color") { $0.color = index } } label: {
+                            Circle().fill(Color(nsColor: SketchStyle.color(index))).frame(width: 18, height: 18)
+                                .overlay(Circle().strokeBorder(first?.color == index ? Extreme.core : .clear, lineWidth: 2).padding(-3))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(SketchStyle.colors[index].name)
+                    }
+                }
+                label("Font")
+                HStack(spacing: 4) {
+                    ForEach(SketchStyle.fonts, id: \.id) { option in
+                        chip(option.name, on: (first?.font ?? "sans") == option.id) { apply("Change Font") { $0.font = option.id } }
+                    }
+                }
+                label("Size")
+                HStack(spacing: 4) {
+                    ForEach(SketchStyle.sizes.indices, id: \.self) { index in
+                        chip(SketchStyle.sizes[index], on: (first?.fontSize ?? 1) == index) { apply("Change Size") { $0.fontSize = index } }
+                    }
+                }
+                label("Alignment")
+                HStack(spacing: 4) {
+                    ForEach(["left", "center", "right"], id: \.self) { align in
+                        chip(align.capitalized, symbol: "text.align\(align)", on: first?.align == align) { apply("Align") { $0.align = align } }
+                    }
+                }
+                label("Opacity")
+                HStack {
+                    Slider(value: Binding(get: { dragging ?? first?.opacity ?? 1 }, set: { dragging = $0 }), in: 0.1...1) { editing in
+                        guard !editing, let value = dragging else { return }
+                        apply("Opacity") { $0.opacity = value }
+                        dragging = nil
+                    }
+                    Text("\(Int(((dragging ?? first?.opacity ?? 1) * 100).rounded()))%").font(Extreme.mono(11)).foregroundColor(Extreme.muted).frame(width: 40)
+                }
+                HStack(spacing: 4) {
+                    chip("Dashed", on: first?.dashed == true) { apply("Dashed") { $0.dashed = $0.dashed == true ? nil : true } }
+                    chip("Hand-drawn", on: first?.hand == true) { apply("Hand-drawn") { $0.hand = $0.hand == true ? nil : true } }
+                }
+                Divider()
+                HStack(spacing: 4) {
+                    chip("Forward", symbol: "square.2.layers.3d.top.filled", on: false) { canvas.bringForward(); selection.tick += 1 }
+                    chip("Backward", symbol: "square.2.layers.3d.bottom.filled", on: false) { canvas.sendBackward(); selection.tick += 1 }
+                    chip("Duplicate", symbol: "plus.square.on.square", on: false) { canvas.duplicate(nil); selection.tick += 1 }
+                    chip("Delete", symbol: "trash", on: false) { canvas.deleteSelected(); selection.tick += 1 }
+                }
+            }
+        }
+        .padding(14)
+        .frame(width: 330)
+        .onAppear {
+            canvas.onSelectionChange = { [weak selection] in selection?.tick += 1 }
+        }
+        .onDisappear { canvas.onSelectionChange = nil }
+    }
+
+    private func apply(_ action: String, _ change: (inout SketchElement) -> Void) {
+        canvas.styleSelection(action, change)
+        selection.tick += 1
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text.uppercased()).font(Extreme.font(9.5, weight: .bold)).foregroundColor(Extreme.dim).tracking(0.6)
+    }
+
+    private func chip(_ title: String, symbol: String? = nil, on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Group {
+                if let symbol {
+                    Image(systemName: symbol).font(.system(size: 11)).help(title)
+                } else {
+                    Text(title).font(Extreme.font(11, weight: .medium))
+                }
+            }
+            .foregroundColor(on ? Extreme.ink : Extreme.text)
+            .padding(.horizontal, 9).frame(height: 24)
+            .background(RoundedRectangle(cornerRadius: 6).fill(on ? Extreme.core : Extreme.raised))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 }
 #endif

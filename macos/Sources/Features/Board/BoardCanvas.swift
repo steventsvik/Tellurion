@@ -129,6 +129,8 @@ final class BoardCanvasView: NSScrollView {
 final class BoardDocumentView: NSView {
     weak var controller: BoardController?
     private var panStart: (pointer: CGPoint, origin: CGPoint)?
+    /// Where a web tile's box started (the web tool).
+    private var webBoxStart: CGPoint?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -153,10 +155,19 @@ final class BoardDocumentView: NSView {
         return controller.drop(urls, images: images, at: convert(sender.draggingLocation, from: nil))
     }
 
-    /// Right-click on empty board.
+    /// Right-click on empty board: the radial menu around the pointer.
     override func menu(for event: NSEvent) -> NSMenu? {
-        guard let controller else { return nil }
+        guard let controller, let content = window?.contentView else { return nil }
         let point = convert(event.locationInWindow, from: nil)
+        let inWindow = content.convert(event.locationInWindow, from: nil)
+        withAnimation(.easeOut(duration: 0.15)) {
+            controller.model.radial = (CGPoint(x: inWindow.x, y: content.bounds.height - inWindow.y), point)
+        }
+        return nil
+    }
+
+    /// Everything you can add here, as a menu ("More" in the radial menu).
+    static func canvasMenu(_ controller: BoardController, at point: CGPoint) -> NSMenu {
         let menu = NSMenu()
         menu.addItem(ClosureMenuItem("New Terminal Here", image: nil) { [weak controller] in
             guard let controller else { return }
@@ -176,8 +187,19 @@ final class BoardDocumentView: NSView {
         return menu
     }
 
+    override func resetCursorRects() {
+        guard let tool = controller?.model.tool, tool != .select else { return }
+        addCursorRect(visibleRect, cursor: tool == .pen ? .crosshair : .pointingHand)
+    }
+
     override func mouseDown(with event: NSEvent) {
         guard let controller else { return }
+        controller.model.radial = nil
+        if controller.model.tool == .web {
+            webBoxStart = convert(event.locationInWindow, from: nil)
+            return
+        }
+        if controller.place(at: convert(event.locationInWindow, from: nil)) { return }
         if event.clickCount == 2 {
             controller.fitAll()
             return
@@ -187,11 +209,20 @@ final class BoardDocumentView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if let start = webBoxStart {
+            controller?.showWebBox(from: start, to: convert(event.locationInWindow, from: nil))
+            return
+        }
         guard let panStart else { return }
         controller?.pan(from: panStart.pointer, origin: panStart.origin)
     }
 
     override func mouseUp(with event: NSEvent) {
+        if let start = webBoxStart {
+            webBoxStart = nil
+            controller?.finishWebBox(from: start, to: convert(event.locationInWindow, from: nil))
+            return
+        }
         guard panStart != nil else { return }
         panStart = nil
         NSCursor.pop()

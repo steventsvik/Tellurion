@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import WebKit
 import GhosttyKit
 
 /// Test-only: `GHOSTTY_EXTREME_TEST_BOARD=<file>` plays a timed script against the boards, like
@@ -32,6 +33,12 @@ import GhosttyKit
 ///     session <kind>             a new session from the New menu (claude, codex, terminal, hermes)
 ///     tools                      log which tools are open and what they see
 ///     snapshot <file.png>        draw the window (or its sheet) into a PNG, frames in <file>.txt
+///     ask <text> | agentdo <reply JSON> | agentconfirm | agentcancel | agentlog | agentcontext
+///                                the board's agent (see BoardAssistant)
+///     pause|resume [n…] | procs <n>  pause tiles; log tile n's process states
+///     orchnew [n…] | orchconnect | orchdone | orchclick <n> | orchgroup <n> | orchstate
+///     orchcanned <reply JSON> | orchcmd <text> | orchclose    orchestrators (see BoardTeams)
+///     minsize                    log the window's minimum and fitting sizes
 @MainActor
 enum BoardTest {
     private static var started = false
@@ -50,6 +57,12 @@ enum BoardTest {
                 MainActor.assumeIsolated {
                     DemoDirector.note("board \(command)")
                     run(command)
+                    // An event after each command, so it's its own step to undo as a real
+                    // click's would be (the undo manager closes its group after an event).
+                    if let wake = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0,
+                                                     windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0) {
+                        NSApp.postEvent(wake, atStart: false)
+                    }
                 }
             }
         }
@@ -163,6 +176,16 @@ enum BoardTest {
             surface.surfaceModel?.sendText(args.dropFirst().joined(separator: " "))
             surface.surfaceModel?.sendKeyEvent(.init(key: .enter, action: .press, text: "\r"))
             surface.surfaceModel?.sendKeyEvent(.init(key: .enter, action: .release))
+        case "enter":
+            // enter <n>: presses Return in tile n (answers a prompt's default).
+            guard let surface = tile(args.first ?? "", of: controller) else { return }
+            surface.surfaceModel?.sendKeyEvent(.init(key: .enter, action: .press, text: "\r"))
+            surface.surfaceModel?.sendKeyEvent(.init(key: .enter, action: .release))
+        case "down":
+            // down <n>: presses ↓ in tile n (moves a prompt's choice).
+            guard let surface = tile(args.first ?? "", of: controller) else { return }
+            surface.surfaceModel?.sendKeyEvent(.init(key: .arrowDown, action: .press))
+            surface.surfaceModel?.sendKeyEvent(.init(key: .arrowDown, action: .release))
         case "act":
             guard args.count == 2, let surface = tile(args[0], of: controller) else { return }
             let ok = surface.surfaceModel?.perform(action: args[1]) ?? false
@@ -255,6 +278,9 @@ enum BoardTest {
         case "closeboard":
             controller.window?.performClose(nil)
         case "undo":
+            if let undo = controller.undoManager {
+                DemoDirector.note("undo can=\(undo.canUndo) name=\(undo.undoActionName) level=\(undo.groupingLevel)")
+            }
             controller.undoManager?.undo()
         case "snapshot":
             guard let path = args.first else { return }
@@ -281,6 +307,10 @@ enum BoardTest {
         case "card":
             guard let kind = BoardCard.Kind(rawValue: args.first ?? "") else { return }
             controller.addCard(kind)
+        case "removecard":
+            // removecard <kind>: removes the last card of that kind.
+            guard let card = controller.model.cards.last(where: { $0.kind.rawValue == args.first }) else { return }
+            controller.removeCard(card.id)
         case "carditem":
             // carditem <text…>: adds to the last card (column 0 on a kanban).
             guard let card = controller.model.cards.last else { return }
@@ -307,6 +337,335 @@ enum BoardTest {
             guard let card = controller.model.cards.first(where: { $0.kind.rawValue == args.first }),
                   let frame = controller.model.frames[card.id] else { return }
             controller.zoom(toFit: frame.insetBy(dx: -30, dy: -30), animated: false)
+        case "ask":
+            // ask <text>: the board's bar, as if typed and sent (runs the real agent).
+            controller.assistant.send(args.joined(separator: " "))
+        case "agentdo":
+            // agentdo <reply JSON>: carries out a reply as if the board's agent had answered.
+            let context = controller.assistantContext(agents: BoardAgent.catalog)
+            guard let data = HeadlessAgent.object(in: args.joined(separator: " ")),
+                  let reply = try? JSONDecoder().decode(BoardAssistantReply.self, from: data) else {
+                DemoDirector.note("agent bad reply")
+                return
+            }
+            controller.assistant.apply(reply, handles: context.handles)
+        case "minsize":
+            guard let window = controller.window else { return }
+            DemoDirector.note("minsize window=\(window.minSize) content=\(window.contentMinSize) fitting=\(window.contentView?.fittingSize ?? .zero)")
+        case "groupnew":
+            // groupnew <tile n…> [name]: a named group of those tiles.
+            let tiles = args.compactMap { tile($0, of: controller)?.id }
+            let name = args.last.flatMap { Int($0) == nil ? $0 : nil }
+            controller.createGroup(tiles, name: name, role: .backend)
+        case "groupspawn":
+            // groupspawn <name> <role> <agent,agent,…> [skip]: the composer's Spawn.
+            guard args.count >= 3 else { return }
+            controller.spawnGroup(name: args[0], role: BoardRole(rawValue: args[1]) ?? .general,
+                                  slots: args[2].split(separator: ",").map(String.init), folder: nil, task: nil,
+                                  skip: args.count > 3 && args[3] == "skip")
+        case "groupcollapse":
+            guard let group = controller.model.groups.first else { return }
+            controller.toggleCollapsed(group.id)
+        case "groupcompose":
+            controller.model.showGroupComposer = true
+        case "grouptidy":
+            guard let group = controller.model.groups.first else { return }
+            controller.tidyGroup(group.id)
+        case "groupstate":
+            let number = { (id: UUID) in (controller.model.surfaces.firstIndex { $0.id == id }).map { "\($0 + 1)" } ?? "?" }
+            for group in controller.model.groups {
+                let display = controller.namedGroupDisplays().first { $0.id == group.id }
+                DemoDirector.note("group \(group.name) role=\(group.role.rawValue) collapsed=\(group.collapsed) tiles="
+                                  + group.tiles.map(number).joined(separator: ",")
+                                  + " running=\(display?.running ?? -1) frame=\(display.map { "\(Int($0.frame.width))x\(Int($0.frame.height))" } ?? "-")")
+            }
+            DemoDirector.note("group count=\(controller.model.groups.count) projectAreas=\(BoardTiles.groups(controller.model).count) hidden="
+                              + controller.collapsedTiles.map(number).sorted().joined(separator: ","))
+            for surface in controller.model.surfaces {
+                DemoDirector.note("tile \(number(surface.id)) title=\(controller.model.titles[surface.id] ?? "-") skip=\(controller.skipsPermissions(surface.id))")
+            }
+        case "drop":
+            // drop <n> <dx> <dy>: moves tile n by that much and lets it settle (joins or leaves groups).
+            guard args.count == 3, let surface = tile(args[0], of: controller), let frame = controller.model.frames[surface.id],
+                  let dx = Double(args[1]), let dy = Double(args[2]) else { return }
+            controller.move(id: surface.id, to: frame.offsetBy(dx: dx, dy: dy))
+            controller.settleDrop(id: surface.id, from: frame)
+        case "droponto":
+            // droponto <n> <m>: drops tile n at tile m's group, beside m.
+            guard args.count == 2, let a = tile(args[0], of: controller), let b = tile(args[1], of: controller),
+                  let fa = controller.model.frames[a.id], let fb = controller.model.frames[b.id] else { return }
+            controller.move(id: a.id, to: CGRect(x: fb.maxX + 20, y: fb.minY, width: fa.width, height: fa.height))
+            controller.settleDrop(id: a.id)
+        case "tilerestart":
+            guard let surface = tile(args.first ?? "", of: controller) else { return }
+            controller.restartTile(surface)
+        case "tiledup":
+            guard let surface = tile(args.first ?? "", of: controller) else { return }
+            controller.duplicateTile(surface)
+        case "pick":
+            // pick <name>: picks a palette tool (select, pen, eraser, text, web, agent, terminal…).
+            guard let tool = BoardTool(rawValue: args.first ?? "") else { return }
+            controller.choose(tool)
+        case "inkline":
+            // inkline <tile n | 0> <dx> <dy>: drags the mouse with the current tool from tile n's middle
+            // (0: the view's middle) by that many board points.
+            guard args.count == 3, let dx = Double(args[1]), let dy = Double(args[2]),
+                  let window = controller.window, let document = controller.groupsView?.superview,
+                  let visible = controller.canvas?.documentVisibleRect else { return }
+            let from = tile(args[0], of: controller).flatMap { controller.model.frames[$0.id] } ?? visible
+            let x = from.midX, y = from.midY
+            let height = window.contentView?.bounds.height ?? 0
+            let start = document.convert(CGPoint(x: x, y: y), to: nil)
+            let end = document.convert(CGPoint(x: x + dx, y: y + dy), to: nil)
+            drag(from: CGPoint(x: start.x, y: height - start.y), by: CGSize(width: end.x - start.x, height: start.y - end.y), in: controller)
+        case "tileorigin":
+            // tileorigin <n>: logs tile n's frame (to aim inklines).
+            guard let surface = tile(args.first ?? "", of: controller) else { return }
+            DemoDirector.note("tile frame \(controller.model.frames[surface.id] ?? .zero)")
+        case "inkstate":
+            DemoDirector.note("ink strokes=\(controller.model.ink.count) anchored=\(controller.model.ink.filter { $0.anchor != nil }.count) "
+                              + controller.model.ink.compactMap { controller.inkPoints($0)?.first }.map { "(\(Int($0.x)),\(Int($0.y)))" }.joined(separator: " "))
+            DemoDirector.note("labels " + controller.model.labels.map { "\($0.text)@\(Int($0.frame.minX)),\(Int($0.frame.minY))" }.joined(separator: " "))
+        case "labelnew":
+            guard let rect = controller.canvas?.documentVisibleRect else { return }
+            controller.addLabel(at: CGPoint(x: rect.midX, y: rect.minY + 120), text: args.joined(separator: " "), edit: false)
+        case "radial":
+            guard let rect = controller.canvas?.documentVisibleRect, let content = controller.window?.contentView else { return }
+            controller.model.radial = (CGPoint(x: content.bounds.midX, y: content.bounds.midY), CGPoint(x: rect.midX, y: rect.midY))
+        case "webnew":
+            guard let rect = controller.canvas?.documentVisibleRect else { return }
+            controller.addWebTile(at: CGPoint(x: rect.midX, y: rect.midY), url: args.first)
+        case "webtabs":
+            // webtabs <tab n> <url…>: the last web tile's tabs, and which one is shown.
+            guard let card = controller.model.cards.last(where: { $0.kind == .web }), let tab = Int(args.first ?? "") else { return }
+            controller.updateCard(card.id) { $0.tabs = Array(args.dropFirst()); $0.tab = tab }
+        case "webclosetab":
+            // webclosetab <index>: closes that tab of the first web tile.
+            guard let content = controller.window?.contentView?.descendants.compactMap({ $0 as? WebContent }).first,
+                  let index = Int(args.first ?? "") else { return }
+            content.closeTab(index)
+        case "webpages":
+            for content in controller.window?.contentView?.descendants.compactMap({ $0 as? WebContent }) ?? [] {
+                let pages = content.descendants.compactMap { $0 as? WKWebView }
+                DemoDirector.note("webpages " + pages.map { "\($0.url?.absoluteString ?? "start")\($0.superview?.isHidden == true ? "" : "*")" }.joined(separator: " "))
+            }
+        case "mdhtml":
+            // mdhtml <file>: logs the page body a markdown file renders to.
+            guard let text = try? String(contentsOfFile: args.first ?? "", encoding: .utf8) else { return }
+            DemoDirector.note("mdhtml " + MarkdownHTML.body(text).replacingOccurrences(of: "\n", with: "⏎"))
+            DemoDirector.note("mdclean " + StudioDocuments.clean(text).prefix(40).replacingOccurrences(of: "\n", with: "⏎"))
+        case "docsstop":
+            controller.documents.stop()
+        case "webstate":
+            for card in controller.model.cards where card.kind == .web {
+                DemoDirector.note("web \(card.title) tabs=\(card.tabs ?? []) tab=\(card.tab ?? -1) viewport=\(card.viewport ?? "-") frame=\(controller.model.frames[card.id].map { "\(Int($0.width))x\(Int($0.height))" } ?? "-")")
+            }
+        case "webviewport":
+            // webviewport <preset name…|fit>: the first web tile's viewport.
+            guard let content = controller.window?.contentView?.descendants.compactMap({ $0 as? WebContent }).first else { return }
+            let name = args.joined(separator: " ")
+            content.setViewport(name == "fit" ? nil : name)
+        case "webinspect":
+            guard let content = controller.window?.contentView?.descendants.compactMap({ $0 as? WebContent }).first else { return }
+            let before = NSApp.windows.filter(\.isVisible).count
+            content.inspect()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                DemoDirector.note("webinspect content " + (content.subviews + content.subviews.flatMap(\.subviews)).map { "\(type(of: $0)) \(Int($0.frame.minY)) \(Int($0.frame.width))x\(Int($0.frame.height))" }.joined(separator: ", "))
+                DemoDirector.note("webinspect windows \(before) -> \(NSApp.windows.filter(\.isVisible).count): "
+                                  + NSApp.windows.map { "\(type(of: $0))[\($0.isVisible ? "v" : "-")\($0.isKeyWindow ? "k" : "")] \(Int($0.frame.width))x\(Int($0.frame.height)) '\($0.title)'" }.joined(separator: ", "))
+            }
+        case "webeval":
+            // webeval <js>: runs script in the first web tile's page and logs the result.
+            guard let page = controller.window?.contentView?.descendants.compactMap({ $0 as? WKWebView }).first(where: { !$0.isHidden }) else { return }
+            page.evaluateJavaScript(args.joined(separator: " ")) { result, error in
+                DemoDirector.note("webeval \(result.map { "\($0)" } ?? "nil") \(error.map { "\($0.localizedDescription)" } ?? "")")
+            }
+        case "docs":
+            // docs <project folder>: opens Documents on that project.
+            controller.showDocuments()
+            if let folder = args.first { controller.documents.project = folder; controller.documents.refresh() }
+        case "docsgen":
+            // docsgen <template id> <quick|balanced|thorough> [codex]: writes it (real run).
+            let docs = controller.documents
+            docs.template = StudioDocs.templates.first { $0.id == args.first } ?? docs.template
+            docs.effort = StudioDocs.Effort(rawValue: args.count > 1 ? args[1] : "quick") ?? .quick
+            docs.engine = args.count > 2 && args[2] == "codex" ? .codex : .claude
+            docs.generate()
+        case "docsstate":
+            let docs = controller.documents
+            let stats = MarkdownHTML.stats(docs.markdown)
+            DemoDirector.note("docs running=\(docs.running) phase=\(String(describing: docs.phase)) words=\(stats.words) title=\(MarkdownHTML.title(docs.markdown) ?? "-") file=\(docs.file?.lastPathComponent ?? "-") error=\(docs.error ?? "-") library=\(docs.library.count)")
+        case "docsplace":
+            if let file = controller.documents.file {
+                controller.model.showDocuments = false
+                controller.placeDocument(file)
+            }
+        case "docspdf":
+            // docspdf <out.pdf>: exports what's shown, without asking where.
+            guard let path = args.first else { return }
+            PDFExporter.shared.export(html: MarkdownHTML.page(controller.documents.markdown), to: URL(fileURLWithPath: path))
+        case "diagramgen":
+            // diagramgen <project folder> <preset title…>: draws it (real run).
+            guard args.count >= 2 else { return }
+            controller.setFolder(args[0])
+            let title = args.dropFirst().joined(separator: " ")
+            guard let preset = StudioDiagram.presets.first(where: { $0.title == title }) else { return }
+            controller.diagrams.generate(preset.ask, title: preset.title)
+        case "diagramstarter":
+            // diagramstarter <name…> [colorful]
+            controller.diagrams.ink = args.last != "colorful"
+            controller.diagrams.starter(args.filter { $0 != "colorful" }.joined(separator: " "))
+        case "diagramjson":
+            // diagramjson <file.json> [colorful]: draws a diagram spec without a model.
+            guard let path = args.first, let data = FileManager.default.contents(atPath: path),
+                  let spec = try? JSONDecoder().decode(StudioDiagram.Spec.self, from: data) else { return }
+            let drawn = StudioDiagram.elements(spec, ink: args.last != "colorful")
+            let id = controller.addSketch(elements: drawn.elements, at: nil, size: drawn.size, focus: false)
+            controller.renameSketch(id, to: spec.title ?? "Diagram")
+        case "diagramstate":
+            DemoDirector.note("diagram drawing=\(controller.diagrams.drawing != nil) error=\(controller.diagrams.error ?? "-") sketches="
+                              + controller.model.sketches.map { "\($0.title):\($0.elements.count)" }.joined(separator: ","))
+        case "accountadd":
+            // accountadd <claude|codex> <name…>: a profile, and a tile to sign it in.
+            guard let provider = BoardAccount.Provider(rawValue: args.first ?? "") else { return }
+            controller.connect(BoardAccounts.shared.add(provider, name: args.dropFirst().joined(separator: " ")))
+        case "accountuse":
+            // accountuse <claude|codex> <name…|usual>
+            guard let provider = BoardAccount.Provider(rawValue: args.first ?? "") else { return }
+            let name = args.dropFirst().joined(separator: " ")
+            BoardAccounts.shared.use(BoardAccounts.shared.accounts.first { $0.name == name }?.id, for: provider)
+        case "accountremove":
+            for account in BoardAccounts.shared.accounts where account.name == args.joined(separator: " ") { BoardAccounts.shared.remove(account.id) }
+        case "accountstate":
+            DemoDirector.note("accounts " + BoardAccounts.shared.accounts.map { "\($0.provider.rawValue):\($0.name)(\($0.initials)) used=\($0.used)" }.joined(separator: ", ")
+                              + " active=" + BoardAccounts.shared.active.map { "\($0.key.rawValue)=\(BoardAccounts.shared.account($0.value)?.name ?? "?")" }.joined(separator: ","))
+            for (index, surface) in controller.model.surfaces.enumerated() {
+                let chosen = controller.model.tileAccounts[surface.id] ?? [:]
+                DemoDirector.note("tile \(index + 1) accounts=" + chosen.map { "\($0.key.rawValue)=\(BoardAccounts.shared.account($0.value)?.name ?? "?")" }.joined(separator: ","))
+            }
+        case "tileenv":
+            // tileenv <n> <VAR>: the variable as tile n's processes have it.
+            guard args.count == 2, let surface = tile(args[0], of: controller) else { return }
+            let name = args[1], id = surface.id.uuidString
+            DispatchQueue.global().async {
+                let found = ProcessProbe.userPIDs().compactMap { pid -> String? in
+                    guard ProcessProbe.environment(pid, BoardPause.surfaceKey) == id else { return nil }
+                    return ProcessProbe.environment(pid, name).map { ($0 as NSString).abbreviatingWithTildeInPath }
+                }
+                DispatchQueue.main.async { DemoDirector.note("tileenv \(args[0]) \(name)=\(Set(found).sorted())") }
+            }
+        case "media":
+            // media <file…>: a media tile; "mediastate" logs it.
+            controller.addMedia(args.map { URL(fileURLWithPath: $0) })
+        case "mediaplay":
+            controller.window?.contentView?.descendants.compactMap { $0 as? MediaContent }.first?.play()
+        case "mediastate":
+            for content in controller.window?.contentView?.descendants.compactMap({ $0 as? MediaContent }) ?? [] {
+                DemoDirector.note("media \(content.testState)")
+            }
+        case "kanbanstate":
+            for card in controller.model.cards where card.kind == .kanban {
+                DemoDirector.note("kanban v\(card.kanbanVersion ?? 0) " + card.items.map { "\($0.text)@\(CardItem.columns[$0.column])" }.joined(separator: ", "))
+            }
+        case "home":
+            BoardHome.show()
+        case "mission":
+            controller.model.showMissionMap = args.first != "off"
+        case "orchnew":
+            // orchnew [tile n…]: an orchestrator wired to those tiles.
+            let tiles = args.compactMap { tile($0, of: controller)?.id }
+            controller.newOrchestrator(wiring: tiles)
+        case "orchconnect":
+            guard let team = controller.model.teams.first else { return }
+            controller.startWiring(team.id)
+        case "orchbutton":
+            // orchbutton: a real click on the first orchestrator's Connect / Done button.
+            guard let team = controller.model.teams.first, let frame = controller.model.frames[team.id] else { return }
+            let point = CGPoint(x: frame.maxX - 45, y: frame.minY + BoardNodeView.header + 21)
+            if let view = controller.cardView(team.id), let document = controller.groupsView?.superview {
+                let local = view.convert(document.convert(point, to: nil), from: nil)
+                DemoDirector.note("orch button local=\(local) bounds=\(view.bounds) frame=\(frame) zoom=\(controller.model.zoom)")
+            }
+            click(board: point, in: controller)
+        case "orchdone":
+            controller.endWiring()
+        case "orchclick":
+            // orchclick <n>: a real click in the middle of tile n's terminal.
+            guard let surface = tile(args.first ?? "", of: controller), let frame = controller.model.frames[surface.id] else { return }
+            click(board: CGPoint(x: frame.midX, y: frame.midY), in: controller)
+        case "orchgroup":
+            // orchgroup <n>: a real click on the wire pill of tile n's group.
+            guard let surface = tile(args.first ?? "", of: controller), let project = controller.model.projects[surface.id],
+                  let rect = controller.groupsView?.pillRect(of: project) else {
+                DemoDirector.note("orch no pill")
+                return
+            }
+            click(board: CGPoint(x: rect.midX, y: rect.midY), in: controller)
+        case "orchstate":
+            let number = { (id: UUID) in (controller.model.surfaces.firstIndex { $0.id == id }).map { "\($0 + 1)" } ?? "?" }
+            for team in controller.model.teams {
+                let brain = controller.orchestratorBrain(team.id)
+                DemoDirector.note("orch \(controller.orchestratorName(team.id)) color=\(team.color) wiring=\(controller.model.wiring == team.id) "
+                                  + "members=" + team.members.map { "\(number($0.tile)):\($0.role ?? "-")" }.joined(separator: ",")
+                                  + " groups=" + team.groups.map(controller.groupTitle).joined(separator: ",")
+                                  + " agents=" + controller.wiredAgents(team).map { number($0.surface.id) }.joined(separator: ",")
+                                  + " running=\(brain.running) busy=\(brain.busy) turn=\(brain.turn)")
+            }
+            DemoDirector.note("orch links=\(controller.teamLinks().count) teams=\(controller.model.teams.count)")
+        case "orchcanned":
+            // orchcanned <reply JSON>: the first orchestrator's next turn answers this instead.
+            guard let team = controller.model.teams.first,
+                  let data = HeadlessAgent.object(in: args.joined(separator: " ")),
+                  let reply = try? JSONDecoder().decode(OrchestratorReply.self, from: data) else {
+                DemoDirector.note("orch bad reply")
+                return
+            }
+            controller.orchestratorBrain(team.id).canned.append(reply)
+        case "orchwiregroup":
+            // orchwiregroup <n>: wires tile n's project group to the first orchestrator.
+            guard let team = controller.model.teams.first, let surface = tile(args.first ?? "", of: controller),
+                  let project = controller.model.projects[surface.id] else {
+                DemoDirector.note("orch no group")
+                return
+            }
+            controller.toggleGroup(project, in: team.id)
+        case "orchturns":
+            guard let team = controller.model.teams.first, let turns = Int(args.first ?? "") else { return }
+            controller.setTurns(turns, for: team.id)
+        case "orchcmd":
+            guard let team = controller.model.teams.first else { return }
+            controller.orchestratorBrain(team.id).command(args.joined(separator: " "))
+        case "orchclose":
+            guard let team = controller.model.teams.first else { return }
+            controller.removeCard(team.id)
+        case "agentconfirm":
+            controller.assistant.confirm()
+        case "agentcancel":
+            controller.assistant.cancel()
+        case "agentcontext":
+            DemoDirector.note("agent context\n" + controller.assistantContext(agents: BoardAgent.catalog).text)
+        case "agentlog":
+            let assistant = controller.assistant
+            DemoDirector.note("agent busy=\(assistant.busy) engine=\(assistant.engine?.rawValue ?? "-") engines=\(assistant.engines?.map(\.rawValue) ?? [])")
+            for message in assistant.messages {
+                DemoDirector.note("agent \(message.role): \(message.text) \(message.done)")
+            }
+            if let pending = assistant.pending { DemoDirector.note("agent pending \(pending.lines)") }
+        case "pause", "resume":
+            // pause|resume [tile numbers…]: all tiles without numbers.
+            let ids = args.isEmpty ? nil : args.compactMap { tile($0, of: controller)?.id }
+            controller.setPaused(action == "pause", ids)
+        case "procs":
+            // procs <n>: the state of tile n's processes (T = stopped).
+            guard let surface = tile(args.first ?? "", of: controller) else { return }
+            let pids = ProcessProbe.userPIDs().filter { ProcessProbe.environment($0, BoardPause.surfaceKey) == surface.id.uuidString }
+            guard !pids.isEmpty else {
+                DemoDirector.note("procs none paused=\(controller.model.paused.contains(surface.id))")
+                return
+            }
+            let result = ToolPath.run("/bin/ps", ["-o", "stat=,comm=", "-p", pids.map(String.init).joined(separator: ",")], in: "/")
+            let states = result.output.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+            DemoDirector.note("procs paused=\(controller.model.paused.contains(surface.id)) \(states.joined(separator: " | "))")
         case "cardstate":
             for card in controller.model.cards {
                 DemoDirector.note("card \(card.kind.rawValue) \(card.title) text=\(card.text.prefix(40)) items=\(card.items.count)")
@@ -424,9 +783,23 @@ enum BoardTest {
                                              clickCount: clicks, pressure: type == .leftMouseUp ? 0 : 1) else { return }
         // Through the app's queue, as a real click arrives (it sets `NSApp.currentEvent`).
         NSApp.postEvent(event, atStart: false)
+        // A posted event can wait in the queue until the next one comes: wake it after a click.
+        if type == .leftMouseUp, let wake = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [],
+                                                                timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                                                subtype: 0, data1: 0, data2: 0) {
+            NSApp.postEvent(wake, atStart: false)
+        }
     }
 
     /// Press, move in steps over about a third of a second, release.
+    /// A click at a board point, as the mouse would.
+    private static func click(board point: CGPoint, in controller: BoardController) {
+        guard let window = controller.window, let document = controller.groupsView?.superview else { return }
+        let inWindow = document.convert(point, to: nil)
+        mouse(.leftMouseDown, CGPoint(x: inWindow.x, y: (window.contentView?.bounds.height ?? 0) - inWindow.y), in: window)
+        mouse(.leftMouseUp, CGPoint(x: inWindow.x, y: (window.contentView?.bounds.height ?? 0) - inWindow.y), in: window)
+    }
+
     private static func drag(from start: CGPoint, by delta: CGSize, in controller: BoardController) {
         guard let window = controller.window else { return }
         mouse(.leftMouseDown, start, in: window)

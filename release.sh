@@ -106,6 +106,20 @@ if git diff "$PREV"..HEAD | grep -E '^\+' | grep -v '^+++' | grep -q "/Users/$US
   fail "a path inside your home folder was added to the code"
 fi
 pass "no paths to your home folder added"
+# Words that must never appear in the repo or the release notes, one per line, kept
+# outside the repo so the list itself isn't published.
+BLOCKLIST=~/.ghostty-extreme/release-blocklist
+if [[ -s $BLOCKLIST ]]; then
+  while IFS= read -r word || [[ -n $word ]]; do
+    word=${word%$'\r'}
+    [[ -z ${word//[[:space:]]/} ]] && continue
+    if git grep -qiF -- "$word" HEAD || git log "$PREV"..HEAD --format=%B | grep -qiF -- "$word" \
+      || print -r -- "$NOTES_BODY" | grep -qiF -- "$word"; then
+      fail "a blocked word from $BLOCKLIST appears in the code, a commit message or the release notes"
+    fi
+  done < $BLOCKLIST
+  pass "no blocked words"
+fi
 
 # ── Build ───────────────────────────────────────────────────────────────
 step "Build (a few minutes)"

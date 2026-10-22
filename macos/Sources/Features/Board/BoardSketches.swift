@@ -8,15 +8,22 @@ extension BoardController {
     static let sketchSize = CGSize(width: 960, height: 620)
 
     /// A new sketch beside the tile with the cursor, or in the middle of the view; `elements`
-    /// starts it with something (pictures dropped on the board).
+    /// starts it with something (pictures dropped on the board); `focus` gives it the keyboard.
     @discardableResult
-    func addSketch(elements: [SketchElement] = [], at point: CGPoint? = nil) -> UUID {
+    func addSketch(elements: [SketchElement] = [], at point: CGPoint? = nil, size: CGSize = BoardController.sketchSize, focus: Bool = true) -> UUID {
         let title = BoardStore.uniqueName("Sketch", taken: Set(model.sketches.map(\.title)))
         let sketch = BoardSketch(id: UUID(), title: title, elements: elements)
-        insertSketch(sketch, frame: spot(for: Self.sketchSize, at: point))
+        insertSketch(sketch, frame: spot(for: size, at: point))
         undoManager?.registerUndo(withTarget: self) { $0.removeSketch(sketch.id) }
         undoManager?.setActionName("New Sketch")
-        DispatchQueue.main.async { [weak self] in self?.focusSketch(sketch.id) }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if focus {
+                self.focusSketch(sketch.id)
+            } else if let frame = self.model.frames[sketch.id] {
+                self.revealRect(frame)
+            }
+        }
         return sketch.id
     }
 
@@ -204,7 +211,15 @@ extension BoardController {
     func drop(_ urls: [URL], images: [NSImage], at point: CGPoint) -> Bool {
         var pictures = images
         var opened = false
-        for url in urls {
+        // Video and audio play in a media tile; Markdown shows as a document.
+        let media = urls.filter(BoardMedia.isMedia)
+        if !media.isEmpty, addMedia(media, at: point) != nil { opened = true }
+        let documents = ExtremeSettings.isOn(.documents)
+        for url in urls where documents && url.pathExtension.lowercased() == "md" {
+            placeDocument(url, at: point)
+            opened = true
+        }
+        for url in urls where !BoardMedia.isMedia(url) && !(documents && url.pathExtension.lowercased() == "md") {
             if UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true, let image = NSImage(contentsOf: url) {
                 pictures.append(image)
                 continue

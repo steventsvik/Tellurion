@@ -73,11 +73,50 @@ enum BoardTileMenu {
                 list.append(Action(title: "Project Memory…", enabled: pwd != nil) { MemoryWindow.show(folder: pwd) })
             }
         }
+        list.append(nil)
+        list.append(contentsOf: groupActions(for: surface.id, in: board))
+        list.append(contentsOf: accountActions(for: surface, in: board))
+        list.append(contentsOf: BoardTeamMenu.actions(for: surface.id, in: board))
         list.append(contentsOf: undoActions(for: surface))
         list.append(nil)
         list.append(Action(title: "Copy Working Directory", enabled: pwd != nil) { VerticalTabsActions.copy(pwd ?? "") })
         list.append(nil)
         list.append(Action(title: "Close Tile") { [weak board] in board?.close(surface) })
+        return list
+    }
+
+    /// Starting the tile's agent on another account.
+    private static func accountActions(for surface: Ghostty.SurfaceView, in board: BoardController) -> [Action?] {
+        guard ExtremeSettings.isOn(.accounts), let kind = VerticalTabsAgents.shared.info(for: surface)?.kind,
+              let provider = BoardAccount.Provider.allCases.first(where: { $0.kind == kind }) else { return [] }
+        let profiles = BoardAccounts.shared.accounts.filter { $0.provider == provider }
+        guard !profiles.isEmpty else { return [] }
+        let current = board.model.tileAccounts[surface.id]?[provider]
+        var list: [Action?] = []
+        if current != nil {
+            list.append(Action(title: "Use Your Usual Sign-in") { [weak board] in board?.switchAccount(surface, to: nil, provider: provider) })
+        }
+        for profile in profiles where profile.id != current {
+            list.append(Action(title: "Use \(profile.name)") { [weak board] in board?.switchAccount(surface, to: profile, provider: provider) })
+        }
+        return list
+    }
+
+    /// Making groups and moving the tile between them.
+    private static func groupActions(for tile: UUID, in board: BoardController) -> [Action?] {
+        var list: [Action?] = []
+        let own = board.namedGroup(containing: tile)
+        if let own {
+            list.append(Action(title: "Remove from \(own.name)") { [weak board] in board?.removeFromGroup(tile) })
+        } else {
+            list.append(Action(title: "New Group with This Tile") { [weak board] in
+                guard let board else { return }
+                if let id = board.createGroup([tile]) { board.promptRenameGroup(id) }
+            })
+        }
+        for group in board.model.groups where group.id != own?.id {
+            list.append(Action(title: "Add to \(group.name)") { [weak board] in board?.addToGroup([tile], group: group.id) })
+        }
         return list
     }
 
