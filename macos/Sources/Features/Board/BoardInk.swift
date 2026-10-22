@@ -64,8 +64,9 @@ extension BoardController {
     /// A finished stroke, pinned to the tile or card it started on.
     func addInk(_ points: [CGPoint]) {
         guard let first = points.first else { return }
+        let hidden = collapsedTiles
         let anchor = model.order.reversed().first { id in
-            model.frames[id]?.contains(first) == true && model.labels.allSatisfy { $0.id != id }
+            model.frames[id]?.contains(first) == true && !hidden.contains(id) && model.labels.allSatisfy { $0.id != id }
         }
         let origin = anchor.flatMap { model.frames[$0]?.origin } ?? .zero
         let stroke = BoardInkStroke(id: UUID(), points: points.map { CGPoint(x: $0.x - origin.x, y: $0.y - origin.y) },
@@ -95,7 +96,9 @@ extension BoardController {
 final class BoardInkView: NSView {
     weak var controller: BoardController?
     private var layers: [UUID: CAShapeLayer] = [:]
-    private var drawn: [UUID: (BoardInkStroke, [CGPoint])] = [:]
+    /// The stroke each layer's path was made from (in its anchor's space).
+    private var drawn: [UUID: BoardInkStroke] = [:]
+    private var lastTool: BoardTool?
     /// The stroke being drawn.
     private let live = CAShapeLayer()
     private var points: [CGPoint] = []
@@ -135,9 +138,11 @@ final class BoardInkView: NSView {
         addCursorRect(bounds, cursor: controller?.model.tool == .eraser ? .disappearingItem : .crosshair)
     }
 
-    /// Draws `ink` where its anchors are now. Only strokes that moved or changed are redone.
+    /// Draws `ink` where its anchors are now. A stroke's path is made once; when its anchor
+    /// moves, only its layer moves.
     func update(_ ink: [BoardInkStroke]) {
         guard let controller else { return }
+        let hidden = ink.contains { $0.anchor != nil } ? controller.collapsedTiles : []
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         let ids = Set(ink.map(\.id))
@@ -147,9 +152,15 @@ final class BoardInkView: NSView {
             drawn[id] = nil
         }
         for stroke in ink {
-            guard let points = controller.inkPoints(stroke) else {
-                layers[stroke.id]?.isHidden = true
-                continue
+            let origin: CGPoint
+            if let anchor = stroke.anchor {
+                guard let frame = controller.model.frames[anchor] else {
+                    layers[stroke.id]?.isHidden = true
+                    continue
+                }
+                origin = frame.origin
+            } else {
+                origin = .zero
             }
             let layer = layers[stroke.id] ?? {
                 let layer = CAShapeLayer()
@@ -160,16 +171,21 @@ final class BoardInkView: NSView {
                 layers[stroke.id] = layer
                 return layer
             }()
-            layer.isHidden = controller.collapsedTiles.contains(stroke.anchor ?? UUID())
-            if let old = drawn[stroke.id], old.0 == stroke, old.1 == points { continue }
-            drawn[stroke.id] = (stroke, points)
-            layer.path = BoardInk.path(points)
+            layer.isHidden = stroke.anchor.map(hidden.contains) ?? false
+            let move = CGAffineTransform(translationX: origin.x, y: origin.y)
+            if layer.affineTransform() != move { layer.setAffineTransform(move) }
+            layer.opacity = erasing.contains(stroke.id) ? 0.25 : 1
+            guard drawn[stroke.id] != stroke else { continue }
+            drawn[stroke.id] = stroke
+            layer.path = BoardInk.path(stroke.points)
             layer.strokeColor = BoardInk.color(stroke.color).cgColor
             layer.lineWidth = stroke.width
-            layer.opacity = erasing.contains(stroke.id) ? 0.25 : 1
         }
         CATransaction.commit()
-        window?.invalidateCursorRects(for: self)
+        if lastTool != controller.model.tool {
+            lastTool = controller.model.tool
+            window?.invalidateCursorRects(for: self)
+        }
     }
 
     // MARK: Mouse

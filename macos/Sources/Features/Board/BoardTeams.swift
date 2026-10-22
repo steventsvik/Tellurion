@@ -375,7 +375,8 @@ extension BoardController {
         // The agents need a moment to start before they can take work.
         if let goal, !goal.isEmpty {
             DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
-                self?.orchestratorBrain(id).command(goal)
+                guard let self, self.orchestrator(id) != nil else { return }
+                self.orchestratorBrain(id).command(goal)
             }
         }
     }
@@ -416,7 +417,7 @@ extension BoardController {
         guard let info, info.activity != before else { return }
         let finished = before == .working || before == .needsPermission
         switch info.activity {
-        case .done, .ready where finished: break
+        case .done where finished, .ready where finished: break
         case .needsInput, .needsPermission, .failed: break
         default: return
         }
@@ -455,9 +456,17 @@ extension BoardController {
 
     /// The agent's last answer, from the transcript it reported. Never guessed from its
     /// folder: that could be another session there (yours, or another agent's).
+    /// Read again only when the transcript has changed.
     func lastAnswer(_ surface: Ghostty.SurfaceView) -> String? {
-        guard let transcript = VerticalTabsAgents.shared.info(for: surface)?.transcriptPath else { return nil }
-        return AgentTools.lastAssistantMessage(transcript: transcript)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let transcript = VerticalTabsAgents.shared.info(for: surface)?.transcriptPath,
+              let attributes = try? FileManager.default.attributesOfItem(atPath: transcript) else { return nil }
+        let stamp = "\((attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)-\(attributes[.size] as? Int ?? 0)"
+        if let cached = Self.answers[transcript], cached.stamp == stamp { return cached.answer }
+        let answer = AgentTools.lastAssistantMessage(transcript: transcript)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        Self.answers[transcript] = (stamp, answer)
+        return answer
     }
+
+    private static var answers: [String: (stamp: String, answer: String?)] = [:]
 }
 #endif

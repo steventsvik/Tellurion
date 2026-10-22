@@ -90,7 +90,22 @@ final class BoardGroupsView: NSView {
     private let boxLayer = CAShapeLayer()
     /// One per wire: a soft glow under the line, the line with a dot at each end, and a dot
     /// that travels along it while something on the far end works.
-    private var wireLayers: [(glow: CAShapeLayer, line: CAShapeLayer, ends: CAShapeLayer, runner: CAShapeLayer)] = []
+    private var wireLayers: [WireLayers] = []
+
+    private struct WireLayers {
+        let glow, line, ends, runner: CAShapeLayer
+    }
+
+    private struct NamedLayers {
+        let frame: CAShapeLayer
+        let header, strip, pill: CATextLayer
+    }
+
+    private struct NamedHit {
+        let id: UUID
+        let header, chevron: CGRect
+        let strip, pill: CGRect?
+    }
     private var links: [BoardTeamLink] = []
     private var linkZoom: CGFloat = 1
     private var linkMotion = false
@@ -106,10 +121,9 @@ final class BoardGroupsView: NSView {
     private var named: [BoardNamedGroupDisplay] = []
     private var namedZoom: CGFloat = 1
     private var namedWiring: (color: NSColor, groups: Set<String>)?
-    private var namedLayers: [(frame: CAShapeLayer, header: CATextLayer, strip: CATextLayer, pill: CATextLayer)] = []
+    private var namedLayers: [NamedLayers] = []
     /// Per group: the header (drag, menu), its chevron, the collapsed strip and the wire pill.
-    private var namedHits: [(id: UUID, header: CGRect, chevron: CGRect, strip: CGRect?, pill: CGRect?)] = []
-    private var namedDrag: UUID?
+    private var namedHits: [NamedHit] = []
 
     private var dragStart: (point: CGPoint, window: CGPoint, frames: [UUID: CGRect])?
     private var dragMoved = false
@@ -205,7 +219,7 @@ final class BoardGroupsView: NSView {
             }
             pill.alignmentMode = .center
             for layer in [frame, header, strip, pill] as [CALayer] { self.layer?.insertSublayer(layer, below: guideLayer) }
-            namedLayers.append((frame, header, strip, pill))
+            namedLayers.append(NamedLayers(frame: frame, header: header, strip: strip, pill: pill))
         }
         let scale = min(1 / max(zoom, 0.08), 5)
         let contents = (window?.backingScaleFactor ?? 2) * max(scale * zoom, 1)
@@ -291,7 +305,7 @@ final class BoardGroupsView: NSView {
                 layers.pill.contentsScale = contents
                 pillRect = CGRect(origin: origin, size: pillSize)
             }
-            namedHits.append((group.id, header, chevron, stripRect, pillRect))
+            namedHits.append(NamedHit(id: group.id, header: header, chevron: chevron, strip: stripRect, pill: pillRect))
         }
         CATransaction.commit()
         window?.invalidateCursorRects(for: self)
@@ -316,7 +330,6 @@ final class BoardGroupsView: NSView {
         }
         guard let group = controller.namedGroup(hit.id) else { return true }
         dragMoved = false
-        namedDrag = hit.id
         let frames = Dictionary(uniqueKeysWithValues: group.tiles.compactMap { id in controller.model.frames[id].map { (id, $0) } })
         dragStart = (local, event.locationInWindow, frames)
         for id in group.tiles { controller.raise(id: id) }
@@ -395,7 +408,7 @@ final class BoardGroupsView: NSView {
             // Strokes only: filling a curve would paint the area under it.
             glow.fillColor = nil
             line.fillColor = nil
-            wireLayers.append((glow, line, ends, runner))
+            wireLayers.append(WireLayers(glow: glow, line: line, ends: ends, runner: runner))
         }
         let scale = min(1 / max(zoom, 0.08), 4)
         for (link, layers) in zip(links, wireLayers) {
@@ -423,15 +436,18 @@ final class BoardGroupsView: NSView {
                                               transform: nil)
             let runs = link.working && motion
             layers.runner.isHidden = !runs
-            if runs {
+            // Started again only when the wire moved, so it doesn't jump back on every update.
+            let running = layers.runner.animation(forKey: "travel") as? CAKeyframeAnimation
+            if runs, running?.path != wire.path {
                 let travel = CAKeyframeAnimation(keyPath: "position")
+                travel.preferredFrameRateRange = Motion.chromeRate
                 travel.path = wire.path
                 travel.calculationMode = .paced
                 // About the same speed on screen whatever the length.
                 travel.duration = max(1.2, min(4, wire.length / 260))
                 travel.repeatCount = .infinity
                 layers.runner.add(travel, forKey: "travel")
-            } else {
+            } else if !runs {
                 layers.runner.removeAnimation(forKey: "travel")
             }
         }
@@ -568,7 +584,7 @@ final class BoardGroupsView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { dragStart = nil; namedDrag = nil }
+        defer { dragStart = nil }
         guard dragMoved else { return }
         NSCursor.pop()
         controller?.tileDidSettle()

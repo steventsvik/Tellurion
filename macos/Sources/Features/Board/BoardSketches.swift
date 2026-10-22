@@ -214,11 +214,12 @@ extension BoardController {
         // Video and audio play in a media tile; Markdown shows as a document.
         let media = urls.filter(BoardMedia.isMedia)
         if !media.isEmpty, addMedia(media, at: point) != nil { opened = true }
-        for url in urls where url.pathExtension.lowercased() == "md" {
+        let documents = ExtremeSettings.isOn(.documents)
+        for url in urls where documents && url.pathExtension.lowercased() == "md" {
             placeDocument(url, at: point)
             opened = true
         }
-        for url in urls where !BoardMedia.isMedia(url) && url.pathExtension.lowercased() != "md" {
+        for url in urls where !BoardMedia.isMedia(url) && !(documents && url.pathExtension.lowercased() == "md") {
             if UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true, let image = NSImage(contentsOf: url) {
                 pictures.append(image)
                 continue

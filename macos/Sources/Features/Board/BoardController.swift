@@ -147,6 +147,18 @@ final class BoardController: BaseTerminalController {
     var wiringMonitor: Any?
     /// The tool keys (see installToolKeys).
     var toolKeyMonitor: Any?
+    /// The board's cursor follows the tool, however it changed.
+    var toolCursor: AnyCancellable?
+    /// Tile labels, built once per run-loop turn (a redraw asks for them many times).
+    var tileLabelCache: (key: [UUID], titles: [UUID: String], labels: [(id: UUID, label: String, surface: Ghostty.SurfaceView)])?
+    /// What a closed tile belonged to, so undoing the close puts it back.
+    private var closedTiles: [UUID: ClosedTile] = [:]
+
+    private struct ClosedTile {
+        var group: BoardGroupNode?
+        var ink: [BoardInkStroke]
+        var teams: [(team: UUID, member: BoardTeam.Member)]
+    }
 
     // MARK: Opening
 
@@ -239,6 +251,7 @@ final class BoardController: BaseTerminalController {
             // Another tool showing a tile (Mission Control, a notification, the palette):
             // the board moves to it too.
             guard let self, let surface = note.object as? Ghostty.SurfaceView, self.surfaceTree.contains(surface) else { return }
+            self.expandGroup(containing: surface.id)
             self.raise(surface)
             self.reveal(surface)
         })
@@ -359,7 +372,17 @@ final class BoardController: BaseTerminalController {
             model.frames[view.id] = freeSpot(size: Self.tileSize, near: anchor)
         }
         for view in surfaces where !model.order.contains(view.id) { model.order.append(view.id) }
+        let before = Set(from.map(\.id)), after = Set(surfaces.map(\.id))
+        for id in before.subtracting(after) {
+            closedTiles[id] = ClosedTile(
+                group: model.groups.first { $0.tiles.contains(id) },
+                ink: model.ink.filter { $0.anchor == id },
+                teams: model.teams.compactMap { team in team.members.first { $0.tile == id }.map { (team.id, $0) } })
+        }
         model.surfaces = surfaces
+        for id in after.subtracting(before) {
+            if let closed = closedTiles.removeValue(forKey: id) { restore(closed, tile: id) }
+        }
         // Closed tiles come unwired.
         if !model.teams.isEmpty { pruneTeams() }
         if !model.groups.isEmpty { pruneGroups() }
@@ -367,6 +390,26 @@ final class BoardController: BaseTerminalController {
         watchProjects()
         updateVisibility()
         scheduleSave()
+    }
+
+    /// An undone close: back into its group (made again if it had gone), with its ink and wires.
+    private func restore(_ closed: ClosedTile, tile id: UUID) {
+        if let group = closed.group {
+            if let index = model.groups.firstIndex(where: { $0.id == group.id }) {
+                if !model.groups[index].tiles.contains(id) { model.groups[index].tiles.append(id) }
+            } else if model.groups.allSatisfy({ !$0.tiles.contains(id) }) {
+                var group = group
+                group.tiles = [id]
+                model.groups.append(group)
+            }
+        }
+        let inked = Set(model.ink.map(\.id))
+        model.ink += closed.ink.filter { !inked.contains($0.id) }
+        for (team, member) in closed.teams {
+            guard let index = model.teams.firstIndex(where: { $0.id == team }),
+                  !model.teams[index].members.contains(where: { $0.tile == id }) else { continue }
+            model.teams[index].members.append(member)
+        }
     }
 
     // MARK: Projects
@@ -868,6 +911,7 @@ final class BoardController: BaseTerminalController {
 
     /// Zooms in on the tile at full size and puts the cursor in it.
     func focusTile(_ view: Ghostty.SurfaceView) {
+        expandGroup(containing: view.id)
         raise(view)
         zoom(toNode: view.id)
         Ghostty.moveFocus(to: view)
@@ -1076,7 +1120,13 @@ final class BoardController: BaseTerminalController {
     override func windowWillClose(_ notification: Notification) {
         setPaused(false)
         for brain in orchestratorBrains.values { brain.stop(quietly: true) }
+        // Headless runs end with the board.
+        assistant.stop()
+        documents.stop()
+        diagrams.cancel()
         endWiring()
+        if let toolKeyMonitor { NSEvent.removeMonitor(toolKeyMonitor) }
+        toolKeyMonitor = nil
         if deleteOnClose {
             BoardStore.delete(workspace.id)
         } else {

@@ -16,6 +16,8 @@ final class BoardDictation: ObservableObject {
     private var task: SFSpeechRecognitionTask?
     /// Let go before permission came back: don't start.
     private var wanted = false
+    /// Bumped by `cancel()`, so a cancelled session's last words don't arrive.
+    private var session = 0
 
     /// Starts listening; `update` gets the words so far, `failed` a reason it can't.
     func start(update: @escaping (String) -> Void, failed: @escaping (String) -> Void) {
@@ -53,6 +55,14 @@ final class BoardDictation: ObservableObject {
         request = nil
     }
 
+    /// Stops listening and drops the words still on their way (the text was sent).
+    func cancel() {
+        session += 1
+        stop()
+        task?.cancel()
+        task = nil
+    }
+
     /// Loudness of a buffer (RMS, scaled so speech fills most of the range).
     private func measure(_ buffer: AVAudioPCMBuffer) {
         guard let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return }
@@ -68,6 +78,8 @@ final class BoardDictation: ObservableObject {
     }
 
     private func begin(update: @escaping (String) -> Void, failed: @escaping (String) -> Void) {
+        // Asked twice before permission came back: the second would tap the input again.
+        guard !listening else { return }
         guard let recognizer = SFSpeechRecognizer(), recognizer.isAvailable else {
             failed("Speech recognition isn't available right now.")
             return
@@ -91,12 +103,14 @@ final class BoardDictation: ObservableObject {
         self.request = request
         listening = true
         task?.cancel()
+        let session = self.session
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             DispatchQueue.main.async {
+                guard let self, self.session == session else { return }
                 if let result { update(result.bestTranscription.formattedString) }
                 if error != nil || result?.isFinal == true {
-                    self?.task = nil
-                    self?.stop()
+                    self.task = nil
+                    self.stop()
                 }
             }
         }

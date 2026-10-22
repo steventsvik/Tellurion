@@ -109,7 +109,8 @@ enum StudioDiagram {
         let nodes = spec.nodes.filter { seen.insert($0.id).inserted }
         let ids = Set(nodes.map(\.id))
         let edges = (spec.edges ?? []).filter { ids.contains($0.from) && ids.contains($0.to) && $0.from != $0.to }
-        let groups = (spec.groups ?? []).filter { group in nodes.contains { $0.group == group.id } }
+        var seenGroups = Set<String>()
+        let groups = (spec.groups ?? []).filter { group in seenGroups.insert(group.id).inserted && nodes.contains { $0.group == group.id } }
         let groupColor = Dictionary(uniqueKeysWithValues: groups.enumerated().map { ($1.id, [1, 5, 3, 6, 2, 4][$0 % 6]) })
         let frames = layout(nodes, edges, groups: groups)
         let top: CGFloat = spec.title?.isEmpty == false ? 70 : 0
@@ -166,27 +167,35 @@ final class StudioDiagrams: ObservableObject {
     /// The sketch being drawn, while a model works on it.
     @Published private(set) var drawing: UUID?
     @Published private(set) var error: String?
-    private var process: Process?
+    private var run: HeadlessAgent.Run?
 
     weak var board: BoardController?
 
     func generate(_ ask: String, title: String) {
-        guard let board, drawing == nil, let project = board.documentsProject else { return }
+        guard let board, drawing == nil else { return }
+        guard let project = board.documentsProject else {
+            error = "Open a terminal in your project first: diagrams are drawn from its folder."
+            return
+        }
         error = nil
         // A placeholder sketch at once: three faint boxes until the real one arrives.
         let skeleton = (0..<3).map { index in
             SketchElement(kind: .rectangle, frame: CGRect(x: 60 + CGFloat(index) * 260, y: 140, width: 200, height: 84), color: 7,
                           opacity: 0.35, dashed: true)
         }
+        // Not undoable: it's replaced (or removed) when the answer comes.
+        board.undoManager?.disableUndoRegistration()
         let id = board.addSketch(elements: skeleton, at: nil, size: BoardController.sketchSize, focus: false)
         board.renameSketch(id, to: "\(title) (drawing…)")
+        board.undoManager?.enableUndoRegistration()
         drawing = id
         let ink = self.ink
-        process = HeadlessAgent.stream(engine, instructions: StudioDiagram.instructions, prompt: "Draw " + ask + ".",
-                                       folder: project, model: "sonnet", progress: { _, _ in }, done: { [weak self, weak board] result in
+        let request = HeadlessAgent.Ask(instructions: StudioDiagram.instructions, prompt: "Draw " + ask + ".",
+                                        folder: project, model: "sonnet")
+        run = HeadlessAgent.stream(engine, request, progress: { _, _ in }, done: { [weak self, weak board] result in
             guard let self, let board else { return }
             self.drawing = nil
-            self.process = nil
+            self.run = nil
             switch result {
             case .success(let text):
                 guard let data = HeadlessAgent.object(in: text), let spec = try? JSONDecoder().decode(StudioDiagram.Spec.self, from: data),
@@ -203,7 +212,7 @@ final class StudioDiagrams: ObservableObject {
                 board.renameSketch(real, to: spec.title ?? title)
                 board.zoom(toNode: real)
             case .failure(let failure):
-                self.error = failure.localizedDescription
+                if case HeadlessAgent.StreamError.stopped = failure {} else { self.error = failure.localizedDescription }
                 self.discard(id)
             }
         })
@@ -217,7 +226,7 @@ final class StudioDiagrams: ObservableObject {
     }
 
     func cancel() {
-        process?.terminate()
+        run?.stop()
     }
 
     /// A starter shape, at once.

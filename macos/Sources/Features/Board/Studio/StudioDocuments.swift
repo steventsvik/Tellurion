@@ -146,8 +146,7 @@ final class StudioDocuments: ObservableObject {
     @Published private(set) var file: URL?
     @Published private(set) var library: [URL] = []
 
-    private var process: Process?
-    private var lastPush = Date.distantPast
+    private var run: HeadlessAgent.Run?
 
     var running: Bool { phase != nil }
 
@@ -178,37 +177,38 @@ final class StudioDocuments: ObservableObject {
         started = Date()
         let effort = self.effort, engine = self.engine
         let prompt = request + "\n\n" + effort.guidance
-        process = HeadlessAgent.stream(engine, instructions: StudioDocs.instructions, prompt: prompt, folder: project,
-                                       model: engine == .claude ? effort.model : nil,
-                                       progress: { [weak self] phase, text in
+        // Callbacks from a run that was stopped (or replaced) are ignored.
+        var current: HeadlessAgent.Run?
+        let ask = HeadlessAgent.Ask(instructions: StudioDocs.instructions, prompt: prompt, folder: project,
+                                    model: engine == .claude ? effort.model : nil)
+        current = HeadlessAgent.stream(engine, ask, progress: { [weak self] phase, text in
             DispatchQueue.main.async {
-                guard let self, self.running else { return }
+                guard let self, let current, self.run === current else { return }
                 self.phase = phase
-                // A few times a second is plenty for the page.
-                if Date().timeIntervalSince(self.lastPush) > 0.3 || phase != .writing {
-                    self.lastPush = Date()
-                    self.markdown = text
-                }
+                self.markdown = text
             }
         }, done: { [weak self] result in
-            guard let self else { return }
+            guard let self, let current, self.run === current else { return }
             let seconds = Date().timeIntervalSince(self.started ?? Date())
             self.phase = nil
-            self.process = nil
+            self.run = nil
             switch result {
             case .success(let text):
                 self.markdown = Self.clean(text)
                 UserDefaults.standard.set(seconds, forKey: "StudioDocsTime." + effort.rawValue)
                 self.save(as: id)
+            case .failure(HeadlessAgent.StreamError.stopped):
+                break
             case .failure(let failure):
                 self.error = failure.localizedDescription
             }
         })
+        run = current
     }
 
     func stop() {
-        process?.terminate()
-        process = nil
+        run?.stop()
+        run = nil
         phase = nil
     }
 
@@ -219,15 +219,18 @@ final class StudioDocuments: ObservableObject {
         error = nil
     }
 
-    /// Strips a code fence some answers wrap the whole document in.
+    /// Strips a code fence some answers wrap the whole document in, and a short remark
+    /// before the document's first heading.
     static func clean(_ text: String) -> String {
         var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.hasPrefix("```"), text.hasSuffix("```") {
             text = text.components(separatedBy: "\n").dropFirst().dropLast().joined(separator: "\n")
         }
-        // Anything said before the document's heading.
-        if let heading = text.range(of: "\n# "), !text.hasPrefix("# ") {
-            text = String(text[text.index(after: heading.lowerBound)...])
+        let lines = text.components(separatedBy: "\n")
+        // Only a few lines of plain text: never code, or a heading inside a code block.
+        if let first = lines.prefix(6).firstIndex(where: { $0.hasPrefix("#") }), first > 0,
+           !lines[..<first].contains(where: { $0.hasPrefix("```") }) {
+            text = lines[first...].joined(separator: "\n")
         }
         return text
     }
@@ -455,15 +458,13 @@ struct StudioDocumentsView: View {
     }
 
     private func statusChip(_ phase: HeadlessAgent.Phase) -> some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
-            let seconds = Int(Date().timeIntervalSince(docs.started ?? Date()))
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.mini)
-                Text(Self.phaseText(phase, docs.engine) + " · \(seconds)s").font(Extreme.font(11.5, weight: .medium)).foregroundColor(Extreme.text)
-            }
-            .padding(.horizontal, 10).frame(height: 26)
-            .background(Capsule().fill(Extreme.raised))
+        HStack(spacing: 6) {
+            ProgressView().controlSize(.mini)
+            Text(Self.phaseText(phase, docs.engine) + " · ").font(Extreme.font(11.5, weight: .medium)).foregroundColor(Extreme.text)
+                + Text(docs.started ?? Date(), style: .timer).font(Extreme.font(11.5, weight: .medium).monospacedDigit()).foregroundColor(Extreme.text)
         }
+        .padding(.horizontal, 10).frame(height: 26)
+        .background(Capsule().fill(Extreme.raised))
     }
 
     static func phaseText(_ phase: HeadlessAgent.Phase, _ engine: HeadlessAgent.Engine) -> String {
@@ -471,7 +472,6 @@ struct StudioDocumentsView: View {
         case .thinking: return "Thinking with \(engine.title)"
         case .reading: return "Reading the project"
         case .writing: return "Writing with \(engine.title)"
-        case .finishing: return "Finishing"
         }
     }
 
@@ -553,10 +553,20 @@ struct DocumentWebView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: WKWebView, context: Context) {
-        guard context.coordinator.shown != markdown else { return }
-        context.coordinator.shown = markdown
-        context.coordinator.follow = follow
-        view.loadHTMLString(MarkdownHTML.page(markdown), baseURL: nil)
+        let coordinator = context.coordinator
+        guard coordinator.shown != markdown else { return }
+        coordinator.shown = markdown
+        let html = MarkdownHTML.page(markdown)
+        guard follow, coordinator.loaded else {
+            coordinator.follow = follow
+            view.loadHTMLString(html, baseURL: nil)
+            return
+        }
+        // Keeps up with new text only if you were at the bottom; reading further up stays put.
+        view.evaluateJavaScript("window.innerHeight + window.scrollY >= document.body.scrollHeight - 80") { result, _ in
+            coordinator.follow = result as? Bool ?? true
+            view.loadHTMLString(html, baseURL: nil)
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -564,17 +574,20 @@ struct DocumentWebView: NSViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate {
         var shown: String?
         var follow = false
+        var loaded = false
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            loaded = true
             if follow { webView.evaluateJavaScript("window.scrollTo(0, document.body.scrollHeight)") }
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            // Links in a document open in your browser.
+            // Web links open in your browser; links within the page move within it.
             if action.navigationType == .linkActivated, let url = action.request.url {
-                NSWorkspace.shared.open(url)
-                decisionHandler(.cancel)
+                let scheme = url.scheme?.lowercased()
+                if scheme == "http" || scheme == "https" { NSWorkspace.shared.open(url) }
+                decisionHandler(scheme == "about" && url.fragment != nil ? .allow : .cancel)
                 return
             }
             decisionHandler(.allow)

@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import SwiftUI
+import WebKit
 
 /// What a click on the board does: select and move (the usual), or place something, or draw.
 enum BoardTool: String, CaseIterable, Identifiable {
@@ -84,7 +85,6 @@ extension BoardController {
         default:
             model.tool = model.tool == tool && tool != .select ? .select : tool
         }
-        canvas?.window?.invalidateCursorRects(for: canvas?.documentView ?? NSView())
     }
 
     /// A click on empty board with a placing tool. Returns whether it was used.
@@ -126,14 +126,24 @@ extension BoardController {
     }
 
     /// V, A, G, T, X, P, E, W, I, F pick tools and Escape goes back to Select, when the
-    /// keyboard isn't in a terminal or a text field.
+    /// keyboard is on the board itself (not a terminal, a field, a sketch or a web page).
     func installToolKeys() {
         guard toolKeyMonitor == nil else { return }
+        toolCursor = model.$tool.removeDuplicates().sink { [weak self] _ in
+            // After the change lands, so the views see the new tool.
+            DispatchQueue.main.async {
+                guard let document = self?.canvas?.documentView else { return }
+                document.window?.invalidateCursorRects(for: document)
+            }
+        }
         toolKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.window === self.window,
                   event.modifierFlags.isDisjoint(with: [.command, .control, .option]) else { return event }
-            let responder = self.window?.firstResponder
-            if responder is Ghostty.SurfaceView || responder is NSTextView || responder is NSTextField { return event }
+            if let view = self.window?.firstResponder as? NSView {
+                if view is Ghostty.SurfaceView || view is NSTextView || view is NSTextField || view is SketchCanvasView { return event }
+                // Keys typed into a web page are the page's.
+                if sequence(first: view, next: \.superview).contains(where: { $0 is WKWebView }) { return event }
+            }
             if event.keyCode == 53, self.model.tool != .select {
                 self.model.tool = .select
                 return nil
@@ -237,9 +247,6 @@ struct BoardSidePalette: View {
                     withAnimation(.easeOut(duration: 0.18)) { model.showMissionMap = true }
                 }
             }
-            ForEach(BoardSidePalette.extras, id: \.title) { extra in
-                button(extra.symbol, extra.title) { extra.run(controller) }
-            }
             if ExtremeSettings.isOn(.documents) {
                 button("doc.richtext", "Documents") { controller.showDocuments() }
             }
@@ -261,9 +268,6 @@ struct BoardSidePalette: View {
         .overlay(Capsule(style: .continuous).strokeBorder(Extreme.lineStrong))
         .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
     }
-
-    /// Tools other parts of the board add (Mission Map, Documents, Diagrams).
-    static var extras: [(symbol: String, title: String, run: (BoardController) -> Void)] = []
 
     private func button(_ symbol: String, _ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {

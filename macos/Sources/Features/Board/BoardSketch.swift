@@ -261,7 +261,7 @@ enum SketchRenderer {
             // The line stops at the arrowhead's base, so its round cap doesn't poke through.
             let tip = element.kind == .arrow ? CGPoint(x: b.x - cos(angle) * head * 0.6, y: b.y - sin(angle) * head * 0.6) : b
             if hand {
-                context.addPath(handLine(a, tip, seed: element.id.hashValue))
+                context.addPath(handLine(a, tip, seed: Self.seed(element.id)))
             } else {
                 context.move(to: a)
                 context.addLine(to: tip)
@@ -285,8 +285,8 @@ enum SketchRenderer {
             context.fillPath()
             if hand {
                 // Two wobbly passes, like a marker going round twice.
-                context.addPath(handShape(element.kind, element.frame, seed: element.id.hashValue))
-                context.addPath(handShape(element.kind, element.frame, seed: element.id.hashValue &+ 7))
+                context.addPath(handShape(element.kind, element.frame, seed: Self.seed(element.id)))
+                context.addPath(handShape(element.kind, element.frame, seed: Self.seed(element.id) &+ 7))
             } else {
                 context.addPath(path)
             }
@@ -330,6 +330,11 @@ enum SketchRenderer {
         x = (x ^ (x >> 27)) &* 0x94D049BB133111EB
         x ^= x >> 31
         return (CGFloat(x % 10_000) / 10_000 - 0.5) * 2 * amount
+    }
+
+    /// The same number for the same element on every launch (hashValue changes per launch).
+    static func seed(_ id: UUID) -> Int {
+        withUnsafeBytes(of: id.uuid) { bytes in bytes.reduce(0) { ($0 &* 31) &+ Int($1) } }
     }
 
     /// A line that bows a little and overshoots its ends, like a marker.

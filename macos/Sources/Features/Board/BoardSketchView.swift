@@ -446,9 +446,19 @@ enum BoardSketchMenu {
 /// dashes, the hand-drawn look, and their order.
 struct SketchStylePanel: View {
     let canvas: SketchCanvasView
-    @State private var refresh = 0
+    @StateObject private var selection = Selection()
+    /// The opacity while the slider is dragged; set once when it's let go.
+    @State private var dragging: Double?
 
-    private var first: SketchElement? { canvas.selectedElements.first }
+    /// Redraws the panel when the canvas's selection (or the selected elements) change.
+    final class Selection: ObservableObject {
+        @Published var tick = 0
+    }
+
+    private var first: SketchElement? {
+        _ = selection.tick
+        return canvas.selectedElements.first
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -486,8 +496,12 @@ struct SketchStylePanel: View {
                 }
                 label("Opacity")
                 HStack {
-                    Slider(value: Binding(get: { first?.opacity ?? 1 }, set: { value in apply("Opacity") { $0.opacity = value } }), in: 0.1...1)
-                    Text("\(Int(((first?.opacity ?? 1) * 100).rounded()))%").font(Extreme.mono(11)).foregroundColor(Extreme.muted).frame(width: 40)
+                    Slider(value: Binding(get: { dragging ?? first?.opacity ?? 1 }, set: { dragging = $0 }), in: 0.1...1) { editing in
+                        guard !editing, let value = dragging else { return }
+                        apply("Opacity") { $0.opacity = value }
+                        dragging = nil
+                    }
+                    Text("\(Int(((dragging ?? first?.opacity ?? 1) * 100).rounded()))%").font(Extreme.mono(11)).foregroundColor(Extreme.muted).frame(width: 40)
                 }
                 HStack(spacing: 4) {
                     chip("Dashed", on: first?.dashed == true) { apply("Dashed") { $0.dashed = $0.dashed == true ? nil : true } }
@@ -495,21 +509,24 @@ struct SketchStylePanel: View {
                 }
                 Divider()
                 HStack(spacing: 4) {
-                    chip("Forward", symbol: "square.2.layers.3d.top.filled", on: false) { canvas.bringForward(); refresh += 1 }
-                    chip("Backward", symbol: "square.2.layers.3d.bottom.filled", on: false) { canvas.sendBackward(); refresh += 1 }
-                    chip("Duplicate", symbol: "plus.square.on.square", on: false) { canvas.duplicate(nil); refresh += 1 }
-                    chip("Delete", symbol: "trash", on: false) { canvas.deleteSelected(); refresh += 1 }
+                    chip("Forward", symbol: "square.2.layers.3d.top.filled", on: false) { canvas.bringForward(); selection.tick += 1 }
+                    chip("Backward", symbol: "square.2.layers.3d.bottom.filled", on: false) { canvas.sendBackward(); selection.tick += 1 }
+                    chip("Duplicate", symbol: "plus.square.on.square", on: false) { canvas.duplicate(nil); selection.tick += 1 }
+                    chip("Delete", symbol: "trash", on: false) { canvas.deleteSelected(); selection.tick += 1 }
                 }
             }
         }
         .padding(14)
         .frame(width: 330)
-        .id(refresh)
+        .onAppear {
+            canvas.onSelectionChange = { [weak selection] in selection?.tick += 1 }
+        }
+        .onDisappear { canvas.onSelectionChange = nil }
     }
 
     private func apply(_ action: String, _ change: (inout SketchElement) -> Void) {
         canvas.styleSelection(action, change)
-        refresh += 1
+        selection.tick += 1
     }
 
     private func label(_ text: String) -> some View {

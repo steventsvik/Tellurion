@@ -46,7 +46,7 @@ final class BoardAssistant: ObservableObject {
 
     weak var controller: BoardController?
     private var session: String?
-    private var process: Process?
+    private var run: HeadlessAgent.Run?
     private var agents: [BoardAgent] = []
 
     init(controller: BoardController) {
@@ -56,16 +56,12 @@ final class BoardAssistant: ObservableObject {
     /// Finds Claude Code, Codex and the other agents once, off the main thread.
     func lookUp() {
         guard engines == nil else { return }
-        DispatchQueue.global(qos: .userInitiated).async {
-            let found = Engine.installed()
-            let agents = BoardAgent.installed()
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.agents = agents
-                self.engines = found
-                let saved = UserDefaults.standard.string(forKey: Self.engineKey).flatMap(Engine.init(rawValue:))
-                self.engine = saved.flatMap { found.contains($0) ? $0 : nil } ?? found.first
-            }
+        HeadlessAgent.lookUp { [weak self] found, agents in
+            guard let self else { return }
+            self.agents = agents
+            self.engines = found
+            let saved = UserDefaults.standard.string(forKey: Self.engineKey).flatMap(Engine.init(rawValue:))
+            self.engine = saved.flatMap { found.contains($0) ? $0 : nil } ?? found.first
         }
     }
 
@@ -106,13 +102,13 @@ final class BoardAssistant: ObservableObject {
                                           body: "The board now:\n\(context.text)\n\nThe user says: \(text)")
         let arguments = HeadlessAgent.arguments(engine, instructions: BoardAssistantPrompt.instructions,
                                                 schema: BoardAssistantPrompt.schema, session: session)
-        let process = Process()
-        self.process = process
+        let run = HeadlessAgent.Run()
+        self.run = run
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = HeadlessAgent.run(process, tool: tool, arguments: arguments, input: prompt)
+            let result = HeadlessAgent.run(run, tool: tool, arguments: arguments, input: prompt)
             DispatchQueue.main.async {
-                guard let self, self.process === process else { return }
-                self.process = nil
+                guard let self, self.run === run else { return }
+                self.run = nil
                 self.busy = false
                 self.finish(result, engine: engine, handles: context.handles)
             }
@@ -121,8 +117,8 @@ final class BoardAssistant: ObservableObject {
 
     /// Stops the answer being worked on.
     func stop() {
-        process?.terminate()
-        process = nil
+        run?.stop()
+        run = nil
         busy = false
     }
 

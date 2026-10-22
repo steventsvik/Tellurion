@@ -49,24 +49,31 @@ extension BoardController {
     func addLabel(at point: CGPoint, text: String = "", edit: Bool = true) -> UUID {
         var label = BoardLabelNode(id: UUID(), text: text)
         label.frame = label.fitted(at: CGPoint(x: point.x, y: point.y - 30))
+        // An empty one only becomes an undo step once something is typed into it.
+        if text.isEmpty { undoManager?.disableUndoRegistration() }
         setLabels(model.labels + [label], action: "New Label")
+        if text.isEmpty { undoManager?.enableUndoRegistration() }
         model.frames[label.id] = label.frame
         if !model.order.contains(label.id) { model.order.append(label.id) }
         if edit { DispatchQueue.main.async { [weak self] in self?.labelView(label.id)?.beginEditing() } }
         return label.id
     }
 
-    func setLabels(_ labels: [BoardLabelNode], action: String) {
+    func setLabels(_ labels: [BoardLabelNode], action: String, undoTo: [BoardLabelNode]? = nil) {
         let old = model.labels
         guard old != labels else { return }
         model.labels = labels
-        for label in labels where model.frames[label.id] == nil { model.frames[label.id] = label.frame }
+        // Labels that changed (an edit, or an undone move or resize) take their frame.
+        for label in labels where model.frames[label.id] == nil || old.first(where: { $0.id == label.id }) != label {
+            model.frames[label.id] = label.frame
+        }
         for label in old where !labels.contains(where: { $0.id == label.id }) {
             model.frames[label.id] = nil
             model.order.removeAll { $0 == label.id }
         }
         for label in labels where !model.order.contains(label.id) { model.order.append(label.id) }
-        undoManager?.registerUndo(withTarget: self) { $0.setLabels(old, action: action) }
+        let undo = undoTo ?? old
+        if undo != labels { undoManager?.registerUndo(withTarget: self) { $0.setLabels(undo, action: action) } }
         undoManager?.setActionName(action)
         scheduleSave()
     }
@@ -82,7 +89,11 @@ extension BoardController {
         if labels[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             labels.remove(at: index)
         }
-        setLabels(labels, action: action)
+        // A label typed into for the first time: undoing it removes it, rather than leaving
+        // an empty one behind.
+        let fresh = model.labels[index].text.isEmpty
+        setLabels(labels, action: fresh ? "New Label" : action,
+                  undoTo: fresh ? model.labels.filter { $0.id != id } : nil)
     }
 
     func removeLabel(_ id: UUID) {
@@ -121,11 +132,18 @@ final class BoardLabelView: NSView, NSTextFieldDelegate {
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    /// Being typed into: the board leaves it alone until it's done.
+    var isEditing: Bool { field.isEditable }
+
     func apply(_ label: BoardLabelNode) {
-        if !field.isEditable { field.stringValue = label.text.isEmpty ? "Label" : label.text }
-        field.font = label.nsFont
+        guard !isEditing else { return }
+        let text = label.text.isEmpty ? "Label" : label.text
+        if field.stringValue != text { field.stringValue = text }
+        if field.font != label.nsFont {
+            field.font = label.nsFont
+            needsLayout = true
+        }
         field.textColor = BoardInk.color(label.color).withAlphaComponent(label.text.isEmpty ? 0.4 : 1)
-        needsLayout = true
     }
 
     override func layout() {

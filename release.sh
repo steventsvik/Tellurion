@@ -110,7 +110,8 @@ pass "no paths to your home folder added"
 # outside the repo so the list itself isn't published.
 BLOCKLIST=~/.ghostty-extreme/release-blocklist
 if [[ -s $BLOCKLIST ]]; then
-  while IFS= read -r word; do
+  while IFS= read -r word || [[ -n $word ]]; do
+    word=${word%$'\r'}
     [[ -z ${word//[[:space:]]/} ]] && continue
     if git grep -qiF -- "$word" HEAD || git log "$PREV"..HEAD --format=%B | grep -qiF -- "$word" \
       || print -r -- "$NOTES_BODY" | grep -qiF -- "$word"; then

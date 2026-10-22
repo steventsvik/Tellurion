@@ -307,6 +307,10 @@ enum BoardTest {
         case "card":
             guard let kind = BoardCard.Kind(rawValue: args.first ?? "") else { return }
             controller.addCard(kind)
+        case "removecard":
+            // removecard <kind>: removes the last card of that kind.
+            guard let card = controller.model.cards.last(where: { $0.kind.rawValue == args.first }) else { return }
+            controller.removeCard(card.id)
         case "carditem":
             // carditem <text…>: adds to the last card (column 0 on a kanban).
             guard let card = controller.model.cards.last else { return }
@@ -339,7 +343,8 @@ enum BoardTest {
         case "agentdo":
             // agentdo <reply JSON>: carries out a reply as if the board's agent had answered.
             let context = controller.assistantContext(agents: BoardAgent.catalog)
-            guard let reply = BoardAssistantReply.decode(args.joined(separator: " ")) else {
+            guard let data = HeadlessAgent.object(in: args.joined(separator: " ")),
+                  let reply = try? JSONDecoder().decode(BoardAssistantReply.self, from: data) else {
                 DemoDirector.note("agent bad reply")
                 return
             }
@@ -430,6 +435,27 @@ enum BoardTest {
         case "webnew":
             guard let rect = controller.canvas?.documentVisibleRect else { return }
             controller.addWebTile(at: CGPoint(x: rect.midX, y: rect.midY), url: args.first)
+        case "webtabs":
+            // webtabs <tab n> <url…>: the last web tile's tabs, and which one is shown.
+            guard let card = controller.model.cards.last(where: { $0.kind == .web }), let tab = Int(args.first ?? "") else { return }
+            controller.updateCard(card.id) { $0.tabs = Array(args.dropFirst()); $0.tab = tab }
+        case "webclosetab":
+            // webclosetab <index>: closes that tab of the first web tile.
+            guard let content = controller.window?.contentView?.descendants.compactMap({ $0 as? WebContent }).first,
+                  let index = Int(args.first ?? "") else { return }
+            content.closeTab(index)
+        case "webpages":
+            for content in controller.window?.contentView?.descendants.compactMap({ $0 as? WebContent }) ?? [] {
+                let pages = content.descendants.compactMap { $0 as? WKWebView }
+                DemoDirector.note("webpages " + pages.map { "\($0.url?.absoluteString ?? "start")\($0.superview?.isHidden == true ? "" : "*")" }.joined(separator: " "))
+            }
+        case "mdhtml":
+            // mdhtml <file>: logs the page body a markdown file renders to.
+            guard let text = try? String(contentsOfFile: args.first ?? "", encoding: .utf8) else { return }
+            DemoDirector.note("mdhtml " + MarkdownHTML.body(text).replacingOccurrences(of: "\n", with: "⏎"))
+            DemoDirector.note("mdclean " + StudioDocuments.clean(text).prefix(40).replacingOccurrences(of: "\n", with: "⏎"))
+        case "docsstop":
+            controller.documents.stop()
         case "webstate":
             for card in controller.model.cards where card.kind == .web {
                 DemoDirector.note("web \(card.title) tabs=\(card.tabs ?? []) tab=\(card.tab ?? -1) viewport=\(card.viewport ?? "-") frame=\(controller.model.frames[card.id].map { "\(Int($0.width))x\(Int($0.height))" } ?? "-")")
@@ -511,7 +537,7 @@ enum BoardTest {
         case "accountremove":
             for account in BoardAccounts.shared.accounts where account.name == args.joined(separator: " ") { BoardAccounts.shared.remove(account.id) }
         case "accountstate":
-            DemoDirector.note("accounts " + BoardAccounts.shared.accounts.map { "\($0.provider.rawValue):\($0.name)(\($0.initials)) signedIn=\($0.signedIn)" }.joined(separator: ", ")
+            DemoDirector.note("accounts " + BoardAccounts.shared.accounts.map { "\($0.provider.rawValue):\($0.name)(\($0.initials)) used=\($0.used)" }.joined(separator: ", ")
                               + " active=" + BoardAccounts.shared.active.map { "\($0.key.rawValue)=\(BoardAccounts.shared.account($0.value)?.name ?? "?")" }.joined(separator: ","))
             for (index, surface) in controller.model.surfaces.enumerated() {
                 let chosen = controller.model.tileAccounts[surface.id] ?? [:]

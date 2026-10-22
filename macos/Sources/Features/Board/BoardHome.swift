@@ -64,6 +64,17 @@ enum BoardHome {
         guard let ghostty else { return }
         Board.newBoard(ghostty, folder: folder)
     }
+
+    /// Asks for a project folder, then opens a board there.
+    static func chooseProject() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.prompt = "Open Project"
+        panel.begin { response in
+            if response == .OK, let url = panel.url { newBoard(in: url.path) }
+        }
+    }
 }
 
 // MARK: - Top bar
@@ -71,7 +82,10 @@ enum BoardHome {
 /// ← Home · project ⌄ · its boards as tabs · + · Close, then live agents and usage.
 struct BoardTopBar: View {
     let controller: BoardController
-    @ObservedObject var model: BoardModel
+    /// Not observed: the bar would redraw on every pan and zoom. It follows agents and tiles.
+    let model: BoardModel
+    @State private var liveCount = 0
+    @State private var waiting: [UUID: Int] = [:]
     @ObservedObject private var index = BoardProjectsIndex.shared
     @ObservedObject private var usage = UsageMonitor.shared
     @ObservedObject private var settings = ExtremeSettings.shared
@@ -88,7 +102,7 @@ struct BoardTopBar: View {
                     }
                 }
                 Divider()
-                Button("New Project…") { newProject() }
+                Button("New Project…") { BoardHome.chooseProject() }
             } label: {
                 Label(project?.name ?? "No project", systemImage: "folder").font(Extreme.font(12, weight: .medium))
             }
@@ -110,11 +124,21 @@ struct BoardTopBar: View {
             }
         }
         .fixedSize()
+        .onReceive(model.$agentTick) { _ in DispatchQueue.main.async { refreshCounts() } }
+        .onReceive(model.$surfaces) { _ in DispatchQueue.main.async { refreshCounts() } }
+    }
+
+    private func refreshCounts() {
+        let count = model.surfaces.filter { VerticalTabsAgents.shared.info(for: $0) != nil }.count
+        if count != liveCount { liveCount = count }
+        let boards = index.project(BoardProjectsIndex.key(of: controller.workspace))?.boards ?? []
+        let counts = Dictionary(uniqueKeysWithValues: boards.map { ($0.id, BoardHome.waiting($0.id)) })
+        if counts != waiting { waiting = counts }
     }
 
     private func tab(_ board: BoardWorkspace) -> some View {
         let current = board.id == controller.workspace.id
-        let waiting = BoardHome.waiting(board.id)
+        let waiting = self.waiting[board.id] ?? 0
         return Button {
             if !current, let ghostty = BoardHome.ghostty { Board.reopen(ghostty, board) }
         } label: {
@@ -134,8 +158,7 @@ struct BoardTopBar: View {
     }
 
     private var live: some View {
-        let count = model.surfaces.filter { VerticalTabsAgents.shared.info(for: $0) != nil }.count
-        _ = model.agentTick
+        let count = liveCount
         return HStack(spacing: 5) {
             Circle().fill(count > 0 ? Color.green : Extreme.dim).frame(width: 6, height: 6)
             Text("\(count) live").font(Extreme.font(11.5)).foregroundColor(Extreme.muted)
@@ -152,11 +175,19 @@ struct BoardTopBar: View {
     }
 
     static func time(_ date: Date) -> String {
+        let formatter = Calendar.current.isDateInToday(date) ? today : later
+        return formatter.string(from: date)
+    }
+
+    private static let today = formatter("h:mma")
+    private static let later = formatter("EEE h:mma")
+
+    private static func formatter(_ format: String) -> DateFormatter {
         let formatter = DateFormatter()
-        formatter.dateFormat = Calendar.current.isDateInToday(date) ? "h:mma" : "EEE h:mma"
+        formatter.dateFormat = format
         formatter.amSymbol = "am"
         formatter.pmSymbol = "pm"
-        return formatter.string(from: date)
+        return formatter
     }
 
     private func pill<Content: View>(_ action: @escaping () -> Void, @ViewBuilder label: () -> Content) -> some View {
@@ -167,14 +198,6 @@ struct BoardTopBar: View {
                 .overlay(Capsule().strokeBorder(Extreme.lineStrong))
         }
         .buttonStyle(.plain)
-    }
-
-    private func newProject() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.prompt = "Open Project"
-        if panel.runModal() == .OK, let url = panel.url { BoardHome.newBoard(in: url.path) }
     }
 }
 
@@ -228,13 +251,7 @@ struct BoardHomeView: View {
                     Text("Each project's boards. Open one to carry on where you left off.").font(Extreme.font(12)).foregroundColor(Extreme.muted)
                 }
                 Spacer()
-                Button("New Project…") {
-                    let panel = NSOpenPanel()
-                    panel.canChooseDirectories = true
-                    panel.canChooseFiles = false
-                    panel.prompt = "Open Project"
-                    if panel.runModal() == .OK, let url = panel.url { BoardHome.newBoard(in: url.path) }
-                }
+                Button("New Project…") { BoardHome.chooseProject() }
                 .buttonStyle(ExtremeButtonStyle(prominent: true))
             }
             ScrollView {

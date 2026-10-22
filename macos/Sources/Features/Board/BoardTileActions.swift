@@ -88,6 +88,12 @@ extension BoardController {
         // The command it was started with (flags included), else its agent plainly.
         let command = commands[view.id] ?? agent.map { $0.binary + "\n" }
         let size = model.frames[view.id]?.size ?? Self.tileSize
+        // One undo step for the copy and its place in the group.
+        undoManager?.beginUndoGrouping()
+        defer {
+            undoManager?.endUndoGrouping()
+            undoManager?.setActionName("Duplicate Tile")
+        }
         guard let copy = addTile(config: config, command: command, near: view,
                                  frame: freeSpot(size: size, near: model.frames[view.id])) else { return }
         if let group = namedGroup(containing: view.id) { addToGroup([copy.id], group: group.id) }

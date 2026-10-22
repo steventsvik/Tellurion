@@ -63,11 +63,25 @@ struct MissionGraph {
     var groups: [MissionNode] = []
     var agents: [MissionNode] = []
     var edges: [MissionEdge] = []
+    /// Who each node is wired to, either way (for lighting a hovered node's wires).
+    var neighbors: [String: Set<String>] = [:]
 
     var all: [MissionNode] { orchestrators + groups + agents }
 
+    init() {}
+
     init(board: BoardController) {
         let model = board.model
+        var seen = Set<MissionEdge>()
+        var edges: [MissionEdge] = []
+        func link(_ edge: MissionEdge) { if seen.insert(edge).inserted { edges.append(edge) } }
+        defer {
+            self.edges = edges
+            for edge in edges {
+                neighbors[edge.from, default: []].insert(edge.to)
+                neighbors[edge.to, default: []].insert(edge.from)
+            }
+        }
         var placed = Set<UUID>()
         // Groups: yours, then project groups an orchestrator wired.
         var groupIDs: [String: String] = [:]
@@ -78,7 +92,7 @@ struct MissionGraph {
             let running = surfaces.filter { VerticalTabsAgents.shared.info(for: $0)?.activity == .working }.count
             groups.append(MissionNode(id: id, kind: .group, title: group.name, detail: "\(surfaces.count) · \(running > 0 ? "\(running) running" : "idle")",
                                       color: Color(nsColor: group.nsColor), target: group.id))
-            for surface in surfaces { edges.insert(MissionEdge(from: id, to: "a:" + surface.id.uuidString, dashed: false)) }
+            for surface in surfaces { link(MissionEdge(from: id, to: "a:" + surface.id.uuidString, dashed: false)) }
         }
         for team in model.teams {
             for key in team.groups where groupIDs[key] == nil {
@@ -87,7 +101,7 @@ struct MissionGraph {
                 let surfaces = board.groupTiles(key)
                 groups.append(MissionNode(id: id, kind: .group, title: board.groupTitle(key), detail: "\(surfaces.count) · project",
                                           color: Color(nsColor: BoardProjects.nsColor(model.colors[key] ?? 0)), target: nil))
-                for surface in surfaces { edges.insert(MissionEdge(from: id, to: "a:" + surface.id.uuidString, dashed: false)) }
+                for surface in surfaces { link(MissionEdge(from: id, to: "a:" + surface.id.uuidString, dashed: false)) }
             }
         }
         // Orchestrators, wired to their groups and to agents wired one by one.
@@ -97,8 +111,8 @@ struct MissionGraph {
             orchestrators.append(MissionNode(id: id, kind: .orchestrator, title: board.orchestratorName(team.id),
                                              detail: "\(agents.count) agent\(agents.count == 1 ? "" : "s")",
                                              color: Color(nsColor: BoardProjects.nsColor(team.color)), target: team.id))
-            for key in team.groups { if let group = groupIDs[key] { edges.insert(MissionEdge(from: id, to: group, dashed: false)) } }
-            for member in team.members { edges.insert(MissionEdge(from: id, to: "a:" + member.tile.uuidString, dashed: false)) }
+            for key in team.groups { if let group = groupIDs[key] { link(MissionEdge(from: id, to: group, dashed: false)) } }
+            for member in team.members { link(MissionEdge(from: id, to: "a:" + member.tile.uuidString, dashed: false)) }
             placed.formUnion(agents.map(\.surface.id))
         }
         placed.formUnion(model.groups.flatMap(\.tiles))
@@ -115,13 +129,9 @@ struct MissionGraph {
             agents.append(MissionNode(id: id, kind: .agent, title: board.tileLabel(surface),
                                       detail: info.map { $0.kind.displayName + " · " + (model.paused.contains(surface.id) ? "Paused" : $0.activity.label) } ?? "Terminal",
                                       color: info.map { $0.kind.brandColor } ?? Extreme.muted, status: MissionStatus(info?.activity), target: surface.id))
-            if loose.contains(where: { $0 === surface }) { edges.insert(MissionEdge(from: "command", to: id, dashed: true)) }
+            if !placed.contains(surface.id) { link(MissionEdge(from: "command", to: id, dashed: true)) }
         }
     }
-}
-
-private extension Array where Element == MissionEdge {
-    mutating func insert(_ edge: MissionEdge) { if !contains(edge) { append(edge) } }
 }
 
 /// Where each node's card is, for the wires.
@@ -139,19 +149,10 @@ struct MissionMapView: View {
     @State private var search = ""
     @State private var selected: String?
     @State private var hovered: String?
-    /// The current graph's wires, for highlighting (kept outside SwiftUI state on purpose).
-    private var graphEdges: [MissionEdge] {
-        get { edgesBox.edges }
-        nonmutating set { edgesBox.edges = newValue }
-    }
-    @State private var edgesBox = EdgesBox()
-
-    private final class EdgesBox {
-        var edges: [MissionEdge] = []
-    }
+    /// Built when agents, groups or wiring change, not on every redraw (hovering redraws).
+    @State private var graph = MissionGraph()
 
     var body: some View {
-        let graph = MissionGraph(board: controller)
         ZStack {
             Color.black.opacity(0.45).onTapGesture { close() }
             HStack(spacing: 0) {
@@ -173,6 +174,17 @@ struct MissionMapView: View {
             .padding(40)
         }
         .onExitCommand { close() }
+        .onAppear { graph = MissionGraph(board: controller) }
+        .onReceive(model.$agentTick) { _ in rebuild() }
+        .onReceive(model.$surfaces) { _ in rebuild() }
+        .onReceive(model.$groups) { _ in rebuild() }
+        .onReceive(model.$teams) { _ in rebuild() }
+        .onReceive(model.$paused) { _ in rebuild() }
+    }
+
+    /// After the change lands (the publishers fire just before it).
+    private func rebuild() {
+        DispatchQueue.main.async { graph = MissionGraph(board: controller) }
     }
 
     private func close() {
@@ -252,7 +264,6 @@ struct MissionMapView: View {
     }
 
     private func columns(_ graph: MissionGraph) -> some View {
-        graphEdges = graph.edges
         let agents = graph.agents.filter(visible)
         let groups = graph.groups.filter(visible)
         return HStack(alignment: .top, spacing: 90) {
@@ -274,14 +285,12 @@ struct MissionMapView: View {
             if nodes.isEmpty {
                 Text("None").font(Extreme.font(11.5)).foregroundColor(Extreme.dim).frame(width: 220, alignment: .leading)
             }
-            ForEach(nodes) { node in card(node, edges: graphEdges) }
+            ForEach(nodes) { node in card(node) }
         }
     }
 
-    private func card(_ node: MissionNode, edges: [MissionEdge]) -> some View {
-        let lit = hovered.map { hovered in
-            hovered == node.id || edges.contains { ($0.from == hovered && $0.to == node.id) || ($0.from == node.id && $0.to == hovered) }
-        } ?? true
+    private func card(_ node: MissionNode) -> some View {
+        let lit = hovered.map { hovered in hovered == node.id || graph.neighbors[hovered]?.contains(node.id) == true } ?? true
         return HStack(spacing: 9) {
             Circle().fill(node.color).frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
@@ -302,7 +311,6 @@ struct MissionMapView: View {
         .onTapGesture(count: 2) { goTo(node) }
         .onTapGesture { selected = node.id }
     }
-
 
     private func wires(_ graph: MissionGraph, anchors: [String: Anchor<CGRect>], proxy: GeometryProxy, shown: Set<String>) -> some View {
         Canvas { context, _ in

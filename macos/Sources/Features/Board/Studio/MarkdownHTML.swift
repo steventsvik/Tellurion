@@ -68,7 +68,7 @@ enum MarkdownHTML {
             if let level = headingLevel(trimmed) {
                 flush()
                 let text = trimmed.dropFirst(level + 1)
-                html += "<h\(level)>\(inline(String(text)))</h\(level)>\n"
+                html += "<h\(level) id=\"\(slug(String(text)))\">\(inline(String(text)))</h\(level)>\n"
                 index += 1
                 continue
             }
@@ -171,9 +171,25 @@ enum MarkdownHTML {
             guard let marker = listMarker(lines[index]), marker.indent <= base + 1 else { index += 1; continue }
             var text = marker.text
             var nested: [String] = []
+            var blocks = ""
             index += 1
             while index < lines.count {
                 let next = lines[index]
+                let trimmed = next.trimmingCharacters(in: .whitespaces)
+                if listMarker(next) == nil, trimmed.hasPrefix("```") {
+                    // A code block inside the item, up to its closing fence.
+                    let indent = next.prefix { $0 == " " }.count
+                    var fence = [trimmed]
+                    index += 1
+                    while index < lines.count {
+                        let line = lines[index]
+                        fence.append(String(line.dropFirst(min(indent, line.prefix { $0 == " " }.count))))
+                        index += 1
+                        if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") { break }
+                    }
+                    blocks += body(fence.joined(separator: "\n"))
+                    continue
+                }
                 if let inner = listMarker(next), inner.indent > base + 1 {
                     nested.append(next)
                 } else if listMarker(next) == nil {
@@ -189,7 +205,7 @@ enum MarkdownHTML {
                 box = text.hasPrefix("[ ]") ? "☐ " : "☑ "
                 text = String(text.dropFirst(4))
             }
-            html += "<li>\(box)\(inline(text))\(nested.isEmpty ? "" : list(nested))</li>"
+            html += "<li>\(box)\(inline(text))\(blocks)\(nested.isEmpty ? "" : list(nested))</li>"
         }
         return html + (first.ordered ? "</ol>" : "</ul>") + "\n"
     }
@@ -217,10 +233,11 @@ enum MarkdownHTML {
                 continue
             }
             if char == "[", let close = text[index...].firstIndex(of: "]"), text.index(after: close) < text.endIndex,
-               text[text.index(after: close)] == "(", let end = text[close...].firstIndex(of: ")") {
+               text[text.index(after: close)] == "(", let end = closingParen(text, from: text.index(after: close)) {
                 let label = String(text[text.index(after: index)..<close])
                 let href = String(text[text.index(close, offsetBy: 2)..<end])
-                let safe = href.hasPrefix("http") || href.hasPrefix("#") ? escape(href) : "#"
+                let lower = href.lowercased()
+                let safe = lower.hasPrefix("http://") || lower.hasPrefix("https://") || href.hasPrefix("#") ? escape(href) : "#"
                 out += "<a href=\"\(safe)\">\(inline(label))</a>"
                 index = text.index(after: end)
                 continue
@@ -230,8 +247,7 @@ enum MarkdownHTML {
                 index = close.upperBound
                 continue
             }
-            if char == "*" || char == "_", text.index(after: index) < text.endIndex, !text[text.index(after: index)].isWhitespace,
-               let close = text[text.index(after: index)...].firstIndex(of: char), close > text.index(after: index) {
+            if char == "*" || char == "_", let close = emphasisEnd(text, at: index) {
                 out += "<em>\(inline(String(text[text.index(after: index)..<close])))</em>"
                 index = text.index(after: close)
                 continue
@@ -240,6 +256,44 @@ enum MarkdownHTML {
             index = text.index(after: index)
         }
         return out
+    }
+
+    /// The ")" matching the "(" at `open`, counting nested ones (URLs can have them).
+    private static func closingParen(_ text: String, from open: String.Index) -> String.Index? {
+        var depth = 0
+        var index = open
+        while index < text.endIndex {
+            if text[index] == "(" { depth += 1 } else if text[index] == ")" {
+                depth -= 1
+                if depth == 0 { return index }
+            }
+            index = text.index(after: index)
+        }
+        return nil
+    }
+
+    /// Where `*text*` or `_text_` ends, if the marker at `index` opens one: not inside a word
+    /// (so my_module_name and 5*3 stay as they are), and not followed by a space.
+    private static func emphasisEnd(_ text: String, at index: String.Index) -> String.Index? {
+        let marker = text[index]
+        let start = text.index(after: index)
+        guard start < text.endIndex, !text[start].isWhitespace, text[start] != marker else { return nil }
+        if index > text.startIndex, text[text.index(before: index)].isLetter || text[text.index(before: index)].isNumber { return nil }
+        var search = start
+        while let close = text[search...].firstIndex(of: marker) {
+            let after = text.index(after: close)
+            let wordAfter = after < text.endIndex && (text[after].isLetter || text[after].isNumber)
+            if close > start, !text[text.index(before: close)].isWhitespace, !wordAfter { return close }
+            search = after
+            if search >= text.endIndex { break }
+        }
+        return nil
+    }
+
+    /// A heading's anchor, for links within the page: "Getting started" → "getting-started".
+    static func slug(_ text: String) -> String {
+        let words = text.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+        return words.joined(separator: "-")
     }
 
     static func escape(_ text: String) -> String {

@@ -46,7 +46,7 @@ final class OrchestratorBrain: ObservableObject {
     weak var controller: BoardController?
     let id: UUID
     private var session: String?
-    private var process: Process?
+    private var run: HeadlessAgent.Run?
     /// The command it's working on.
     private var goal: String?
     /// Updates that came while it was thinking: the next turn carries them.
@@ -71,16 +71,12 @@ final class OrchestratorBrain: ObservableObject {
 
     func lookUp() {
         guard engines == nil else { return }
-        DispatchQueue.global(qos: .userInitiated).async {
-            let found = Engine.installed()
-            let agents = BoardAgent.installed()
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.installed = agents
-                self.engines = found
-                let saved = UserDefaults.standard.string(forKey: BoardAssistant.engineKey).flatMap(Engine.init(rawValue:))
-                self.engine = saved.flatMap { found.contains($0) ? $0 : nil } ?? found.first
-            }
+        HeadlessAgent.lookUp { [weak self] found, agents in
+            guard let self else { return }
+            self.installed = agents
+            self.engines = found
+            let saved = UserDefaults.standard.string(forKey: BoardAssistant.engineKey).flatMap(Engine.init(rawValue:))
+            self.engine = saved.flatMap { found.contains($0) ? $0 : nil } ?? found.first
         }
     }
 
@@ -116,8 +112,8 @@ final class OrchestratorBrain: ObservableObject {
     }
 
     func stop(quietly: Bool = false) {
-        process?.terminate()
-        process = nil
+        run?.stop()
+        run = nil
         pass += 1
         busy = false
         waiting = []
@@ -231,17 +227,22 @@ final class OrchestratorBrain: ObservableObject {
             }
             return
         }
-        guard let engine, let tool else { return }
+        guard let engine, let tool else {
+            busy = false
+            running = false
+            add(.error, "Claude Code or Codex isn't available any more.")
+            return
+        }
         let prompt = HeadlessAgent.prompt(engine, instructions: OrchestratorPrompt.instructions, session: session, body: body)
         let arguments = HeadlessAgent.arguments(engine, instructions: OrchestratorPrompt.instructions,
                                                 schema: OrchestratorPrompt.schema, session: session)
-        let process = Process()
-        self.process = process
+        let run = HeadlessAgent.Run()
+        self.run = run
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = HeadlessAgent.run(process, tool: tool, arguments: arguments, input: prompt)
+            let result = HeadlessAgent.run(run, tool: tool, arguments: arguments, input: prompt)
             DispatchQueue.main.async {
-                guard let self, self.process === process else { return }
-                self.process = nil
+                guard let self, self.run === run else { return }
+                self.run = nil
                 self.busy = false
                 let parsed = HeadlessAgent.parse(result, engine: engine)
                 if let session = parsed.session { self.session = session }
@@ -311,7 +312,7 @@ final class OrchestratorBrain: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
     }
 
-    private func add(_ kind: Entry.Kind, _ text: String) {
+    func add(_ kind: Entry.Kind, _ text: String) {
         log.append(Entry(kind: kind, text: text))
         if log.count > 80 { log.removeFirst(log.count - 80) }
         DemoDirector.note("orchestrator[\(controller?.orchestratorName(id) ?? "")] \(kind): \(text.replacingOccurrences(of: "\n", with: " / "))")
@@ -347,8 +348,8 @@ enum OrchestratorPrompt {
     and their last answer. Use only handles from the latest message. Agents can't see each \
     other or this conversation, so give each one everything it needs: what to do, where, \
     and what to report back. Keep agents busy in parallel when the work allows it; don't \
-    give two agents the same files at once. A "terminal" with no agent runs what you send \
-    as a shell command line.
+    give two agents the same files at once. A "terminal" with no agent running can't take \
+    messages: start an agent in it, or spawn one.
 
     Reply with JSON only: {"say": "...", "actions": [...], "done": false}. "say" is one or \
     two short, plain sentences for the user: what you just did or found. Set "done" to true \
@@ -445,26 +446,29 @@ extension BoardController {
                 ?? wired.first { tileLabel($0.surface).lowercased() == lower }
                 ?? wired.first { $0.role?.lowercased().hasPrefix(lower) == true }
         }
-        func send(_ text: String, to agent: BoardTeamAgent) {
+        /// Only to agents: text typed into a plain shell would run as a command.
+        func send(_ text: String, to agent: BoardTeamAgent) -> Bool {
             if VerticalTabsAgents.shared.info(for: agent.surface) == nil {
-                // An agent's input box takes one line (a newline would send it early); a shell
-                // runs what it's given.
+                guard detected.contains(agent.surface.id) else { return false }
+                // An agent's input box takes one line (a newline would send it early).
                 let line = text.replacingOccurrences(of: "\n", with: " ")
-                deliver(detected.contains(agent.surface.id) ? "From \(from)" + (agent.role.map { ", to you as the \($0)" } ?? "")
-                        + ": " + line : text, to: agent.surface)
+                deliver("From \(from)" + (agent.role.map { ", to you as the \($0)" } ?? "") + ": " + line, to: agent.surface)
             } else {
                 deliverToAgent("From \(from)" + (agent.role.map { ", to you as the \($0)" } ?? "") + ":\n\n" + text,
                                to: agent.surface, label: "From \(from)")
             }
+            return true
         }
         switch action.type {
         case "send":
             guard let agent = target(action.agent), let text = action.text, !text.isEmpty else { return nil }
-            send(text, to: agent)
+            guard send(text, to: agent) else { return "\(tileLabel(agent.surface)) has no agent running; not sent" }
             return "Sent \(tileLabel(agent.surface)): " + BoardTeams.clip(text.replacingOccurrences(of: "\n", with: " "), 120)
         case "broadcast":
             guard let text = action.text, !text.isEmpty, !wired.isEmpty else { return nil }
-            for agent in wired { send(text, to: agent) }
+            let skipped = wired.filter { !send(text, to: $0) }.map { tileLabel($0.surface) }
+            if skipped.count == wired.count { return "Not sent: no agent running in \(skipped.joined(separator: ", "))" }
+            if !skipped.isEmpty { return "Sent everyone with an agent (not \(skipped.joined(separator: ", "))): " + BoardTeams.clip(text.replacingOccurrences(of: "\n", with: " "), 100) }
             return "Sent everyone: " + BoardTeams.clip(text.replacingOccurrences(of: "\n", with: " "), 120)
         case "spawn":
             guard wired.count < BoardTeams.maxAgents else { return "Can't start more than \(BoardTeams.maxAgents) agents" }

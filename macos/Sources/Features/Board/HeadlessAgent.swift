@@ -40,6 +40,21 @@ enum HeadlessAgent {
         }
     }
 
+    /// Claude Code, Codex and the other agents on this Mac, found once (off the main thread)
+    /// and shared; `done` runs on the main queue.
+    static func lookUp(_ done: @escaping (_ engines: [Engine], _ agents: [BoardAgent]) -> Void) {
+        if let found { return done(found.engines, found.agents) }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = (engines: Engine.installed(), agents: BoardAgent.installed())
+            DispatchQueue.main.async {
+                found = result
+                done(result.engines, result.agents)
+            }
+        }
+    }
+
+    private static var found: (engines: [Engine], agents: [BoardAgent])?
+
     /// The prompt for one turn: Codex's first one starts with the instructions.
     static func prompt(_ engine: Engine, instructions: String, session: String?, body: String) -> String {
         (session == nil && engine == .codex ? instructions + "\n\n" : "") + body
@@ -47,27 +62,29 @@ enum HeadlessAgent {
 
     /// Runs in its own folder, so its sessions stay out of your projects' histories. Gets your
     /// login shell's PATH and nothing else from Tellurion's environment (no event token).
-    static func run(_ process: Process, tool: String, arguments: [String], input: String) -> AgentTools.Result {
+    /// Call it off the main thread; `handle` stops it.
+    static func run(_ handle: Run, tool: String, arguments: [String], input: String) -> AgentTools.Result {
         let folder = AgentTools.root.appendingPathComponent("board-agent", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let process = Process()
         process.executableURL = URL(fileURLWithPath: tool)
         process.arguments = arguments
         process.currentDirectoryURL = folder
-        let inherited = ProcessInfo.processInfo.environment
-        var environment = ["HOME": NSHomeDirectory(), "PATH": SetupChecks.loginPath.joined(separator: ":"),
-                           "LANG": inherited["LANG"] ?? "en_US.UTF-8", "TERM": "dumb"]
-        for key in ["USER", "LOGNAME", "SHELL", "TMPDIR"] { environment[key] = inherited[key] }
-        process.environment = environment
+        process.environment = environment()
         let stdin = Pipe(), out = Pipe(), err = Pipe()
         process.standardInput = stdin
         process.standardOutput = out
         process.standardError = err
-        do { try process.run() } catch { return AgentTools.Result(status: -1, output: "", error: "\(error)") }
-        stdin.fileHandleForWriting.write(Data(input.utf8))
-        try? stdin.fileHandleForWriting.close()
-        // A stuck run gives up after two minutes.
-        let timeout = DispatchWorkItem { [weak process] in process?.terminate() }
+        do {
+            guard try handle.start(process) else { return AgentTools.Result(status: 15, output: "", error: "Stopped.") }
+        } catch {
+            return AgentTools.Result(status: -1, output: "", error: "\(error)")
+        }
+        // A stuck run gives up after two minutes (set first: the write below can wait on it).
+        let timeout = DispatchWorkItem { [weak handle] in handle?.stop() }
         DispatchQueue.global().asyncAfter(deadline: .now() + 120, execute: timeout)
+        try? stdin.fileHandleForWriting.write(contentsOf: Data(input.utf8))
+        try? stdin.fileHandleForWriting.close()
         var errData = Data()
         let reader = DispatchQueue(label: "board-agent-stderr")
         reader.async { errData = err.fileHandleForReading.readDataToEndOfFile() }
@@ -80,58 +97,135 @@ enum HeadlessAgent {
                                  error: String(bytes: errData, encoding: .utf8) ?? "")
     }
 
-    // MARK: Streaming, read-only, in a project
-
-    /// What a streaming run is doing.
-    enum Phase: Equatable {
-        case thinking, reading, writing, finishing
-    }
-
-    /// Runs the engine in `folder` with read-only tools (it can look at the project, not change
-    /// it), streaming: `progress` gets the phase and the answer so far (on a background
-    /// queue), `done` the whole answer or an error (on the main queue). Returns the process,
-    /// to stop it.
-    @discardableResult
-    static func stream(_ engine: Engine, instructions: String, prompt: String, folder: String, model: String?,
-                       progress: @escaping (Phase, String) -> Void,
-                       done: @escaping (Result<String, Error>) -> Void) -> Process? {
-        guard let tool = ToolPath.find(engine.rawValue) else {
-            done(.failure(StreamError.missing(engine.title)))
-            return nil
-        }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: tool)
-        switch engine {
-        case .claude:
-            process.arguments = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-                                 "--model", model ?? "sonnet", "--strict-mcp-config", "--setting-sources", "",
-                                 "--tools", "Read", "Grep", "Glob", "--allowedTools", "Read", "Grep", "Glob",
-                                 "--system-prompt", instructions]
-        case .codex:
-            process.arguments = ["exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only", "-c", "notify=[]", "-"]
-        }
-        process.currentDirectoryURL = URL(fileURLWithPath: folder)
+    /// Your login shell's PATH and nothing else from Tellurion's environment (no event token).
+    private static func environment() -> [String: String] {
         let inherited = ProcessInfo.processInfo.environment
         var environment = ["HOME": NSHomeDirectory(), "PATH": SetupChecks.loginPath.joined(separator: ":"),
                            "LANG": inherited["LANG"] ?? "en_US.UTF-8", "TERM": "dumb"]
         for key in ["USER", "LOGNAME", "SHELL", "TMPDIR"] { environment[key] = inherited[key] }
-        process.environment = environment
-        let stdin = Pipe(), out = Pipe(), err = Pipe()
-        process.standardInput = stdin
-        process.standardOutput = out
-        process.standardError = err
-        do { try process.run() } catch {
-            done(.failure(error))
-            return nil
+        return environment
+    }
+
+    // MARK: Streaming, read-only, in a project
+
+    /// What a streaming run is doing.
+    enum Phase: Equatable {
+        case thinking, reading, writing
+    }
+
+    /// How long a streaming run may take.
+    static let streamLimit: TimeInterval = 600
+
+    /// A streaming run; `stop()` works before or after the process starts.
+    final class Run {
+        private let lock = NSLock()
+        private var process: Process?
+        private var stopped = false
+        fileprivate var timedOut = false
+
+        var isStopped: Bool { lock.withLock { stopped } }
+
+        func stop() {
+            let process = lock.withLock { () -> Process? in
+                stopped = true
+                return self.process
+            }
+            if process?.isRunning == true { process?.terminate() }
         }
-        stdin.fileHandleForWriting.write(Data(((engine == .codex ? instructions + "\n\n" : "") + prompt).utf8))
-        try? stdin.fileHandleForWriting.close()
+
+        /// Starts it unless it was stopped first.
+        fileprivate func start(_ process: Process) throws -> Bool {
+            try lock.withLock {
+                guard !stopped else { return false }
+                try process.run()
+                self.process = process
+                return true
+            }
+        }
+    }
+
+    /// What a streaming run is asked: its instructions and prompt, the project folder it
+    /// reads, and the model (nil: the engine's default).
+    struct Ask {
+        var instructions: String
+        var prompt: String
+        var folder: String
+        var model: String?
+    }
+
+    /// Runs the engine in the asked folder with read-only tools (it can look at the project, not change
+    /// it), streaming: `progress` gets the phase and the answer so far, a few times a second at
+    /// most (on a background queue); `done` the whole answer or an error (on the main queue).
+    /// Gives up after `streamLimit`.
+    @discardableResult
+    static func stream(_ engine: Engine, _ ask: Ask,
+                       progress: @escaping (Phase, String) -> Void,
+                       done: @escaping (Result<String, Error>) -> Void) -> Run {
+        let run = Run()
+        let instructions = ask.instructions, prompt = ask.prompt, folder = ask.folder, model = ask.model
+        let finish = { (result: Result<String, Error>) in DispatchQueue.main.async { done(result) } }
         DispatchQueue.global(qos: .userInitiated).async {
+            // Finding the tool can ask a login shell, so it happens here, off the main thread.
+            guard let tool = ToolPath.find(engine.rawValue) else {
+                finish(.failure(StreamError.missing(engine.title)))
+                return
+            }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: tool)
+            switch engine {
+            case .claude:
+                process.arguments = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+                                     "--model", model ?? "sonnet", "--strict-mcp-config", "--setting-sources", "",
+                                     "--tools", "Read", "Grep", "Glob", "--allowedTools", "Read", "Grep", "Glob",
+                                     "--system-prompt", instructions]
+            case .codex:
+                // No MCP servers: they'd run outside the read-only sandbox.
+                process.arguments = ["exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only",
+                                     "-c", "notify=[]", "-c", "mcp_servers={}", "-"]
+            }
+            process.currentDirectoryURL = URL(fileURLWithPath: folder)
+            process.environment = environment()
+            let stdin = Pipe(), out = Pipe(), err = Pipe()
+            process.standardInput = stdin
+            process.standardOutput = out
+            process.standardError = err
+            do {
+                guard try run.start(process) else {
+                    finish(.failure(StreamError.stopped))
+                    return
+                }
+            } catch {
+                finish(.failure(error))
+                return
+            }
+            let timeout = DispatchWorkItem { [weak run] in
+                run?.timedOut = true
+                run?.stop()
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + streamLimit, execute: timeout)
+            // stderr on its own, so a chatty CLI can't fill the pipe and stall.
+            var errorData = Data()
+            let errorRead = DispatchGroup()
+            errorRead.enter()
+            DispatchQueue.global(qos: .utility).async {
+                errorData = err.fileHandleForReading.readDataToEndOfFile()
+                errorRead.leave()
+            }
+            try? stdin.fileHandleForWriting.write(contentsOf: Data(((engine == .codex ? instructions + "\n\n" : "") + prompt).utf8))
+            try? stdin.fileHandleForWriting.close()
+
             var buffer = Data()
             var text = ""
+            var sent = ""
+            var lastSent = Date.distantPast
             var final: String?
             var failure: String?
-            let handle = out.fileHandleForReading
+            func emit(_ phase: Phase) {
+                guard phase != .writing || Date().timeIntervalSince(lastSent) > 0.25 else { return }
+                lastSent = Date()
+                sent = text
+                progress(phase, text)
+            }
             func line(_ data: Data) {
                 guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
                 let type = json["type"] as? String
@@ -140,26 +234,26 @@ enum HeadlessAgent {
                     if type == "stream_event", let event = json["event"] as? [String: Any] {
                         if let delta = event["delta"] as? [String: Any], let chunk = delta["text"] as? String {
                             text += chunk
-                            progress(.writing, text)
+                            emit(.writing)
                         } else if event["type"] as? String == "content_block_start",
                                   (event["content_block"] as? [String: Any])?["type"] as? String == "tool_use" {
                             // A new turn after tools: what it wrote before was thinking aloud.
                             text = ""
-                            progress(.reading, text)
+                            emit(.reading)
                         }
                     } else if type == "result" {
-                        final = json["result"] as? String
+                        final = (json["result"] as? String).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
                         if json["is_error"] as? Bool == true { failure = final ?? "The run failed." }
                     }
                 case .codex:
                     if let item = json["item"] as? [String: Any] {
                         switch item["type"] as? String {
-                        case "reasoning": progress(.thinking, text)
-                        case "command_execution", "file_read": progress(.reading, text)
+                        case "reasoning": emit(.thinking)
+                        case "command_execution", "file_read": emit(.reading)
                         case "agent_message":
                             if let message = item["text"] as? String {
                                 text = message
-                                progress(.writing, text)
+                                emit(.writing)
                             }
                         default: break
                         }
@@ -169,6 +263,7 @@ enum HeadlessAgent {
                     }
                 }
             }
+            let handle = out.fileHandleForReading
             while true {
                 let chunk = handle.availableData
                 if chunk.isEmpty { break }
@@ -180,21 +275,26 @@ enum HeadlessAgent {
             }
             if !buffer.isEmpty { line(buffer) }
             process.waitUntilExit()
-            let errorText = String(bytes: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            DispatchQueue.main.async {
-                if process.terminationStatus == 15 || process.terminationReason == .uncaughtSignal {
-                    done(.failure(StreamError.stopped))
-                } else if let failure {
-                    done(.failure(StreamError.failed(failure)))
-                } else if let answer = final ?? (text.isEmpty ? nil : text) {
-                    done(.success(answer))
-                } else {
-                    let detail = errorText.split(separator: "\n").last.map(String.init) ?? "exit \(process.terminationStatus)"
-                    done(.failure(StreamError.failed("\(engine.title) didn't answer: \(detail)")))
-                }
+            timeout.cancel()
+            errorRead.wait()
+            // The last words, which the throttle may have held back.
+            if text != sent, !run.isStopped { progress(.writing, text) }
+            let errorText = String(bytes: errorData, encoding: .utf8) ?? ""
+            let answer = final ?? (text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text)
+            if run.timedOut {
+                finish(.failure(StreamError.failed("\(engine.title) took longer than \(Int(streamLimit / 60)) minutes and was stopped.")))
+            } else if run.isStopped {
+                finish(.failure(StreamError.stopped))
+            } else if let failure {
+                finish(.failure(StreamError.failed(failure)))
+            } else if let answer {
+                finish(.success(answer))
+            } else {
+                let detail = errorText.split(separator: "\n").last.map(String.init) ?? "exit \(process.terminationStatus)"
+                finish(.failure(StreamError.failed("\(engine.title) didn't answer: \(detail)")))
             }
         }
-        return process
+        return run
     }
 
     enum StreamError: LocalizedError {

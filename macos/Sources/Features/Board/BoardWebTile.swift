@@ -165,7 +165,8 @@ final class WebContent: CardContent, WKNavigationDelegate, WKUIDelegate {
     private var chrome: NSView?
     /// One web view per tab; only the current one is shown.
     private var pages: [WKWebView] = []
-    private var observations: [NSKeyValueObservation] = []
+    /// Per page, in the same order.
+    private var observations: [[NSKeyValueObservation]] = []
     private var applied: [String] = []
 
     override func apply(_ card: BoardCard) {
@@ -173,7 +174,7 @@ final class WebContent: CardContent, WKNavigationDelegate, WKUIDelegate {
         let tabs = card.tabs ?? [""]
         // Pages follow the card's tabs (added, closed); a page navigates on its own.
         while pages.count < tabs.count { pages.append(makePage()) }
-        while pages.count > tabs.count { pages.removeLast().superview?.removeFromSuperview() }
+        while pages.count > tabs.count { removePage(pages.count - 1) }
         for (index, url) in tabs.enumerated() where index >= applied.count || applied[index] != url {
             load(url, in: pages[index])
         }
@@ -206,7 +207,7 @@ final class WebContent: CardContent, WKNavigationDelegate, WKUIDelegate {
     private var current: WKWebView? { pages.indices.contains(state.tab) ? pages[state.tab] : nil }
 
     private func attach() {
-        guard chrome == nil, let board else { return }
+        guard chrome == nil, board != nil else { return }
         let host = NSHostingView(rootView: WebTileChrome(state: state, actions: WebTileActions(
             back: { [weak self] in self?.current?.goBack() },
             forward: { [weak self] in self?.current?.goForward() },
@@ -215,22 +216,18 @@ final class WebContent: CardContent, WKNavigationDelegate, WKUIDelegate {
                 if page.isLoading { page.stopLoading() } else if page.url == nil { self?.showStart(in: page) } else { page.reload() }
             },
             go: { [weak self] text in self?.go(text) },
-            select: { [weak self] index in board.updateCard(self?.cardID ?? UUID()) { $0.tab = index } },
+            select: { [weak self] index in
+                guard let self else { return }
+                self.board?.updateCard(self.cardID) { $0.tab = index }
+            },
             newTab: { [weak self] in
-                board.updateCard(self?.cardID ?? UUID()) { card in
+                guard let self else { return }
+                self.board?.updateCard(self.cardID) { card in
                     card.tabs = (card.tabs ?? [""]) + [""]
                     card.tab = (card.tabs?.count ?? 1) - 1
                 }
             },
-            closeTab: { [weak self] index in
-                board.updateCard(self?.cardID ?? UUID()) { card in
-                    var tabs = card.tabs ?? [""]
-                    guard tabs.count > 1, tabs.indices.contains(index) else { return }
-                    tabs.remove(at: index)
-                    card.tabs = tabs
-                    card.tab = min(card.tab ?? 0, tabs.count - 1)
-                }
-            },
+            closeTab: { [weak self] index in self?.closeTab(index) },
             inspect: { [weak self] in self?.inspect() },
             viewport: { [weak self] name in self?.setViewport(name) })))
         host.sizingOptions = []
@@ -255,16 +252,42 @@ final class WebContent: CardContent, WKNavigationDelegate, WKUIDelegate {
         page.autoresizingMask = [.width, .height]
         box.addSubview(page)
         addSubview(box, positioned: .below, relativeTo: chrome)
-        observations.append(page.observe(\.estimatedProgress, options: [.new]) { [weak self] _, _ in
-            DispatchQueue.main.async { self?.sync() }
-        })
-        observations.append(page.observe(\.title, options: [.new]) { [weak self] _, _ in
-            DispatchQueue.main.async { self?.titleChanged() }
-        })
-        observations.append(page.observe(\.url, options: [.new]) { [weak self] _, _ in
-            DispatchQueue.main.async { self?.urlChanged(page) }
-        })
+        observations.append([
+            page.observe(\.estimatedProgress, options: [.new]) { [weak self] _, _ in
+                DispatchQueue.main.async { self?.sync() }
+            },
+            page.observe(\.title, options: [.new]) { [weak self] _, _ in
+                DispatchQueue.main.async { self?.titleChanged() }
+            },
+            page.observe(\.url, options: [.new]) { [weak self, weak page] _, _ in
+                DispatchQueue.main.async { if let page { self?.urlChanged(page) } }
+            },
+        ])
         return page
+    }
+
+    /// That tab's page goes, and the others keep theirs (and their history).
+    func closeTab(_ index: Int) {
+        guard let board, pages.count > 1, pages.indices.contains(index) else { return }
+        removePage(index)
+        if applied.indices.contains(index) { applied.remove(at: index) }
+        board.updateCard(cardID) { card in
+            var tabs = card.tabs ?? [""]
+            guard tabs.count > 1, tabs.indices.contains(index) else { return }
+            tabs.remove(at: index)
+            card.tabs = tabs
+            let tab = card.tab ?? 0
+            card.tab = min(index < tab ? tab - 1 : tab, tabs.count - 1)
+        }
+    }
+
+    private func removePage(_ index: Int) {
+        let page = pages.remove(at: index)
+        if observations.indices.contains(index) { observations.remove(at: index).forEach { $0.invalidate() } }
+        page.stopLoading()
+        page.navigationDelegate = nil
+        page.uiDelegate = nil
+        page.superview?.removeFromSuperview()
     }
 
     private func load(_ url: String, in page: WKWebView) {

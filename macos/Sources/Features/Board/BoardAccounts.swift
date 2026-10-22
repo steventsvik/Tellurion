@@ -36,16 +36,10 @@ struct BoardAccount: Codable, Identifiable, Equatable {
         return String(letters).uppercased()
     }
 
-    /// Whether it has been signed in: the agent wrote its account to the folder (only that
-    /// the entry is there is checked, nothing in it is read).
-    var signedIn: Bool {
-        let files = FileManager.default
-        switch provider {
-        case .codex: return files.fileExists(atPath: folder.appendingPathComponent("auth.json").path)
-        case .claude:
-            guard let data = files.contents(atPath: folder.appendingPathComponent(".claude.json").path) else { return false }
-            return String(bytes: data, encoding: .utf8)?.contains("\"oauthAccount\"") == true
-        }
+    /// Whether the agent has set the profile up yet: only that its file is there is checked,
+    /// nothing in it is read.
+    var used: Bool {
+        FileManager.default.fileExists(atPath: folder.appendingPathComponent(provider == .codex ? "auth.json" : ".claude.json").path)
     }
 }
 
@@ -155,6 +149,22 @@ extension BoardController {
         setTitle("Sign in: \(account.name)", for: tile)
     }
 
+    /// Removing a profile deletes its sign-in, so it asks first, and says which tiles use it.
+    func confirmRemove(_ account: BoardAccount) {
+        let using = model.surfaces.filter { model.tileAccounts[$0.id]?[account.provider] == account.id }
+        let alert = NSAlert()
+        alert.messageText = "Remove \(account.name)?"
+        alert.informativeText = "Its sign-in is deleted from this Mac."
+            + (using.isEmpty ? "" : " \(using.count) tile\(using.count == 1 ? " uses" : "s use") it and will need to sign in again.")
+        alert.addButton(withTitle: "Remove")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        BoardAccounts.shared.remove(account.id)
+        for surface in using { model.tileAccounts[surface.id]?[account.provider] = nil }
+        scheduleSave()
+    }
+
     /// Starts the tile's agent again on another profile (or your usual sign-in).
     func switchAccount(_ surface: Ghostty.SurfaceView, to account: BoardAccount?, provider: BoardAccount.Provider) {
         var chosen = model.tileAccounts[surface.id] ?? [:]
@@ -212,7 +222,7 @@ struct BoardAccountsView: View {
             VStack(spacing: 6) {
                 row(nil, title: "Your sign-in", detail: "The usual \(provider.title) sign-in")
                 ForEach(store.accounts.filter { $0.provider == provider }) { account in
-                    row(account, title: account.name, detail: account.signedIn ? "Signed in" : "Not signed in yet: open a tile to sign in")
+                    row(account, title: account.name, detail: account.used ? "Set up" : "Not set up yet: open a tile to sign in")
                 }
             }
             ExtremeSectionLabel("Connect another account")
@@ -261,7 +271,7 @@ struct BoardAccountsView: View {
                     controller.promptRename("Rename Account", current: account.name) { store.rename(account.id, to: $0) }
                 } label: { Image(systemName: "pencil") }
                     .buttonStyle(.plain).help("Rename")
-                Button { store.remove(account.id) } label: { Image(systemName: "xmark") }
+                Button { controller.confirmRemove(account) } label: { Image(systemName: "xmark") }
                     .buttonStyle(.plain).help("Remove this account and its sign-in")
             }
         }

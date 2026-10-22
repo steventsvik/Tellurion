@@ -88,6 +88,8 @@ final class BoardCardView: BoardNodeView {
         if abs(state.zoom - zoom) > 0.001 { state.zoom = zoom }
         setZoom(zoom)
         overview.isHidden = zoom >= 0.45
+        // Zoomed out, the overview stands in: the content underneath (a page, a video) rests.
+        if content.isHidden == overview.isHidden { content.isHidden = !overview.isHidden }
         // A note's color, or an Agent Map's project color.
         let tint = card.kind == .note ? SketchStyle.color(card.color)
             : card.folder.flatMap { controller?.model.colors[$0] }.map(BoardProjects.nsColor)
@@ -754,7 +756,7 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
     }
 
     override func beginTyping() {
-        if items.isEmpty { addCard(in: 0) }
+        if items.isEmpty { addCard(in: CardItem.todo) }
     }
 
     func addCard(in column: Int) {

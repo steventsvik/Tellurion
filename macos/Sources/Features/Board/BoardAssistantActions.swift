@@ -5,13 +5,6 @@ import AppKit
 struct BoardAssistantReply: Codable {
     var say: String
     var actions: [BoardAssistantAction]
-
-    /// From an answer's text, with or without a code fence around the JSON.
-    static func decode(_ text: String) -> BoardAssistantReply? {
-        guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end,
-              let data = String(text[start...end]).data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(Self.self, from: data)
-    }
 }
 
 /// One thing to do on the board. Which fields matter depends on `type` (see BoardAssistantPrompt).
@@ -54,11 +47,13 @@ struct BoardAssistantAction: Codable, Equatable {
     var role: String?
     var members: [TeamMember]?
 
-    /// Closing, removing and typing into an agent that's already running wait for you.
+    /// Closing, removing, typing into an agent that's already running, and running a command wait for you.
     var needsConfirmation: Bool {
         switch type {
         case "close_tile", "remove_card", "message_agent", "command_orchestrator", "message_group", "close_group": return true
         case "hand_item": return tile != nil
+        // A command the agent chose runs in a shell: you see it first.
+        case "new_terminal": return command?.isEmpty == false
         default: return false
         }
     }
@@ -250,13 +245,19 @@ extension BoardController {
     }
 
     func tileLabels() -> [(id: UUID, label: String, surface: Ghostty.SurfaceView)] {
+        let key = model.surfaces.map(\.id)
+        if let cache = tileLabelCache, cache.key == key, cache.titles == model.titles { return cache.labels }
         var seen: [String: Int] = [:]
-        return model.surfaces.map { surface in
+        let labels = model.surfaces.map { surface in
             let base = BoardTileTitle.title(surface, VerticalTabsAgents.shared.info(for: surface), name: model.titles[surface.id])
             let n = (seen[base] ?? 0) + 1
             seen[base] = n
-            return (surface.id, n == 1 ? base : "\(base) \(n)", surface)
+            return (id: surface.id, label: n == 1 ? base : "\(base) \(n)", surface: surface)
         }
+        // Agents' statuses (part of the labels) change between turns, so it lasts one turn.
+        if tileLabelCache == nil { DispatchQueue.main.async { [weak self] in self?.tileLabelCache = nil } }
+        tileLabelCache = (key, model.titles, labels)
+        return labels
     }
 
     /// A group @mentioned in `text` ("@Backend fix the tests"), and the text without it.
@@ -367,6 +368,9 @@ extension BoardController {
         case "close_group":
             guard let id = handles.id(action.target), let group = namedGroup(id) else { return nil }
             return "Close \(group.name) and its \(group.tiles.count) tiles"
+        case "new_terminal":
+            guard let command = action.command, !command.isEmpty else { return nil }
+            return "Open a terminal and run: \(Self.clip(command, 120))"
         case "command_orchestrator":
             guard let id = handles.id(action.card), orchestrator(id) != nil else { return nil }
             return "Give \(orchestratorName(id)) the command “\(action.text ?? "")” (it messages its agents)"
@@ -554,7 +558,7 @@ extension BoardController {
             let tiles = (action.tiles ?? action.tile.map { [$0] } ?? []).compactMap { surface($0, handles)?.id }
             guard !tiles.isEmpty else { return nil }
             let role = BoardRole(rawValue: (action.role ?? "general").lowercased()) ?? .general
-            let id = createGroup(tiles, name: action.title, role: role)
+            guard let id = createGroup(tiles, name: action.title, role: role) else { return nil }
             return "Grouped \(tiles.count) tile\(tiles.count == 1 ? "" : "s") as \(namedGroup(id)?.name ?? role.title)"
         case "add_to_group":
             guard let id = handles.id(action.target), let group = namedGroup(id) else { return nil }

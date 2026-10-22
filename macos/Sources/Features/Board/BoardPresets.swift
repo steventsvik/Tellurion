@@ -77,6 +77,10 @@ extension BoardController {
         guard !lines.isEmpty else { return nil }
         undoManager?.beginUndoGrouping()
         let views = launch(lines, folder: folder?.isEmpty == false ? folder : nil, skip: skip)
+        guard !views.isEmpty else {
+            undoManager?.endUndoGrouping()
+            return nil
+        }
         let id = createGroup(views.map(\.id), name: name, role: role)
         undoManager?.endUndoGrouping()
         undoManager?.setActionName("Spawn \(name)")

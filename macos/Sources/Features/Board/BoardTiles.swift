@@ -137,7 +137,7 @@ final class BoardTiles {
                 labelViews[label.id] = view
                 return view
             }()
-            if view.frame != frame { view.frame = frame }
+            if !view.isEditing, view.frame != frame { view.frame = frame }
             view.apply(label)
         }
         ink.update(model.ink)
@@ -334,6 +334,16 @@ final class BoardTileView: BoardNodeView {
     }
 
     override var wirable: Bool { true }
+
+    /// The ring stays the same width on screen at any zoom.
+    override func setZoom(_ zoom: CGFloat) {
+        super.setZoom(zoom)
+        guard let wire, !wireRing.isHidden else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        wireRing.borderWidth = (wire.on ? 3 : 1.5) / max(self.zoom, 0.25)
+        CATransaction.commit()
+    }
 
     override var tileButtons: Bool { true }
 

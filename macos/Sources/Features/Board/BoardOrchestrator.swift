@@ -427,7 +427,7 @@ private struct OrchestratorPanel: View {
     private func submit() {
         let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty, !brain.busy else { return }
-        dictation.stop()
+        dictation.cancel()
         text = ""
         brain.command(message)
     }
@@ -443,7 +443,7 @@ private struct OrchestratorPanel: View {
         dictation.start(update: { words in
             let before = spokenAfter ?? ""
             text = before.isEmpty ? words : before + " " + words
-        }, failed: { _ in })
+        }, failed: { reason in brain.add(.error, reason) })
     }
 }
 

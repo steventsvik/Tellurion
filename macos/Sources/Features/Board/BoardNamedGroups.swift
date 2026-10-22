@@ -90,7 +90,9 @@ extension BoardController {
     }
 
     func groupSurfaces(_ group: BoardGroupNode) -> [Ghostty.SurfaceView] {
-        group.tiles.compactMap { id in model.surfaces.first { $0.id == id } }
+        let members = Set(group.tiles)
+        let byID = Dictionary(model.surfaces.filter { members.contains($0.id) }.map { ($0.id, $0) }) { first, _ in first }
+        return group.tiles.compactMap { byID[$0] }
     }
 
     /// Around a group's tiles.
@@ -137,8 +139,9 @@ extension BoardController {
 
     /// A new group of these tiles (which leave any group they were in).
     @discardableResult
-    func createGroup(_ tiles: [UUID], name: String? = nil, role: BoardRole = .general) -> UUID {
+    func createGroup(_ tiles: [UUID], name: String? = nil, role: BoardRole = .general) -> UUID? {
         let tiles = tiles.filter { id in model.surfaces.contains { $0.id == id } }
+        guard !tiles.isEmpty else { return nil }
         var groups = model.groups
         for index in groups.indices { groups[index].tiles.removeAll { tiles.contains($0) } }
         groups.removeAll { $0.tiles.isEmpty }
@@ -176,7 +179,8 @@ extension BoardController {
     func renameGroup(_ id: UUID, to name: String) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
-        changeGroup(id, action: "Rename Group") { $0.name = name }
+        let taken = Set(model.groups.filter { $0.id != id }.map(\.name))
+        changeGroup(id, action: "Rename Group") { $0.name = BoardStore.uniqueName(name, taken: taken) }
     }
 
     func setGroupColor(_ id: UUID, _ color: Int?) {
@@ -184,8 +188,11 @@ extension BoardController {
     }
 
     func setGroupRole(_ id: UUID, _ role: BoardRole) {
+        let taken = Set(model.groups.filter { $0.id != id }.map(\.name))
         changeGroup(id, action: "Group Role") { group in
-            if BoardRole.allCases.contains(where: { $0.title == group.name }) { group.name = role.title }
+            if BoardRole.allCases.contains(where: { group.name == $0.title || group.name.hasPrefix($0.title + " ") }) {
+                group.name = BoardStore.uniqueName(role.title, taken: taken)
+            }
             group.role = role
         }
     }
@@ -193,9 +200,16 @@ extension BoardController {
     func toggleCollapsed(_ id: UUID) {
         changeGroup(id, action: "Collapse Group") { $0.collapsed.toggle() }
         // A hidden tile can't keep the keyboard.
-        if let group = namedGroup(id), group.collapsed, let focused = focusedSurface, group.tiles.contains(focused.id) {
-            window?.makeFirstResponder(canvas)
+        if let group = namedGroup(id), group.collapsed {
+            if let focused = focusedSurface, group.tiles.contains(focused.id) { window?.makeFirstResponder(canvas) }
+            if let focused = model.focused?.value, group.tiles.contains(focused.id) { model.focused = nil }
         }
+    }
+
+    /// Opens the collapsed group a tile is in, so it can be shown (or take the keyboard).
+    func expandGroup(containing tile: UUID) {
+        guard let group = namedGroup(containing: tile), group.collapsed else { return }
+        changeGroup(group.id, action: "Expand Group") { $0.collapsed = false }
     }
 
     func promptRenameGroup(_ id: UUID) {

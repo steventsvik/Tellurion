@@ -71,7 +71,11 @@ final class MediaContent: CardContent {
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil, queue: .main) { [weak self] note in
             guard let self, (note.object as? AVPlayerItem) === self.player.currentItem else { return }
-            self.next()
+            self.advance()
+        })
+        observers.append(center.addObserver(forName: .AVPlayerItemFailedToPlayToEndTime, object: nil, queue: .main) { [weak self] note in
+            guard let self, (note.object as? AVPlayerItem) === self.player.currentItem else { return }
+            self.advance()
         })
     }
 
@@ -85,8 +89,8 @@ final class MediaContent: CardContent {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        for observer in observers.dropFirst() { NotificationCenter.default.removeObserver(observer) }
-        observers = Array(observers.prefix(1))
+        for observer in observers.dropFirst(2) { NotificationCenter.default.removeObserver(observer) }
+        observers = Array(observers.prefix(2))
         guard let window else {
             player.pause()
             return
@@ -95,6 +99,11 @@ final class MediaContent: CardContent {
         observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main) { [weak self] _ in
             if !window.occlusionState.contains(.visible) { self?.player.pause() }
         })
+    }
+
+    override func viewDidHide() {
+        super.viewDidHide()
+        player.pause()
     }
 
     override func apply(_ card: BoardCard) {
@@ -113,10 +122,26 @@ final class MediaContent: CardContent {
         controls.frame = CGRect(x: 8, y: bounds.height - bar, width: bounds.width - 16, height: bar)
     }
 
+    /// The end of a file: the next one, or stop after the last of a single file.
+    private func advance() {
+        guard files.count > 1 else { return }
+        next()
+    }
+
     private func load() {
         guard files.indices.contains(index) else {
             player.replaceCurrentItem(with: nil)
             return
+        }
+        // A file that's gone: skip it (once round the list at most).
+        if !FileManager.default.fileExists(atPath: files[index]) {
+            if let other = files.indices.first(where: { FileManager.default.fileExists(atPath: files[$0]) }), other != index {
+                index = other
+            } else {
+                player.replaceCurrentItem(with: nil)
+                board?.updateCard(cardID) { $0.title = "File missing" }
+                return
+            }
         }
         player.replaceCurrentItem(with: AVPlayerItem(url: URL(fileURLWithPath: files[index])))
         let title = URL(fileURLWithPath: files[index]).deletingPathExtension().lastPathComponent

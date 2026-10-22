@@ -111,8 +111,7 @@ enum BoardTileMenu {
         } else {
             list.append(Action(title: "New Group with This Tile") { [weak board] in
                 guard let board else { return }
-                let id = board.createGroup([tile])
-                board.promptRenameGroup(id)
+                if let id = board.createGroup([tile]) { board.promptRenameGroup(id) }
             })
         }
         for group in board.model.groups where group.id != own?.id {

@@ -357,7 +357,7 @@ struct BoardAssistantBar: View {
     private func submit() {
         let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty, !assistant.busy else { return }
-        dictation.stop()
+        dictation.cancel()
         text = ""
         assistant.send(message)
         hint = Self.hints.randomElement() ?? hint
@@ -562,7 +562,9 @@ struct BoardAssistantField: NSViewRepresentable {
         private func installMonitor() {
             guard monitor == nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
-                guard let self, event.keyCode == 49, event.window === self.field?.window, self.editing,
+                // Letting go of Space always counts while holding, even if focus moved away.
+                guard let self, event.keyCode == 49, event.window === self.field?.window,
+                      self.editing || (event.type == .keyUp && self.holding),
                       event.modifierFlags.isDisjoint(with: [.command, .control, .option]) else { return event }
                 return self.space(event)
             }
@@ -590,6 +592,17 @@ struct BoardAssistantField: NSViewRepresentable {
                 hold?.cancel()
             }
             return nil
+        }
+
+        /// Focus left the bar mid-hold: stop listening rather than wait for a Space that won't come.
+        func controlTextDidEndEditing(_ notification: Notification) {
+            guard holding else { return }
+            holding = false
+            hold?.cancel()
+            if dictating {
+                dictating = false
+                parent.onHold(false)
+            }
         }
 
         func controlTextDidChange(_ notification: Notification) {
