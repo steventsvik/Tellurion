@@ -528,6 +528,8 @@ enum BoardTest {
                 }
                 DispatchQueue.main.async { DemoDirector.note("tileenv \(args[0]) \(name)=\(Set(found).sorted())") }
             }
+        case "home":
+            BoardHome.show()
         case "mission":
             controller.model.showMissionMap = args.first != "off"
         case "orchnew":

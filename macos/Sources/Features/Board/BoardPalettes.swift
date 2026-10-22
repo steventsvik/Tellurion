@@ -233,6 +233,7 @@ struct BoardSidePalette: View {
                 }
             button("folder", "Files and changes") { showFiles() }
             button("person.2.circle", "Accounts") { model.showAccounts = true }
+            button("house", "Home: every project and board") { BoardHome.show() }
             button("arrow.triangle.2.circlepath", "Review loop for the focused agent") { showLoops() }
         }
         .padding(5)

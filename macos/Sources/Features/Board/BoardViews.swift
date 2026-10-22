@@ -53,6 +53,14 @@ struct BoardWindowView: View {
                         LocalhostToastLayer(controller: controller).padding(.top, 34)
                     }
                     BoardCornerOverlay(controller: controller)
+                    VStack {
+                        Spacer()
+                        HStack {
+                            BoardGitChip(controller: controller)
+                            Spacer()
+                        }
+                        .padding(.leading, 14).padding(.bottom, 14)
+                    }
                     HStack(alignment: .center) {
                         BoardToolPalette(controller: controller, model: model)
                         Spacer()
@@ -193,7 +201,13 @@ private struct BoardToolbar: View {
                 Spacer().frame(width: 70)
                 button("sidebar.left", "Show the list") { model.showSidebar = true }
             }
-            Spacer()
+            // Home, the project and its boards, live agents and usage, as far as there's room.
+            ViewThatFits(in: .horizontal) {
+                BoardTopBar(controller: controller, model: model)
+                Color.clear.frame(width: 0, height: 0)
+            }
+            .padding(.leading, 12)
+            Spacer(minLength: 8)
             HStack(spacing: 2) {
                 button("plus", "New terminal (⌘T)") { controller.addTile() }
                 button("sparkles", "Launch agents…") { model.showComposer = true }
