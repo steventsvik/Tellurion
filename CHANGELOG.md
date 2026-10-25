@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Switching back to Classic works.** Picking **Classic** in Settings did nothing: the board stayed and no window opened. It now offers to move the board's tiles into windows, a window per project with a tab for each tile, and closes the board (its notes, sketches and maps stay saved). Agents keep running. **Keep Board** opens a window beside the board instead.
+
 ## 1.8.1
 
 A fix release for Boards. If you tried 1.8.0 and the orchestrator or **Settings → Board** didn't seem to do anything, this is why.

@@ -186,7 +186,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     // of each other.
     private static var lastCascadePoint = NSPoint(x: 0, y: 0)
 
-    private static func applyCascade(to window: NSWindow, hasFixedPos: Bool) {
+    static func applyCascade(to window: NSWindow, hasFixedPos: Bool) {
         if hasFixedPos { return }
 
         if all.count > 1 {
