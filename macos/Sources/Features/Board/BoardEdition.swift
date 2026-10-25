@@ -34,13 +34,17 @@ enum ExtremeEdition: String, CaseIterable, Identifiable {
     static var chosen: Bool { UserDefaults.standard.string(forKey: key) != nil }
 
     /// Switches editions. Picking Board brings a board to the front (opening one if none is),
-    /// and offers to move the terminals of open classic windows onto it.
+    /// and offers to move the terminals of open classic windows onto it. Picking Classic offers
+    /// to move the boards' tiles into windows, and closes the boards.
     static func set(_ edition: ExtremeEdition) {
         let changed = edition != current || !chosen
         UserDefaults.standard.set(edition.rawValue, forKey: key)
         if changed { ExtremeSettings.shared.objectWillChange.send() }
-        guard edition == .board, let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty else { return }
-        Board.activate(ghostty)
+        guard let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty else { return }
+        switch edition {
+        case .board: Board.activate(ghostty)
+        case .classic: Board.deactivate(ghostty)
+        }
     }
 }
 
@@ -91,7 +95,94 @@ enum Board {
             guard response == .alertFirstButtonReturn else { return }
             board.adopt(views, from: terminals)
         }
-        if let window = NSApp.keyWindow, window.sheets.isEmpty, window.attachedSheet == nil {
+        ask(alert, then: decide)
+    }
+
+    /// Switching to Classic from Settings or the welcome window. With tiles on the open boards,
+    /// asks whether they should become tabs in windows; the boards close either way when
+    /// they're empty, and when their tiles move. A board stays saved without the terminals
+    /// that left it.
+    static func deactivate(_ ghostty: Ghostty.App) {
+        let boards = BoardController.all
+        let views = boards.flatMap { Array($0.surfaceTree) }
+        guard !views.isEmpty else {
+            closeBoards(boards)
+            if let window = TerminalController.preferredParent?.window ?? TerminalController.all.first?.window {
+                window.makeKeyAndOrderFront(nil)
+            } else {
+                _ = TerminalController.newWindow(ghostty)
+            }
+            return
+        }
+        let alert = NSAlert()
+        let count = views.count
+        alert.messageText = count == 1 ? "Move your terminal to a window?" : "Move your \(count) terminals to windows?"
+        alert.informativeText = "Each tile becomes a tab, with a window per project, and the board closes. "
+            + "Agents keep running. Keep Board opens a window beside it instead."
+        alert.addButton(withTitle: "Move to Windows")
+        alert.addButton(withTitle: "Keep Board")
+        ask(alert) { response in
+            guard response == .alertFirstButtonReturn else {
+                _ = TerminalController.newWindow(ghostty)
+                return
+            }
+            release(views, from: boards, ghostty)
+        }
+    }
+
+    /// Tiles become tabs: a window per project, in the order they were on the board. The
+    /// terminals themselves aren't touched, so their agents keep running.
+    private static func release(_ views: [Ghostty.SurfaceView], from boards: [BoardController], _ ghostty: Ghostty.App) {
+        let folders = Dictionary(uniqueKeysWithValues: views.map { ($0.id, $0.pwd) })
+        // Out of the boards first; an empty board closes without asking.
+        for board in boards { board.surfaceTree = .init() }
+        closeBoards(boards)
+        var groups: [(project: String, views: [Ghostty.SurfaceView])] = []
+        for view in views {
+            let project = BoardProjects.project(of: folders[view.id] ?? nil) ?? ""
+            if let index = groups.firstIndex(where: { $0.project == project }) {
+                groups[index].views.append(view)
+            } else {
+                groups.append((project, [view]))
+            }
+        }
+        var controllers: [[TerminalController]] = []
+        for group in groups {
+            var windows: [TerminalController] = []
+            for view in group.views {
+                let controller = TerminalController(ghostty, withSurfaceTree: SplitTree(view: view))
+                guard let window = controller.window else { continue }
+                if let previous = windows.last?.window, window.tabbingMode != .disallowed {
+                    _ = previous.addTabbedWindowSafely(window, ordered: .above)
+                }
+                windows.append(controller)
+            }
+            controllers.append(windows)
+        }
+        // Shown a tick later, as new windows are, so each window's frame is set before it cascades.
+        DispatchQueue.main.async {
+            for windows in controllers {
+                for controller in windows { controller.showWindow(nil) }
+                if let window = windows.first?.window { TerminalController.applyCascade(to: window, hasFixedPos: false) }
+            }
+            controllers.first?.first?.window?.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    /// Hidden boards first, so none comes forward in a closing one's place.
+    private static func closeBoards(_ boards: [BoardController]) {
+        let hidden = boards.filter { $0.window?.isVisible != true }
+        for board in hidden + boards.filter({ $0.window?.isVisible == true }) {
+            board.window?.close()
+        }
+    }
+
+    /// Over the key window when it can take a sheet, else on its own. A sheet that's up
+    /// (another question) is key itself; the question goes under its window, not onto it.
+    private static func ask(_ alert: NSAlert, then decide: @escaping (NSApplication.ModalResponse) -> Void) {
+        var window = NSApp.keyWindow
+        while let parent = window?.sheetParent { window = parent }
+        if let window, window.sheets.isEmpty, window.attachedSheet == nil {
             alert.beginSheetModal(for: window, completionHandler: decide)
         } else {
             decide(alert.runModal())
