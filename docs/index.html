@@ -137,19 +137,19 @@ header.site nav a:hover { color: var(--text); text-decoration: none; }
 .splitbar button[aria-pressed="true"] { background: linear-gradient(180deg, #ecc87f, var(--gold)); color: var(--ink); }
 .splitbar .new { color: var(--gold); margin-left: 6px; }
 .splitbar button[aria-pressed="true"] .new { color: var(--ink); }
-.stage { position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #000; border: 1px solid rgba(239,233,220,.1); box-shadow: 0 1px 2px rgba(0,0,0,.5), 0 14px 44px rgba(0,0,0,.55), 0 40px 120px -20px rgba(0,0,0,.7), 0 0 0 1px rgba(222,184,110,.06); cursor: ew-resize; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
-.stage .side { position: absolute; inset: 0; margin: 0; }
-.stage video { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-.stage .side.board { clip-path: inset(0 0 0 calc(var(--x) * 1%)); }
+.splitstage { position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #000; border: 1px solid rgba(239,233,220,.1); box-shadow: 0 1px 2px rgba(0,0,0,.5), 0 14px 44px rgba(0,0,0,.55), 0 40px 120px -20px rgba(0,0,0,.7), 0 0 0 1px rgba(222,184,110,.06); cursor: ew-resize; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.splitstage .side { position: absolute; inset: 0; margin: 0; }
+.splitstage video { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.splitstage .side.board { clip-path: inset(0 0 0 calc(var(--x) * 1%)); }
 /* The side you're pulling away from dims a little, so the eye follows the slider. */
-.stage .side::after { content: ""; position: absolute; inset: 0; background: #000; pointer-events: none; }
-.stage .side.classic::after { opacity: calc((50 - min(var(--x), 50)) / 50 * .45); }
-.stage .side.board::after { opacity: calc((max(var(--x), 50) - 50) / 50 * .45); }
-.stage .tag { position: absolute; top: 16px; z-index: 2; font: 600 10.5px var(--mono); letter-spacing: .22em; color: var(--text); padding: 6px 11px; border-radius: 999px; background: rgba(11,10,9,.78); border: 1px solid var(--line); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); transition: opacity .25s ease, transform .35s cubic-bezier(.2,.8,.2,1); pointer-events: none; }
-.stage .tag.l { left: 16px; transform-origin: left center; }
-.stage .tag.r { right: 16px; transform-origin: right center; }
-.stage .tag.r b { color: var(--gold); font-weight: 600; }
-.stage.lowL .tag.l, .stage.lowR .tag.r { opacity: 0; transform: scale(.85); }
+.splitstage .side::after { content: ""; position: absolute; inset: 0; background: #000; pointer-events: none; }
+.splitstage .side.classic::after { opacity: calc((50 - min(var(--x), 50)) / 50 * .45); }
+.splitstage .side.board::after { opacity: calc((max(var(--x), 50) - 50) / 50 * .45); }
+.splitstage .tag { position: absolute; top: 16px; z-index: 2; font: 600 10.5px var(--mono); letter-spacing: .22em; color: var(--text); padding: 6px 11px; border-radius: 999px; background: rgba(11,10,9,.78); border: 1px solid var(--line); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); transition: opacity .25s ease, transform .35s cubic-bezier(.2,.8,.2,1); pointer-events: none; }
+.splitstage .tag.l { left: 16px; transform-origin: left center; }
+.splitstage .tag.r { right: 16px; transform-origin: right center; }
+.splitstage .tag.r b { color: var(--gold); font-weight: 600; }
+.splitstage.lowL .tag.l, .splitstage.lowR .tag.r { opacity: 0; transform: scale(.85); }
 .divider { position: absolute; top: 0; bottom: 0; left: calc(var(--x) * 1%); width: 44px; margin-left: -22px; z-index: 3; cursor: ew-resize; outline: none; }
 .divider::before { content: ""; position: absolute; top: 0; bottom: 0; left: 21px; width: 2px; background: linear-gradient(180deg, rgba(222,184,110,0), var(--gold) 14%, var(--gold) 86%, rgba(222,184,110,0)); box-shadow: 0 0 18px rgba(222,184,110,.55); }
 /* A spark rides the divider, like the dot on an orchestrator wire. */
@@ -178,9 +178,9 @@ header.site nav a:hover { color: var(--text); text-decoration: none; }
   .splitcap { grid-template-columns: 1fr; gap: 10px; }
   .splitcap .r { text-align: left; }
   .split.leanR .splitcap .l, .split.leanL .splitcap .r { opacity: .45; }
-  .stage .tag { top: 10px; font-size: 9.5px; padding: 4px 8px; }
-  .stage .tag.l { left: 10px; } .stage .tag.r { right: 10px; }
-  .stage .tag.r b { display: none; }
+  .splitstage .tag { top: 10px; font-size: 9.5px; padding: 4px 8px; }
+  .splitstage .tag.l { left: 10px; } .splitstage .tag.r { right: 10px; }
+  .splitstage .tag.r b { display: none; }
   .divider .knob { width: 36px; height: 36px; margin: -18px 0 0 -18px; }
 }
 
@@ -251,6 +251,8 @@ h3 { font-size: 22px; font-weight: 650; margin: 0 0 10px; color: #EDE3CD; }
 .tile.t-command::after { background: rgba(222,184,110,.45); }
 .tile.t-alliance::after { background: rgba(217,119,87,.45); }
 .tile.t-keep::after { background: rgba(127,201,138,.4); }
+.tile.t-board::after { background: rgba(155,123,234,.55); }
+.tile.t-board .newtag { background: var(--hermes); }
 /* the selection cursor: breathing corners, slides between portraits */
 #selframe { position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none; opacity: 0; transition: transform .24s cubic-bezier(.3,.8,.3,1), width .24s ease, height .24s ease, opacity .2s ease; }
 #selframe i { position: absolute; width: 16px; height: 16px; border: 2.5px solid var(--gold); filter: drop-shadow(0 0 6px rgba(222,184,110,.55)); }
@@ -260,7 +262,7 @@ h3 { font-size: 22px; font-weight: 650; margin: 0 0 10px; color: #EDE3CD; }
 #selframe i:nth-child(3) { bottom: -4px; left: -4px; border-right: 0; border-top: 0; border-radius: 0 0 0 6px; }
 #selframe i:nth-child(4) { bottom: -4px; right: -4px; border-left: 0; border-top: 0; border-radius: 0 0 6px 0; }
 .tiles[data-f="sight"] .tile:not(.t-sight), .tiles[data-f="command"] .tile:not(.t-command),
-.tiles[data-f="alliance"] .tile:not(.t-alliance), .tiles[data-f="keep"] .tile:not(.t-keep) { display: none; }
+.tiles[data-f="alliance"] .tile:not(.t-alliance), .tiles[data-f="keep"] .tile:not(.t-keep), .tiles[data-f="board"] .tile:not(.t-board) { display: none; }
 .hintbar { margin-top: 14px; font: 500 10.5px var(--mono); letter-spacing: .12em; color: var(--dim); display: flex; gap: 18px; flex-wrap: wrap; }
 .hintbar kbd { font-size: 10px; padding: 1px 6px; }
 /* Keyboard hints mean nothing on a touch screen. */
@@ -326,7 +328,7 @@ h3 { font-size: 22px; font-weight: 650; margin: 0 0 10px; color: #EDE3CD; }
 .stage { min-height: 96px; border-radius: 10px; background: var(--ink); border: 1px solid #241e14; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 10px; font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 14px; flex-wrap: wrap; }
 
 /* story scene (unchanged engine) */
-.scrolly { height: 470vh; position: relative; }
+.scrolly { height: 570vh; position: relative; }
 .scene-pin { position: sticky; top: 0; height: 100vh; height: 100svh; display: grid; align-content: center; overflow: clip; padding-block: 64px 24px; }
 .scene-head { margin-bottom: 24px; }
 .scene-head h2 { margin-bottom: 6px; }
@@ -588,6 +590,18 @@ h3 { font-size: 22px; font-weight: 650; margin: 0 0 10px; color: #EDE3CD; }
 .live .st-loop .arrow.a2 { animation: pulsea 2.8s ease-in-out infinite 1.4s; }
 @keyframes pulsea { 0%, 100% { color: var(--dim); } 25% { color: var(--gold); } }
 .st-loop .ok2 { color: var(--live); font-weight: 600; }
+.st-bagent { flex-direction: column; gap: 8px; }
+.st-bagent .ask { border-color: rgba(155,123,234,.5); color: var(--text); }
+.st-bagent .ask i { background: var(--hermes); }
+.st-bagent .did { opacity: 0; transform: translateY(4px); }
+.live .st-bagent .did { animation: bagent 4.8s ease infinite; animation-delay: calc(var(--k) * .45s + .6s); }
+@keyframes bagent { 0% { opacity: 0; transform: translateY(4px); } 12%, 82% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+.st-sketch svg { width: 220px; height: 110px; overflow: visible; }
+.st-sketch .ln { fill: none; stroke: var(--text); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 400; stroke-dashoffset: 0; }
+.live .st-sketch .ln { animation: sketchdraw 5s ease-in-out infinite; animation-delay: calc(var(--k) * .35s); }
+.st-sketch text { font: 600 9px var(--mono); fill: var(--muted); }
+.st-sketch .send { position: absolute; right: 12px; bottom: 10px; }
+@keyframes sketchdraw { 0% { stroke-dashoffset: 400; } 40%, 88% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 0; opacity: 0; } }
 .st-ports .chip.bad { border-color: rgba(208,105,94,.5); color: var(--danger); }
 .live .st-ports .chip.bad { animation: portflash 3.8s ease-in-out infinite; }
 @keyframes portflash { 0%, 30% { border-color: var(--line); color: var(--muted); } 42%, 100% { border-color: rgba(208,105,94,.5); color: var(--danger); } }
@@ -796,6 +810,100 @@ h3 { font-size: 22px; font-weight: 650; margin: 0 0 10px; color: #EDE3CD; }
   .rc .lane2 { grid-template-columns: 1fr; gap: 8px; } .rc .res { text-align: left; min-width: 0; }
   .dv .pair { grid-template-columns: 1fr; }
 }
+/* board chapter: a zoomed-out board that flies in to the tile that needs you */
+.bdwin { width: 100%; font-family: var(--mono); background: var(--ink); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) 150px; }
+.bdcanvas { position: relative; aspect-ratio: 16 / 10; overflow: hidden; background: radial-gradient(circle, rgba(239,233,220,.07) 1px, transparent 1.2px) 0 0 / 14px 14px; }
+.bdzoom { position: absolute; inset: 0; transform-origin: 0 0; transition: transform 1s cubic-bezier(.65,0,.25,1); }
+.bds[data-beat="2"] .bdzoom { transform: translate(var(--fx, -40%), var(--fy, -12%)) scale(2.6); }
+.bds[data-beat="3"] .bdzoom { transform: translate(5%, 4%) scale(.9); }
+.bdgrp { position: absolute; border: 1px solid color-mix(in srgb, var(--c) 55%, transparent); background: color-mix(in srgb, var(--c) 7%, transparent); border-radius: 6px; padding: 14px 5px 5px; display: grid; gap: 4px; transition: opacity .5s ease, transform .6s cubic-bezier(.2,.8,.2,1); }
+.bdgrp .gl { position: absolute; top: 2px; left: 6px; font-size: 6.5px; color: var(--c); letter-spacing: .04em; white-space: nowrap; }
+.bdgrp.g1 { left: 4%; top: 6%; width: 40%; grid-template-columns: 1fr 1fr; }
+.bdgrp.g2 { left: 50%; top: 6%; width: 44%; grid-template-columns: 1fr 1fr; }
+.bdgrp.g3 { left: 4%; top: 53%; width: 40%; grid-template-columns: 1fr 1fr; }
+.bdgrp.g4 { left: 50%; top: 53%; width: 44%; grid-template-columns: 1fr 1fr; opacity: 0; transform: scale(.85); }
+.bds.ge3 .bdgrp.g4 { opacity: 1; transform: none; }
+.bt { position: relative; aspect-ratio: 2 / 1; border-radius: 4px; background: #0f0d0b; border: 1px solid color-mix(in srgb, var(--c) 60%, transparent); display: grid; place-content: center; text-align: center; gap: 1px; overflow: hidden; }
+.bt b { font-size: 8px; color: #EDE3CD; font-weight: 700; }
+.bt span { font-size: 6px; color: var(--c); }
+.bt::after { content: ""; position: absolute; inset: -1px; border-radius: 4px; border: 1px solid var(--c); opacity: 0; }
+.anim .bds .bt.w::after { animation: tilebreathe 2.6s ease-in-out infinite; animation-delay: var(--d, 0s); }
+@keyframes tilebreathe { 0%, 100% { opacity: 0; } 50% { opacity: .9; } }
+.bt .tline { display: none; position: absolute; left: 4px; right: 4px; text-align: left; font-size: 3.2px; line-height: 1.5; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.bt .tline.a { top: 4px; } .bt .tline.b { bottom: 5px; color: var(--gold); }
+.bds.ge2 .bt.otto .tline { display: block; }
+.bds.ge2 .bt.otto b, .bds.ge2 .bt.otto span.st { opacity: 0; }
+.bds[data-beat="1"] .bt.otto { --c: var(--warn); }
+.anim .bds[data-beat="1"] .bt.otto::after { animation: tilepulse .9s ease-in-out infinite; opacity: 1; }
+@keyframes tilepulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(217,165,91,.0); } 50% { box-shadow: 0 0 10px 2px rgba(217,165,91,.7); } }
+.bt .ok { display: none; color: var(--live); }
+.bds.ge2 .bt.otto .tline.b .q { display: none; } .bds.ge2 .bt.otto .tline.b .ok { display: inline; }
+.bdlist { border-left: 1px solid var(--line); padding: 8px 7px; display: flex; flex-direction: column; gap: 5px; background: var(--panel); }
+.bdlist .lh { font-size: 8px; color: var(--muted); letter-spacing: .1em; margin-bottom: 2px; }
+.bdlist .lr { display: grid; grid-template-columns: 6px 1fr; gap: 2px 6px; align-items: center; font-size: 9px; color: var(--text); padding: 4px 5px; border-radius: 5px; border: 1px solid transparent; transition: background .4s ease, border-color .4s ease; }
+.bdlist .lr i { width: 6px; height: 6px; border-radius: 50%; background: var(--c, var(--core)); }
+.bdlist .lr em { grid-column: 2; font-style: normal; font-size: 7.5px; color: var(--muted); }
+.bdlist .lr.otto { order: 3; }
+.bdlist .lr .ab { display: none; grid-column: 2; gap: 4px; margin-top: 2px; }
+.bdlist .lr .ab span { font-size: 7.5px; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--muted); }
+.bdlist .lr .ab span:first-child { background: var(--gold); color: var(--ink); border-color: var(--gold); font-weight: 700; }
+.bds[data-beat="1"] .bdlist .lr.otto { order: 0; background: rgba(217,165,91,.1); border-color: rgba(217,165,91,.5); --c: var(--warn); }
+.bds[data-beat="1"] .bdlist .lr.otto .ab { display: flex; }
+.bdlist .lr .e1, .bdlist .lr .e2 { display: none; }
+.bds.ge1 .bdlist .lr.otto .e0 { display: none; }
+.bds[data-beat="1"] .bdlist .lr.otto .e1 { display: inline; }
+.bds.ge2 .bdlist .lr.otto .e2 { display: inline; color: var(--live); }
+.bdlist .lr.new { display: none; }
+.bds.ge3 .bdlist .lr.new { display: grid; animation: rowin .45s ease both; animation-delay: var(--d, 0s); }
+@keyframes rowin { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+/* orchestrator chapter: a card, wires drawing out to a group, dots running along them */
+.ocwin { position: relative; width: 100%; aspect-ratio: 16 / 10; font-family: var(--mono); background: radial-gradient(circle, rgba(239,233,220,.07) 1px, transparent 1.2px) 0 0 / 14px 14px, var(--ink); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.ocwin svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ocwin .wire { fill: none; stroke: var(--gold); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-dasharray: 1; stroke-dashoffset: 1; filter: drop-shadow(0 0 4px rgba(222,184,110,.7)); transition: stroke-dashoffset .9s cubic-bezier(.6,0,.3,1); transition-delay: calc(var(--k) * .15s); }
+.ocs.ge1 .wire { stroke-dashoffset: 0; }
+.ocwin .run { fill: none; stroke: #fff4d6; stroke-width: 4; stroke-linecap: round; vector-effect: non-scaling-stroke; stroke-dasharray: .01 1; stroke-dashoffset: 0; opacity: 0; }
+.ocs[data-beat="2"] .run { opacity: 1; animation: wirerun 1.6s linear infinite; animation-delay: calc(var(--k) * -.5s); }
+@keyframes wirerun { to { stroke-dashoffset: -1; } }
+.occard { position: absolute; left: 4%; top: 8%; width: 40%; bottom: 8%; background: var(--raised); border: 1px solid var(--strong); border-radius: 10px; padding: 9px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 9.5px; color: var(--muted); box-shadow: 0 16px 40px -18px rgba(0,0,0,.8); }
+.occard .oh { display: flex; align-items: center; gap: 6px; color: #EDE3CD; font-weight: 700; font-size: 10.5px; }
+.occard .oh .cn { white-space: nowrap; margin-left: auto; font-size: 8.5px; font-weight: 600; color: var(--ink); background: var(--gold); border-radius: 999px; padding: 2px 8px; }
+.anim .ocs[data-beat="0"] .occard .oh .cn { animation: cnpulse 1.4s ease-in-out infinite; }
+@keyframes cnpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(222,184,110,.6); } 50% { box-shadow: 0 0 0 6px rgba(222,184,110,0); } }
+.ocs.ge1 .occard .oh .cn { background: transparent; color: var(--live); border: 1px solid rgba(127,201,138,.5); }
+.occard .oh .cn .w { display: none; } .ocs.ge1 .occard .oh .cn .c { display: none; } .ocs.ge1 .occard .oh .cn .w { display: inline; }
+.occard .cmd { border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; color: var(--dim); min-height: 2.6em; }
+.ocs.ge2 .occard .cmd { color: var(--text); border-color: rgba(222,184,110,.45); }
+.occard .cmd .t { display: none; } .ocs.ge2 .occard .cmd .t { display: inline; } .ocs.ge2 .occard .cmd .ph { display: none; }
+.occard .ag { display: grid; grid-template-columns: 6px 1fr auto; gap: 6px; align-items: center; opacity: .35; transition: opacity .4s ease; }
+.ocs.ge1 .occard .ag { opacity: 1; }
+.occard .ag i { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
+.ocs.ge2 .occard .ag i { background: var(--core); } .ocs.ge3 .occard .ag i { background: var(--live); }
+.occard .ag b { color: var(--text); font-weight: 600; }
+.occard .ag .s { font-size: 8px; } .occard .ag .s .s2, .occard .ag .s .s3 { display: none; }
+.ocs[data-beat="2"] .occard .ag .s .s1 { display: none; } .ocs[data-beat="2"] .occard .ag .s .s2 { display: inline; color: var(--core); }
+.ocs.ge3 .occard .ag .s .s1 { display: none; } .ocs.ge3 .occard .ag .s .s3 { display: inline; color: var(--live); }
+.occard .of { margin-top: auto; display: flex; justify-content: space-between; font-size: 8.5px; color: var(--dim); border-top: 1px solid var(--line); padding-top: 6px; }
+.occard .of b { color: var(--text); font-weight: 600; }
+.occard .of .d3 { display: none; } .ocs.ge3 .occard .of .d0 { display: none; } .ocs.ge3 .occard .of .d3 { display: inline; color: var(--live); }
+.ocgrp { position: absolute; right: 4%; top: 8%; bottom: 8%; width: 36%; border: 1px solid rgba(91,155,240,.5); background: rgba(91,155,240,.06); border-radius: 8px; padding: 16px 7px 7px; display: grid; gap: 7px; }
+.ocgrp .gl { position: absolute; top: 3px; left: 8px; font-size: 8px; color: #5B9BF0; }
+.ocgrp .pill { position: absolute; top: -9px; right: 8px; font-size: 7.5px; background: var(--ink); color: var(--gold); border: 1px solid var(--gold); border-radius: 999px; padding: 1px 7px; opacity: 0; transition: opacity .4s ease .5s; }
+.ocs.ge1 .ocgrp .pill { opacity: 1; }
+.ocgrp .ot { position: relative; border-radius: 6px; background: #0f0d0b; border: 1px solid rgba(91,155,240,.55); padding: 5px 7px; font-size: 7.5px; color: var(--muted); display: grid; gap: 2px; transition: border-color .4s ease, box-shadow .4s ease; }
+.ocgrp .ot b { color: #EDE3CD; font-size: 9px; }
+.ocs[data-beat="2"] .ocgrp .ot { border-color: rgba(120,220,235,.7); }
+.anim .ocs[data-beat="2"] .ocgrp .ot { animation: tilebreathe2 2.2s ease-in-out infinite; animation-delay: calc(var(--k) * .3s); }
+@keyframes tilebreathe2 { 0%, 100% { box-shadow: 0 0 0 0 rgba(120,220,235,0); } 50% { box-shadow: 0 0 12px 0 rgba(120,220,235,.45); } }
+.ocs.ge3 .ocgrp .ot { border-color: rgba(127,201,138,.6); }
+.ocgrp .ot .l2, .ocgrp .ot .l3 { display: none; }
+.ocs[data-beat="2"] .ocgrp .ot .l1 { display: none; } .ocs[data-beat="2"] .ocgrp .ot .l2 { display: block; color: var(--core); }
+.ocs.ge3 .ocgrp .ot .l1 { display: none; } .ocs.ge3 .ocgrp .ot .l3 { display: block; color: var(--live); }
+@media (max-width: 860px) {
+  .bdwin { grid-template-columns: 1fr; } .bdlist { border-left: 0; border-top: 1px solid var(--line); flex-direction: row; flex-wrap: wrap; }
+  .bdlist .lh, .bdlist .lr:not(.otto) { display: none !important; } .bdlist .lr.otto { flex: 1; }
+  .occard { font-size: 8.5px; padding: 7px 8px; gap: 4px; } .occard .ag .s { display: none; }
+}
+
 .storyband { padding-block: clamp(40px, 6vw, 72px) clamp(4px, 1vw, 12px); }
 .scrollcue { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--gold); }
 .scrollcue span { font: 600 11px var(--mono); letter-spacing: .3em; text-transform: uppercase; padding-left: .3em; }
@@ -961,7 +1069,7 @@ footer.site nav a { color: var(--text); font-size: 14.5px; }
     <h1 class="gametitle"><span class="t2">TELLURION</span></h1>
     <p class="tag in2">The macOS terminal where your coding agents are the main characters.</p>
     <p class="sub in2">Run Claude Code, Codex, Gemini, Copilot and a dozen more the way you already do,
-    <strong>watch them work, live</strong>, and chat with models on your own Mac. A fork of Ghostty,
+    <strong>watch them work, live</strong>, in tabs or on a board, and chat with models on your own Mac. A fork of Ghostty,
     the fast native terminal.</p>
 
     <div class="cta-row in3" id="download">
@@ -971,7 +1079,7 @@ footer.site nav a { color: var(--text); font-size: 14.5px; }
         </svg>
         Download for macOS
       </a>
-      <div class="dl-meta"><span class="ver" id="dl-ver">1.7.1</span> · free<br>Apple silicon · macOS 13+</div>
+      <div class="dl-meta"><span class="ver" id="dl-ver">1.8.0</span> · free<br>Apple silicon · macOS 13+</div>
     </div>
 
     <div class="install-line in4">
@@ -987,7 +1095,7 @@ footer.site nav a { color: var(--text); font-size: 14.5px; }
         <button type="button" data-to="50" aria-pressed="true">BOTH</button>
         <button type="button" data-to="0" aria-pressed="false">BOARD<span class="new">NEW</span></button>
       </div>
-      <div class="stage" id="stage">
+      <div class="splitstage" id="stage">
         <figure class="side classic">
           <video id="filmvid" src="assets/demo.mp4" poster="assets/img/demo-poster.webp" muted loop playsinline preload="metadata"
             aria-label="Classic edition, a 52-second tour: real Claude Code and Codex sessions in a floating window, the editor following the agent, Mission Control, the review inbox, Visual Fix, a local model chat through Ollama, an agent race, and undoing a turn"></video>
@@ -1040,11 +1148,12 @@ footer.site nav a { color: var(--text); font-size: 14.5px; }
   <div class="wrap">
     <p class="eyebrow rv">FEATURE SELECT</p>
     <h2 class="rv">Pick a feature.</h2>
-    <p class="section-intro rv" style="--i:1; margin-bottom: 28px">Twenty-six of them, each built for
+    <p class="section-intro rv" style="--i:1; margin-bottom: 28px">Thirty-five of them, nine new on boards, each built for
     running agents. <strong>Hover to preview. Click for the full details.</strong> Every one can
     be switched off in Settings, where it does no background work at all.</p>
     <div class="filters rv" style="--i:2" role="group" aria-label="Filter the features">
-      <button class="fbtn" data-t="all" aria-pressed="true">ALL<span class="n">26</span></button>
+      <button class="fbtn" data-t="all" aria-pressed="true">ALL<span class="n">35</span></button>
+      <button class="fbtn" data-t="board" aria-pressed="false">BOARD<span class="n">9</span></button>
       <button class="fbtn" data-t="sight" aria-pressed="false">SEE<span class="n">6</span></button>
       <button class="fbtn" data-t="command" aria-pressed="false">CONTROL<span class="n">5</span></button>
       <button class="fbtn" data-t="alliance" aria-pressed="false">TEAMWORK<span class="n">3</span></button>
@@ -1097,6 +1206,8 @@ footer.site nav a { color: var(--text); font-size: 14.5px; }
       <div class="chh-stack">
         <div class="chh c0 on"><h2>One agent turn, end to end</h2></div>
         <div class="chh c1"><h2>Every agent, every project, one board.</h2></div>
+        <div class="chh"><h2>Or put them all on an actual board.</h2></div>
+        <div class="chh"><h2>One card runs the whole team.</h2></div>
         <div class="chh c2"><h2>Point at your running app. Say what to change.</h2></div>
         <div class="chh c3"><h2>Models on your own Mac.</h2></div>
         <div class="chh c4"><h2>Answer from anywhere.</h2></div>
@@ -1258,6 +1369,69 @@ footer.site nav a { color: var(--text); font-size: 14.5px; }
           <p data-b="1"><strong>An agent needs you.</strong> Its card turns amber and moves to the front. Waiting agents always come first.</p>
           <p data-b="2"><strong>Allow it right there.</strong> No hunting for the tab. ⌘P puts waiting agents at the top of the palette too.</p>
           <p data-b="3"><strong>Start a race from the board,</strong> or hand the work to another agent, without leaving it.</p>
+        </div>
+      </div>
+    </div>
+
+        <div class="chap cbd">
+      <div class="fchap">
+        <div class="bdwin fs bds" id="bds" data-beat="0" aria-hidden="true">
+          <div class="bdcanvas"><div class="bdzoom">
+            <div class="bdgrp g1" style="--c:#5B9BF0"><span class="gl">orbit-api · 4</span><div class="bt w" style="--d:0s"><b>Ada</b><span class="st">Working</span></div><div class="bt w otto" style="--d:.4s"><b>Otto</b><span class="st">Working</span><span class="tline a">$ uv run pytest -q<br>collected 43 items</span><span class="tline b"><span class="q">Allow Bash: uv run pytest -q?</span><span class="ok">✓ Allowed · 43 passed in 2.1s</span></span></div><div class="bt w" style="--d:.9s"><b>Cy</b><span class="st">Working</span></div><div class="bt " style="--d:0s"><b>Pip</b><span class="st">Done</span></div></div>
+            <div class="bdgrp g2" style="--c:#E0645C"><span class="gl">lumen-web · 3</span><div class="bt w" style="--d:.3s"><b>Dax</b><span class="st">Working</span></div><div class="bt w" style="--d:1.2s"><b>Maya</b><span class="st">Working</span></div><div class="bt " style="--d:0s"><b>Rafa</b><span class="st">Done</span></div></div>
+            <div class="bdgrp g3" style="--c:#7FC98A"><span class="gl">atlas-cli · 3</span><div class="bt w" style="--d:.6s"><b>Nova</b><span class="st">Working</span></div><div class="bt w" style="--d:1.5s"><b>Iris</b><span class="st">Working</span></div><div class="bt w" style="--d:.2s"><b>Kai</b><span class="st">Working</span></div></div>
+            <div class="bdgrp g4" style="--c:#9B7BEA"><span class="gl">Ship a feature · 4</span><div class="bt w" style="--d:0s"><b>Leo</b><span class="st">Starting</span></div><div class="bt w" style="--d:.3s"><b>Zoe</b><span class="st">Starting</span></div><div class="bt w" style="--d:.6s"><b>Ivy</b><span class="st">Starting</span></div><div class="bt w" style="--d:.9s"><b>Max</b><span class="st">Starting</span></div></div>
+          </div></div>
+          <div class="bdlist">
+            <span class="lh">AGENTS · 10</span>
+            <div class="lr otto" style="--c:#5B9BF0"><i></i>Otto<em><span class="e0">Working</span><span class="e1">Needs permission</span><span class="e2">Allowed · tests passed</span></em><span class="ab"><span>Allow</span><span>Deny</span></span></div>
+            <div class="lr" style="--c:#5B9BF0"><i></i>Ada<em>Working</em></div>
+            <div class="lr" style="--c:#E0645C"><i></i>Dax<em>Working</em></div>
+            <div class="lr" style="--c:#E0645C"><i></i>Maya<em>Working</em></div>
+            <div class="lr" style="--c:#7FC98A"><i></i>Nova<em>Working</em></div>
+            <div class="lr new" style="--c:#9B7BEA;--d:.1s"><i></i>Leo<em>Starting</em></div>
+            <div class="lr new" style="--c:#9B7BEA;--d:.25s"><i></i>Zoe<em>Starting</em></div>
+          </div>
+        </div>
+        <div class="steps" id="bds-steps">
+          <p data-b="0" class="on"><strong>Every terminal is a tile.</strong> Zoomed out, each shows its agent and status in big type; edges breathe while agents work.</p>
+          <p data-b="1"><strong>Otto needs you.</strong> Its tile pulses and it jumps to the top of the list, with Allow and Deny.</p>
+          <p data-b="2"><strong>Fly in to answer.</strong> Double-click a tile. Zooming never resizes a terminal, so the agent isn’t interrupted.</p>
+          <p data-b="3"><strong>Spin up a team.</strong> A preset starts four more agents in a new group, one click.</p>
+        </div>
+      </div>
+    </div>
+
+        <div class="chap coc">
+      <div class="fchap">
+        <div class="ocwin fs ocs" id="ocs" data-beat="0" aria-hidden="true">
+          <svg class="wires" viewBox="0 0 600 375" preserveAspectRatio="none">
+            <path class="wire" pathLength="1" style="--k:0" d="M264 120 C 330 120, 330 82, 384 82"/>
+            <path class="wire" pathLength="1" style="--k:1" d="M264 150 C 330 150, 330 187, 384 187"/>
+            <path class="wire" pathLength="1" style="--k:2" d="M264 180 C 330 180, 330 292, 384 292"/>
+            <path class="run" pathLength="1" style="--k:0" d="M264 120 C 330 120, 330 82, 384 82"/>
+            <path class="run" pathLength="1" style="--k:1" d="M264 150 C 330 150, 330 187, 384 187"/>
+            <path class="run" pathLength="1" style="--k:2" d="M264 180 C 330 180, 330 292, 384 292"/>
+          </svg>
+          <div class="occard">
+            <div class="oh">Orchestrator<span class="cn"><span class="c">Connect</span><span class="w">3 wired</span></span></div>
+            <div class="cmd"><span class="ph">Command 3 agents · @ to direct…</span><span class="t">Add rate limiting to the orders API, with tests and docs</span></div>
+            <div class="ag"><i></i><b>Ada</b><span class="s"><span class="s1">idle</span><span class="s2">the limiter</span><span class="s3">done</span></span></div>
+            <div class="ag"><i></i><b>Otto</b><span class="s"><span class="s1">idle</span><span class="s2">the tests</span><span class="s3">done</span></span></div>
+            <div class="ag"><i></i><b>Cy</b><span class="s"><span class="s1">idle</span><span class="s2">the docs</span><span class="s3">done</span></span></div>
+            <div class="of"><span><span class="d0"><b>0</b> of 3 done</span><span class="d3"><b>3</b> of 3 done</span></span><span>turns 4 / 12</span></div>
+          </div>
+          <div class="ocgrp"><span class="gl">orbit-api · Backend</span><span class="pill">Wired</span>
+            <div class="ot" style="--k:0"><b>Ada</b><span class="l1">› ready</span><span class="l2">✎ orders/limiter.py</span><span class="l3">✓ limiter added</span></div>
+            <div class="ot" style="--k:1"><b>Otto</b><span class="l1">› ready</span><span class="l2">✎ tests/test_limits.py</span><span class="l3">✓ 6 tests pass</span></div>
+            <div class="ot" style="--k:2"><b>Cy</b><span class="l1">› ready</span><span class="l2">✎ docs/api.md</span><span class="l3">✓ docs updated</span></div>
+          </div>
+        </div>
+        <div class="steps" id="ocs-steps">
+          <p data-b="0" class="on"><strong>An orchestrator is a card.</strong> Tap Connect, then click terminals or a group’s pill.</p>
+          <p data-b="1"><strong>Glowing wires</strong> show who’s connected.</p>
+          <p data-b="2"><strong>Give it the job.</strong> It splits the work and sends each agent its part; a dot runs along each wire while that agent works.</p>
+          <p data-b="3"><strong>It reads their answers</strong> and hands out next steps until it’s done. Permission prompts still come to you.</p>
         </div>
       </div>
     </div>
@@ -1454,9 +1628,9 @@ Running the tests…
         </thead>
         <tbody>
           <tr class="vsrow"><th scope="row">Runs Claude Code, Codex &amp; co. unchanged</th><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td>In its terminal; also via ACP</td></tr>
-          <tr class="vsrow"><th scope="row">Status of every agent at a glance</th><td class="yes">Sidebar card per agent, 14 agents connected</td><td class="no">—</td><td>Pane rings, tab highlights</td><td>Tab status, notifications</td><td>For agents in its panel</td></tr>
-          <tr class="vsrow"><th scope="row">Every agent, every project, on one board</th><td class="yes">Mission Control</td><td class="no">—</td><td>Sidebar and notification panel</td><td>Agent management panel</td><td>Threads in its panel</td></tr>
-          <tr class="vsrow"><th scope="row">Answer a permission prompt without switching</th><td class="yes">Sidebar, Mission Control, notification or phone</td><td class="no">—</td><td class="no">—</td><td>Notifies you</td><td>For agents in its panel</td></tr>
+          <tr class="vsrow"><th scope="row">Status of every agent at a glance</th><td class="yes">Sidebar card or board tile per agent, 14 agents connected</td><td class="no">—</td><td>Pane rings, tab highlights</td><td>Tab status, notifications</td><td>For agents in its panel</td></tr>
+          <tr class="vsrow"><th scope="row">Every agent, every project, on one board</th><td class="yes">A real board: every terminal a tile, with groups, an orchestrator and Mission Map; Mission Control in tabs</td><td class="no">—</td><td>Sidebar and notification panel</td><td>Agent management panel</td><td>Threads in its panel</td></tr>
+          <tr class="vsrow"><th scope="row">Answer a permission prompt without switching</th><td class="yes">Sidebar, board list, Mission Control, notification or phone</td><td class="no">—</td><td class="no">—</td><td>Notifies you</td><td>For agents in its panel</td></tr>
           <tr class="vsrow"><th scope="row">Your terminal on your phone</th><td class="yes">Every tab, over your own Tailscale network</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
           <tr class="vsrow"><th scope="row">See the code as the agent writes it</th><td class="yes">Editor follows the CLI agent live, up to four per tab</td><td class="no">—</td><td class="no">—</td><td>Diff review panel</td><td>Follows agents in its panel</td></tr>
           <tr class="vsrow"><th scope="row">Map of what the agent touched</th><td class="yes">Code map with blast radius</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
@@ -1495,7 +1669,7 @@ Running the tests…
         <div class="winbar"><span class="tl" aria-hidden="true"><i></i><i></i><i></i></span><span class="wt">~ — zsh — 80×14</span></div>
         <div class="body">
           <div class="pr"><b>❯</b> <span class="cmdline" id="term-type"></span><span class="tcaret" id="term-caret"></span></div>
-          <div class="out" id="out-1">downloading Tellurion 1.7.1 … <b>done</b></div>
+          <div class="out" id="out-1">downloading Tellurion 1.8.0 … <b>done</b></div>
           <div class="out" id="out-2">verifying SHA-256 checksums … <b>ok</b></div>
           <div class="out" id="out-3"><b>✓</b> Tellurion.app installed — opening the welcome window</div>
         </div>
@@ -1508,8 +1682,9 @@ Running the tests…
         <li class="rv"><strong>Run the one-liner.</strong> It downloads the latest release, checks
         it against the release’s SHA-256 checksums, and puts Tellurion.app in /Applications.</li>
         <li class="rv" style="--i:1"><strong>Open it.</strong> The welcome window finds Claude Code
-        and Codex, connects them in one click (backing up each file it changes), and runs a live
-        test. <strong>Check Setup</strong> re-verifies everything later, with a fix button on each
+        and Codex, connects them in one click (backing up each file it changes), runs a live
+        test, and asks how you want your terminals: <strong>Classic</strong> tabs or a
+        <strong>Board</strong>. <strong>Check Setup</strong> re-verifies everything later, with a fix button on each
         problem.</li>
         <li class="rv" style="--i:2"><strong>That’s it.</strong> Updates arrive in the app, signed
         with this project’s key — nothing else is accepted. Your existing Ghostty configuration
@@ -1542,6 +1717,15 @@ Running the tests…
         <div class="rv" style="--i:11"><kbd>⌃⌘A</kbd> Agent activity</div>
         <div class="rv" style="--i:12"><kbd>⌃⌘U</kbd> Skills</div>
         <div class="rv" style="--i:13"><kbd>⌃⌘N</kbd> Environment</div>
+      </div>
+      <h3 class="rv" style="margin:26px 0 16px">On a board</h3>
+      <div class="shortcuts">
+        <div class="rv"><kbd>⌥⌘9</kbd> Show every tile</div>
+        <div class="rv" style="--i:1"><kbd>⌥⌘0</kbd> Actual size</div>
+        <div class="rv" style="--i:2"><kbd>⌘L</kbd> Ask the board</div>
+        <div class="rv" style="--i:3"><kbd>⌃⌘M</kbd> Agent Map</div>
+        <div class="rv" style="--i:4"><kbd>A</kbd> <kbd>G</kbd> <kbd>W</kbd> Agent, group, web tile</div>
+        <div class="rv" style="--i:5"><kbd>P</kbd> <kbd>X</kbd> Pen, text</div>
       </div>
       <p class="rv" style="color:var(--muted);font-size:14px;margin-top:16px;--i:14">Hold <kbd>⌃⌘</kbd>
       for a moment in the app and every shortcut appears over the window; <kbd>⌃⌘/</kbd> keeps
@@ -1599,6 +1783,109 @@ Running the tests…
 </div>
 
 <!-- ======================= dossier content ======================= -->
+<template data-f="board">
+  <p class="power">Every terminal a tile, every agent in view.</p>
+  <ul>
+    <li><strong>Pick Board when you first open Tellurion,</strong> or any time in Settings → Edition. Classic stays the default; nothing changes unless you switch.</li>
+    <li><strong>Every terminal is a tile:</strong> a full terminal, so Vim, full-screen apps and every agent work as they do in a tab. Drag it by its title bar, resize it from its corner.</li>
+    <li><strong>Pan and zoom:</strong> pinch or ⌘-scroll to zoom, drag empty space to move. ⌥⌘9 shows everything, and double-clicking a title bar flies to that tile. Zooming never resizes a terminal, so agents aren’t interrupted.</li>
+    <li><strong>See who needs you:</strong> a tile’s edge breathes while its agent works and pulses when it needs you. The list beside the board puts those agents first, with Allow and Deny right there.</li>
+    <li><strong>Pause all</strong> freezes every agent and everything it started, mid-turn; <strong>Resume all</strong> carries on where they left off.</li>
+    <li><strong>Saved as you go:</strong> tiles, where you were looking and the window come back when Tellurion starts, and Claude Code and Codex pick up their last conversation.</li>
+  </ul>
+  <div class="media"><figure><div class="shot"><img data-src="assets/img/board-board.webp" alt="A board of twelve agent tiles in four colored project groups, zoomed out, with the agent list beside it and one agent waiting for permission" loading="lazy" decoding="async"></div>
+  <figcaption>A real board: twelve tiles in four projects, one waiting on you.</figcaption></figure></div>
+</template>
+
+<template data-f="orchestrator">
+  <p class="power">One card that runs a group of agents for you.</p>
+  <ul>
+    <li><strong>Wire it up:</strong> tap Connect and click terminals, or a group’s Click to wire group pill. Glowing wires show what’s connected, with a dot running along each wire while that agent works.</li>
+    <li><strong>Give it a command:</strong> your own Claude Code (or Codex) splits the work, sends each agent its part, reads what they answer, and hands out the next steps until it’s done, up to a turn limit you set.</li>
+    <li><strong>@name</strong> sends straight to one agent, and it can start new agents too (“start two reviewers”).</li>
+    <li><strong>It only messages agents:</strong> a wired terminal with no agent running is never typed into, and permission prompts still come to you.</li>
+  </ul>
+  <div class="media"><figure><div class="shot"><img data-src="assets/img/board-orchestrator.webp" alt="An orchestrator card wiring a group of two agents, with a glowing wire running down to the group" loading="lazy" decoding="async"></div>
+  <figcaption>Wiring a group to an orchestrator.</figcaption></figure></div>
+</template>
+
+<template data-f="mission-map">
+  <p class="power">Who runs whom, at a glance.</p>
+  <ul>
+    <li><strong>The whole chain of command:</strong> orchestrators, the groups they (or you) run, and every agent, joined by wires; dashed for agents you reach only with @.</li>
+    <li><strong>Filter by status:</strong> Working, Needs you, Idle or Done, or search. Hover a node to follow its wires.</li>
+    <li><strong>Select anything</strong> to see its status and how long it’s been in it, what it belongs to, and to go there, pause it or stop it.</li>
+  </ul>
+  <div class="media"><figure><div class="shot"><img data-src="assets/img/board-mission-map.webp" alt="Mission Map: an orchestrator and the command bar on the left, a group in the middle, nine agents on the right with their status, and one agent selected" loading="lazy" decoding="async"></div>
+  <figcaption>Mission Map with one agent that needs you, selected.</figcaption></figure></div>
+</template>
+
+<template data-f="groups">
+  <p class="power">A whole team of agents, in one click.</p>
+  <ul>
+    <li><strong>The Group composer</strong> (the bar’s Group chip):</strong> a name, a role, up to 12 agent slots, a folder and one first task for all of them. Spawn starts them as a grid in a new group.</li>
+    <li><strong>Presets:</strong> save a setup and start it again from the Presets chip, which has a few ready-made ones. Spawn 4 starts four of your default agent.</li>
+    <li><strong>Groups have roles:</strong> Frontend, Backend, Testers, Reviewers, Design, Docs, Security or General, each framed in its color, with how many tiles are working.</li>
+    <li><strong>Talk to a group:</strong> type @ and pick a group to message every tile in it. Collapse a group into a list; its agents keep running.</li>
+    <li><strong>Skip permission prompts</strong> is off unless you turn it on, and those tiles wear a red No prompts badge.</li>
+  </ul>
+  <div class="media"><figure><div class="shot"><img data-src="assets/img/board-team.webp" alt="Four agents just started from the Ship a feature preset: two Claude Code and two Codex tiles in a new group" loading="lazy" decoding="async"></div>
+  <figcaption>Ship a feature: two Claude Code and two Codex, from one click.</figcaption></figure></div>
+</template>
+
+<template data-f="board-agent">
+  <p class="power">Say what you want. It sets the board up.</p>
+  <ul>
+    <li><strong>Plain requests:</strong> “start three Claude agents, one per kanban card”, “sketch the backend: API, queue, Postgres”. It starts agents and terminals, adds notes, checklists, kanban and diagrams, hands out cards, groups tiles and zooms to what you ask for.</li>
+    <li><strong>It can only arrange the board:</strong> it runs your own Claude Code (or Codex) with no tools of its own. Closing tiles, typing into a running agent or running a command wait for you to confirm, and ⌘Z undoes what it added.</li>
+    <li><strong>@ a tile’s name</strong> to talk to that agent directly, hold Space to speak, or use the quick actions above the bar. ⌘L jumps to it.</li>
+  </ul>
+</template>
+
+<template data-f="agent-map">
+  <p class="power">Every agent as a dot on your project’s files.</p>
+  <ul>
+    <li><strong>The project as a map,</strong> grouped by folder, with every agent working in it as a dot that moves to the file it’s reading or changing, trailing the files it came through.</li>
+    <li><strong>Changed files keep the agent’s color</strong> for a while. Hover a file to see who touched it and when.</li>
+    <li><strong>Double-click</strong> a file to open it or a folder to go in; click an agent to go to its terminal. ⌃⌘M, or Show on Agent Map from a tile’s menu.</li>
+  </ul>
+  <div class="media"><figure><div class="shot"><img data-src="assets/img/board-agent-map.webp" alt="The Agent Map of a project: files as blocks grouped by folder, with two agent dots and the trails of files they visited" loading="lazy" decoding="async"></div>
+  <figcaption>Two agents on the Agent Map, with their trails.</figcaption></figure></div>
+</template>
+
+<template data-f="web-tiles">
+  <p class="power">Your app, beside the agents building it.</p>
+  <ul>
+    <li><strong>A browser on the board:</strong> tabs, back and forward, an address bar that also searches, and a start page listing the localhost servers running now.</li>
+    <li><strong>Real screen sizes:</strong> lay the page out as a 24, 27 or 32 inch 4K screen, or a phone from iPhone SE up. {} opens Web Inspector under the page.</li>
+    <li><strong>Kept apart:</strong> its own cookies and storage, no bridge into Tellurion, no downloads.</li>
+  </ul>
+  <div class="media"><figure><div class="shot"><img data-src="assets/img/board-web-tiles.webp" alt="A web tile laid out at iPhone 14 Pro size showing a local shop page, above the dev server terminal it comes from" loading="lazy" decoding="async"></div>
+  <figcaption>The dev server’s page at iPhone 14 Pro size.</figcaption></figure></div>
+</template>
+
+<template data-f="kanban">
+  <p class="power">Plan on the board, hand the cards to agents.</p>
+  <ul>
+    <li><strong>Notes, checklists and kanban</strong> from the + menu or by right-clicking the board.</li>
+    <li><strong>Hand a card to an agent,</strong> on the board or a new Claude Code or Codex tile. It moves to In Progress while the agent works and to Done when it finishes.</li>
+    <li><strong>Backlog, To Do, In Progress and Done,</strong> with due dates and priorities on each card. Drag cards between columns.</li>
+  </ul>
+  <div class="media"><figure><div class="shot"><img data-src="assets/img/board-kanban.webp" alt="A kanban board with Backlog, To Do, In Progress and Done columns, one card just moved to Done" loading="lazy" decoding="async"></div>
+  <figcaption>A card lands in Done.</figcaption></figure></div>
+</template>
+
+<template data-f="sketches">
+  <p class="power">Draw the backend. Hand it to an agent.</p>
+  <ul>
+    <li><strong>A sketch tile:</strong> pen, boxes, diamonds, databases and arrows that stay attached when you move things. Drop or paste pictures, or bring one in from your iPhone with Continuity Camera.</li>
+    <li><strong>Send to Agent</strong> hands the sketch, with what you want built, to an agent on the board or a new Claude Code or Codex tile.</li>
+    <li><strong>Diagrams:</strong> have your Claude Code or Codex draw one of a project (architecture, user flow, data flow and more), hand-drawn and fully editable.</li>
+    <li><strong>Documents:</strong> an onboarding guide, architecture or API reference written from the project, read-only, kept in Tellurion and exportable as a PDF.</li>
+    <li><strong>Draw on the board itself</strong> with the pen, and label areas in big type.</li>
+  </ul>
+</template>
+
 <template data-f="sidebar">
   <p class="power">Every agent’s status, in the corner of your eye.</p>
   <ul>
@@ -2240,11 +2527,29 @@ Running the tests…
     phone: [".ggggg.", "g.....g", "g.ccc.g", "g.c.c.g", "g.ccc.g", "g.....g", "g..w..g", ".ggggg."],
     "local-models": ["ggggggggg", "g.......g", "g..c.c..g", "g.ccccc.g", "g..c.c..g", "g.......g", "ggggggggg", "...ggg...", ".ggggggg."],
     layout: ["gggggggggg", "g..g.....g", "g..g.....g", "g..g..gggg", "g..g..g..g", "g..g..g..g", "gggggggggg"],
+    board: ["ggg.ggg.ggg", "g.g.g.g.g.g", "ggg.ggg.ggg", "...........", "ggg.ooo.ggg", "g.g.o.o.g.g", "ggg.ooo.ggg"],
+    orchestrator: ["......c", "gggg.c.", "g..gc..", "g..gccc", "g..gc..", "gggg.c.", "......c"],
+    "mission-map": ["g.....c", ".b...b.", "..bgb..", "...g...", "..bgb..", ".b...b.", "c.....c"],
+    "agent-map": ["bbbbb.bbb", "b...b.b.b", "b.c.b.bbb", "b...b....", "bbbbb.bbb", ".......ob", "bbbbb.bbb"],
+    groups: ["ppppppppp", "p.......p", "p.gg.gg.p", "p.gg.gg.p", "p.......p", "p.gg.gg.p", "p.gg.gg.p", "p.......p", "ppppppppp"],
+    "board-agent": [".ggggggg.", "g.......g", "g.p.p.p.g", "g.......g", ".gggggg..", ".gg......", ".g......."],
+    "web-tiles": ["ggggggggg", "g.r.l.c.g", "ggggggggg", "g.......g", "g.www...g", "g.......g", "ggggggggg"],
+    kanban: ["ggg.ggg.ggg", "...........", "bbb.bbb.lll", "...........", "bbb.bbb....", "...........", "bbb........"],
+    sketches: ["gggg.....", "g..g.....", "gggg.....", "..g......", "..g...c..", "..ggg.cc.", "......ccc", "......cc.", "......c.."],
     design: ["..ggggg..", ".g.....g.", "g.r.l.c.g", "g.......g", "g.o...w.g", ".g...gg..", "..gggg..."]
   };
 
   /* ---------- the roster ---------- */
   var ROSTER = [
+    { id: "board", name: "The Board", cls: "EVERY TERMINAL, A TILE", type: "board", kbd: "⌥⌘9", line: "Every terminal a tile. Zoom out to see them all.", isNew: true },
+    { id: "orchestrator", name: "Orchestrator", cls: "ONE CARD RUNS THE TEAM", type: "board", kbd: "", line: "Wire agents to a card. Give it the job.", isNew: true },
+    { id: "mission-map", name: "Mission Map", cls: "WHO RUNS WHOM", type: "board", kbd: "", line: "Orchestrators, groups and agents, wired.", isNew: true },
+    { id: "groups", name: "Groups & Presets", cls: "A TEAM IN ONE CLICK", type: "board", kbd: "", line: "Up to 12 agents at once, in a named group.", isNew: true },
+    { id: "board-agent", name: "Board Agent", cls: "ASK, AND IT ARRANGES", type: "board", kbd: "⌘L", line: "Say what you want. It sets the board up.", isNew: true },
+    { id: "agent-map", name: "Agent Map", cls: "WHO'S IN WHICH FILE", type: "board", kbd: "⌃⌘M", line: "Every agent as a dot on the project's files.", isNew: true },
+    { id: "web-tiles", name: "Web Tiles", cls: "A BROWSER ON THE BOARD", type: "board", kbd: "W", line: "Your app beside its agents, at phone size.", isNew: true },
+    { id: "kanban", name: "Kanban & Notes", cls: "HAND A CARD TO AN AGENT", type: "board", kbd: "", line: "Cards move to Done when the agent finishes.", isNew: true },
+    { id: "sketches", name: "Sketches & Diagrams", cls: "DRAW IT, HAND IT OVER", type: "board", kbd: "", line: "Draw the backend. Send it to an agent.", isNew: true },
     { id: "sidebar", name: "Agent Sidebar", cls: "LIVE AGENT STATUS", type: "sight", kbd: "⌃⌘S", line: "Live status for fourteen agents, every tab." },
     { id: "mission-control", name: "Mission Control", cls: "ALL AGENTS, ONE SCREEN", type: "sight", kbd: "⌃⌘M", line: "Every agent in every window, one screen." },
     { id: "editor", name: "Code Editor", cls: "FOLLOWS EVERY AGENT", type: "sight", kbd: "⌃⌘E", line: "Follows every agent, types their edits live." },
@@ -2272,8 +2577,8 @@ Running the tests…
     { id: "design", name: "Design", cls: "YOUR COLORS, YOUR LOGO", type: "keep", kbd: "", line: "Twenty templates, or colors and a logo of your own.", isNew: true },
     { id: "updates", name: "Signed Updates", cls: "SIGNED & SELF-RESTORING", type: "keep", kbd: "", line: "Updates itself, restores every window." }
   ];
-  var TYPELABEL = { sight: "SEE", command: "CONTROL", alliance: "TEAMWORK", keep: "OPS" };
-  var TYPECOLOR = { sight: "var(--core)", command: "var(--gold)", alliance: "var(--claude)", keep: "var(--live)" };
+  var TYPELABEL = { board: "BOARD", sight: "SEE", command: "CONTROL", alliance: "TEAMWORK", keep: "OPS" };
+  var TYPECOLOR = { board: "var(--hermes)", sight: "var(--core)", command: "var(--gold)", alliance: "var(--claude)", keep: "var(--live)" };
 
   /* ---------- character select + dossier (guarded: a failure here must not blank the page) ---------- */
   try {
@@ -2299,6 +2604,12 @@ Running the tests…
     "local-models": { img: "local-models.webp" },
     layout: { stage: '<div class="stage st-lay live"><span class="box tabs">TABS</span><span class="box term">TERMINAL</span><span class="box ed">EDITOR</span></div>' },
     design: { img: "design-looks.webp" },
+    board: { img: "board-board.webp" }, orchestrator: { img: "board-orchestrator.webp" },
+    "mission-map": { img: "board-mission-map.webp" }, groups: { img: "board-team.webp" },
+    "agent-map": { img: "board-agent-map.webp" }, "web-tiles": { img: "board-web-tiles.webp" },
+    kanban: { img: "board-kanban.webp" },
+    "board-agent": { stage: '<div class="stage st-bagent live"><span class="chip ask"><i></i>start three Claude agents, one per kanban card</span><span class="chip did" style="--k:0">+ 3 Claude Code tiles · <b>Ada, Otto, Cy</b></span><span class="chip did" style="--k:1">cards handed out · <b>To Do → In Progress</b></span><span class="chip did" style="--k:2">⌘Z undoes it all</span></div>' },
+    sketches: { stage: '<div class="stage st-sketch live"><svg viewBox="0 0 220 110" aria-hidden="true"><rect class="ln" style="--k:0" x="4" y="38" width="54" height="30" rx="4"/><text x="18" y="57">API</text><path class="ln" style="--k:1" d="M60 53h38m-6-5 6 5-6 5"/><rect class="ln" style="--k:2" x="100" y="38" width="54" height="30" rx="4"/><text x="110" y="57">queue</text><path class="ln" style="--k:3" d="M156 53h22m-6-5 6 5-6 5"/><path class="ln" style="--k:4" d="M182 40c0-6 32-6 32 0v28c0 6-32 6-32 0zM182 40c0 6 32 6 32 0"/><text x="185" y="60">pg</text></svg><span class="chip send">Send to Agent →</span></div>' },
     updates: { stage: '<div class="stage st-upd live"><span>1.7.0 → 1.7.1 · signed</span><span class="bar"><i></i></span></div>' }
   };
   ROSTER.forEach(function (f, i) {
@@ -2854,6 +3165,20 @@ Running the tests…
     };
   }
   var mcApply = stageBeats("mcs", 4);
+  var bdApply = stageBeats("bds", 4);
+  (function () {
+    var z = document.querySelector("#bds .bdzoom"), t = document.querySelector("#bds .bt.otto");
+    if (!z || !t) return;
+    var aim = function () {
+      var x = (t.offsetLeft + t.parentElement.offsetLeft + t.offsetWidth / 2) / z.offsetWidth;
+      var y = (t.offsetTop + t.parentElement.offsetTop + t.offsetHeight / 2) / z.offsetHeight;
+      z.style.setProperty("--fx", ((.5 - 2.6 * x) * 100).toFixed(1) + "%");
+      z.style.setProperty("--fy", ((.5 - 2.6 * y) * 100).toFixed(1) + "%");
+    };
+    aim(); addEventListener("resize", aim);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(aim);
+  })();
+  var ocApply = stageBeats("ocs", 4);
   var vfApply = stageBeats("vfs", 4);
   var lmApply = stageBeats("lms", 5);
   var phApply = stageBeats("phs", 3);
@@ -2917,22 +3242,25 @@ Running the tests…
     function c01(x) { return Math.max(0, Math.min(1, x)); }
     // Each chapter gets a share of the scroll. The first is the long one.
     var CHAPTERS = [
-      { label: "The turn", w: .17, apply: function (p) { if (turnApply) turnApply(p); } },
-      { label: "Mission Control", w: .10, apply: mcApply },
-      { label: "Visual Fix", w: .10, apply: vfApply },
-      { label: "Local models", w: .11, apply: lmApply },
-      { label: "Phone", w: .10, apply: phApply },
-      { label: "Races", w: .09, apply: rcApply },
-      { label: "Dev servers", w: .09, apply: dvApply },
-      { label: "Featherweight", w: .11, apply: function (p) { if (perfApply) perfApply(p); } },
-      { label: "House rules", w: .13, apply: function (p) { if (vowApply) vowApply(p); } }
+      { label: "The turn", w: .14, apply: function (p) { if (turnApply) turnApply(p); } },
+      { label: "Mission Control", w: .08, apply: mcApply },
+      { label: "The board", w: .09, apply: bdApply },
+      { label: "Orchestrator", w: .09, apply: ocApply },
+      { label: "Visual Fix", w: .08, apply: vfApply },
+      { label: "Local models", w: .09, apply: lmApply },
+      { label: "Phone", w: .08, apply: phApply },
+      { label: "Races", w: .07, apply: rcApply },
+      { label: "Dev servers", w: .07, apply: dvApply },
+      { label: "Featherweight", w: .09, apply: function (p) { if (perfApply) perfApply(p); } },
+      { label: "House rules", w: .12, apply: function (p) { if (vowApply) vowApply(p); } }
     ];
     var rail = document.getElementById("rail");
     var railDots = CHAPTERS.map(function (c, i) {
       var s = document.createElement("span"); s.textContent = c.label; if (i === 0) s.className = "on";
       if (rail) rail.appendChild(s); return s;
     });
-    var chhs = CHAPTERS.map(function (c, i) { return stage.querySelector(".chh.c" + i); });
+    var chhStack = stage.querySelector(".chh-stack");
+    var chhs = CHAPTERS.map(function (c, i) { return chhStack ? chhStack.children[i] : null; });
     // Short screens: shrink the chapters just enough to fit the pinned stage. A chapter
     // grows as it plays (code gets typed in), so this keeps the tallest it has been.
     var pin = holder.querySelector(".scene-pin");
