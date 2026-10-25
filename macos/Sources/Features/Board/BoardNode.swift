@@ -101,7 +101,8 @@ class BoardNodeView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard let superview else { return nil }
+        // Hidden (a collapsed group's tiles): the strip drawn there gets the click.
+        guard !isHidden, let superview else { return nil }
         let local = convert(point, from: superview)
         guard bounds.contains(local) else { return nil }
         // The title bar and the corner are the tile's; the rest is its content's.

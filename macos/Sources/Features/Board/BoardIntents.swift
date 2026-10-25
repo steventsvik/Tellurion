@@ -210,8 +210,9 @@ struct LaunchAgentsIntent: AppIntent {
         }
         let prompt = task?.trimmingCharacters(in: .whitespacesAndNewlines)
         let line = entry.command(prompt: prompt?.isEmpty == false ? prompt : nil)
-        controller.launch(Array(repeating: (agent: entry, command: line), count: count),
-                          folder: folder?.fileURL?.path(percentEncoded: false))
+        // The range above is the editor's; a variable can hand in any number.
+        controller.launch(Array(repeating: (agent: entry, command: line), count: min(max(count, 1), 12)),
+                          folder: folder?.fileURL?.path(percentEncoded: false), adopt: false)
         BoardIntents.bringForward(controller)
         return .result()
     }

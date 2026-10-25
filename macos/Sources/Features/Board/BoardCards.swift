@@ -271,7 +271,9 @@ extension BoardController {
         guard let activity = VerticalTabsAgents.shared.info(for: surface)?.activity else { return }
         for card in model.cards where card.items.contains(where: { $0.agent == surface.id }) {
             updateCard(card.id) { card in
-                for index in card.items.indices where card.items[index].agent == surface.id {
+                // By id: a move puts an item at the end and shifts the ones after it.
+                for itemID in card.items.filter({ $0.agent == surface.id }).map(\.id) {
+                    guard let index = card.items.firstIndex(where: { $0.id == itemID }) else { continue }
                     switch activity {
                     case .working:
                         if card.kind == .kanban, card.items[index].column != CardItem.doing { Self.move(&card.items, index, toColumn: CardItem.doing) }
@@ -288,10 +290,14 @@ extension BoardController {
 
     /// Kanbans from before Backlog: To Do, Doing and Done move one column right.
     static func migrated(_ card: BoardCard) -> BoardCard {
-        guard card.kind == .kanban, card.kanbanVersion == nil else { return card }
+        guard card.kind == .kanban else { return card }
         var card = card
-        for index in card.items.indices { card.items[index].column = min(card.items[index].column + 1, CardItem.done) }
-        card.kanbanVersion = 2
+        if card.kanbanVersion == nil {
+            for index in card.items.indices { card.items[index].column = min(card.items[index].column + 1, CardItem.done) }
+            card.kanbanVersion = 2
+        }
+        // A column outside the four isn't laid out: the item would count but couldn't be seen.
+        for index in card.items.indices { card.items[index].column = min(max(card.items[index].column, 0), CardItem.done) }
         return card
     }
 

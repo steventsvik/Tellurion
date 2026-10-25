@@ -177,10 +177,23 @@ extension BoardController {
     }
 
     private func changeTeam(_ id: UUID, action: String, _ change: (inout BoardTeam) -> Void) {
-        guard let index = model.teams.firstIndex(where: { $0.id == id }) else { return }
+        guard ensureTeam(id) != nil, let index = model.teams.firstIndex(where: { $0.id == id }) else { return }
         var teams = model.teams
         change(&teams[index])
         setTeams(teams, action: action)
+    }
+
+    /// An orchestrator card's team, made on the spot when the card has none (a board file
+    /// from before, or one whose team was lost): without it, wiring and commands would do
+    /// nothing, silently.
+    @discardableResult
+    func ensureTeam(_ id: UUID) -> BoardTeam? {
+        if let team = orchestrator(id) { return team }
+        guard model.cards.contains(where: { $0.id == id && $0.kind == .orchestrator }) else { return nil }
+        let team = BoardTeam(id: id)
+        model.teams.append(team)
+        scheduleSave()
+        return team
     }
 
     /// A new orchestrator card at `point` (or beside the focused tile), wired to `tiles`.
@@ -292,12 +305,14 @@ extension BoardController {
         wiringMonitor = nil
     }
 
-    /// Closed tiles come unwired.
+    /// Closed tiles and ungrouped groups come unwired.
     func pruneTeams() {
         let ids = Set(model.surfaces.map(\.id))
+        let groups = Set(model.groups.map(\.id))
         let teams = model.teams.map { team -> BoardTeam in
             var team = team
             team.members.removeAll { !ids.contains($0.tile) }
+            team.groups.removeAll { key in BoardTeams.groupID(key).map { !groups.contains($0) } ?? false }
             return team
         }
         if teams != model.teams { model.teams = teams }
@@ -316,7 +331,9 @@ extension BoardController {
         if let agent, let task, !task.isEmpty {
             let prompt = Self.memberIntro(role: role, orchestrator: orchestratorName(id)) + "\n\nYour task: " + task
             if agent.kind == .claude || agent.kind == .codex,
-               let file = AgentTools.writePrompt(prompt, folder: "board-prompts", name: "\(AgentTools.timestamp())-member.md") {
+               // Unique: one reply can spawn several agents in the same second.
+               let file = AgentTools.writePrompt(prompt, folder: "board-prompts",
+                                                 name: "\(AgentTools.timestamp())-\(UUID().uuidString.prefix(6))-member.md") {
                 command = AgentTools.agentCommand(agent.kind, promptFile: file)
             } else {
                 command = agent.command(prompt: prompt)
@@ -391,12 +408,13 @@ extension BoardController {
     }
 
     /// Typed to an agent once it's ready (Claude Code and Codex), or straight into a terminal.
+    /// The camera stays where it is: an orchestrator or group message goes to many tiles.
     func deliverToAgent(_ text: String, to surface: Ghostty.SurfaceView, label: String) {
         let kind = VerticalTabsAgents.shared.info(for: surface)?.kind
         if kind == .claude || kind == .codex {
             AgentInbox.shared.deliver(text, to: surface, label: label)
         } else {
-            deliver(text, to: surface)
+            deliver(text, to: surface, show: false)
         }
     }
 

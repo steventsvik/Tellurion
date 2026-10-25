@@ -30,7 +30,10 @@ enum MarkdownHTML {
 
     // MARK: Blocks
 
-    static func body(_ markdown: String) -> String {
+    static func body(_ markdown: String) -> String { body(markdown, depth: 0) }
+
+    /// Quotes nest by rendering their insides again; `depth` is how deep this is.
+    private static func body(_ markdown: String, depth: Int) -> String {
         let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
         var html = ""
         var index = 0
@@ -84,10 +87,14 @@ enum MarkdownHTML {
                 flush()
                 var quote: [String] = []
                 while index < lines.count, lines[index].trimmingCharacters(in: .whitespaces).hasPrefix(">") {
-                    quote.append(String(lines[index].trimmingCharacters(in: .whitespaces).dropFirst()).trimmingCharacters(in: .whitespaces))
+                    var line = String(lines[index].trimmingCharacters(in: .whitespaces).dropFirst()).trimmingCharacters(in: .whitespaces)
+                    // Deep enough: the rest of the markers are dropped, not nested further (a
+                    // line of thousands of them would recurse once per marker).
+                    if depth >= 6 { line = String(line.drop { $0 == ">" || $0 == " " }) }
+                    quote.append(line)
                     index += 1
                 }
-                html += callout(quote)
+                html += callout(quote, depth: depth + 1)
                 continue
             }
             // Tables: a header row, then a |---| row.
@@ -210,14 +217,16 @@ enum MarkdownHTML {
         return html + (first.ordered ? "</ol>" : "</ul>") + "\n"
     }
 
-    private static func callout(_ lines: [String]) -> String {
+    private static func callout(_ lines: [String], depth: Int) -> String {
         if let first = lines.first, first.hasPrefix("[!"), let end = first.firstIndex(of: "]") {
             let kind = first[first.index(first.startIndex, offsetBy: 2)..<end].lowercased()
             let rest = Array(lines.dropFirst())
             let titles = ["note": "ⓘ NOTE", "tip": "💡 TIP", "important": "! IMPORTANT", "warning": "⚠ WARNING", "caution": "⚠ CAUTION"]
-            return "<div class=\"callout \(escape(kind))\"><b>\(titles[kind] ?? kind.uppercased())</b>\(body(rest.joined(separator: "\n")))</div>\n"
+            // The kind is the document's text: escaped like the rest of it.
+            return "<div class=\"callout \(escape(kind))\"><b>\(escape(titles[kind] ?? kind.uppercased()))</b>"
+                + "\(body(rest.joined(separator: "\n"), depth: depth))</div>\n"
         }
-        return "<blockquote>\(body(lines.joined(separator: "\n")))</blockquote>\n"
+        return "<blockquote>\(body(lines.joined(separator: "\n"), depth: depth))</blockquote>\n"
     }
 
     // MARK: Inline

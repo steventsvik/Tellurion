@@ -96,8 +96,11 @@ final class MediaContent: CardContent {
             return
         }
         // Hidden windows do no work: pause when the board can't be seen.
-        observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main) { [weak self] _ in
-            if !window.occlusionState.contains(.visible) { self?.player.pause() }
+        // Nothing strong in the block: the center keeps it, and a window held there would keep
+        // the whole closed board alive.
+        observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main) { [weak self] note in
+            guard let window = note.object as? NSWindow, !window.occlusionState.contains(.visible) else { return }
+            self?.player.pause()
         })
     }
 

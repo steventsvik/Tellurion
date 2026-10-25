@@ -9,6 +9,22 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 - **Fixed:** on macOS 27, **Pause all** let the shell take its terminal back ("suspended"), and **Resume all** then left the agents stopped. Pausing now stops each tile's shell first again, so agents pause and resume where they were.
 - **Fixed:** with the board zoomed out, buttons and menus on orchestrator cards and web tiles (Connect, Done, the screen size menu, tabs and the address row) missed clicks. They now work at any zoom.
 - **Fixed:** the group composer was cut off on its left side when many agents are installed. Its **Fill all** buttons now wrap onto more rows.
+- **Switching to Board moves your terminals.** Picking **Board** in Settings (or the welcome window) with classic windows open now asks whether to move their terminals to the board. Say yes and every tab and split becomes a tile, laid out in a grid with each project's terminals together, agents still running, and the empty windows close. **Keep Windows** opens the board beside them, as before.
+- **Fixed:** picking **Board** in Settings did nothing, or brought back an empty window, once a board had been closed or switched away from. It now brings a board to the front every time, opening one when none is.
+- **Fixed:** an orchestrator card whose wiring record was missing (boards saved by earlier versions) took commands and Connect clicks without doing anything. The record is made on the spot now.
+- **Fixed:** when an orchestrator started two agents in one turn, both got the second one's task.
+- **Fixed:** ungrouping or closing a group wired to an orchestrator left a ghost "Group 0/0" on the card and in the Mission Map that couldn't be unwired.
+- **Fixed:** orchestrator and group messages to agents other than Claude Code and Codex flew the board to each tile and took the keyboard.
+- **Fixed:** restarting a tile's agent dropped the tile's saved command, so it came back as a plain shell after a relaunch and lost its **NO PROMPTS** badge.
+- **Fixed:** the tiles of a collapsed group still took clicks through the strip drawn over them.
+- **Fixed:** flying to a tile near the board's edge put the view off the board; the next drag snapped it back.
+- **Fixed:** the board's agent could hand the wrong kanban item to an agent when items had moved while it was thinking.
+- **Fixed:** the board's agent and the Shortcuts action changed the board's own folder when asked to start agents in another folder.
+- **Fixed:** the board's agent's confirmations shortened the command it was about to run; a long or multi-line command could run more than was shown. The whole command is shown now, and a terminal takes one line.
+- **Fixed:** the dictation's last words replaced what you typed after stopping it; and on a Mac with no microphone, starting dictation crashed.
+- **Fixed:** kanban items given to the same agent could skip a column when their status changed together, and items in a column that doesn't exist (from damaged files) were counted but invisible.
+- **Fixed:** a document with thousands of nested `>` quote markers crashed the app when opened; and the title of a `[!...]` callout could inject HTML into the document.
+- **Fixed:** closing a board with a media tile kept the whole board in memory.
 
 ## 1.8.0
 

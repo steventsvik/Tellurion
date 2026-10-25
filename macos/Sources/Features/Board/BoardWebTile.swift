@@ -369,7 +369,7 @@ final class WebContent: CardContent, WKNavigationDelegate, WKUIDelegate {
     func inspect() {
         guard let page = current, let board else { return }
         // WebKit's own inspector, docked in the tile, which grows to make room for it.
-        guard let inspector = page.value(forKey: "_inspector") as? NSObject,
+        guard page.responds(to: Selector(("_inspector"))), let inspector = page.value(forKey: "_inspector") as? NSObject,
               inspector.responds(to: Selector(("show"))), inspector.responds(to: Selector(("close"))) else {
             NSSound.beep()
             return
