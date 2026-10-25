@@ -171,7 +171,12 @@ final class OrchestratorBrain: ObservableObject {
     // MARK: Thinking
 
     private func think(command: String?, updates: [Update]) {
-        guard let controller, let team = controller.orchestrator(id) else { return }
+        guard let controller else { return }
+        guard let team = controller.ensureTeam(id) else {
+            add(.error, "This orchestrator card is gone from the board.")
+            running = false
+            return
+        }
         let engine = self.engine, tool = engine.flatMap { ToolPath.find($0.rawValue) }
         guard canned.isEmpty == false || tool != nil else {
             add(.error, engines == nil ? "Still looking for Claude Code and Codex. Try again in a moment."
@@ -199,7 +204,7 @@ final class OrchestratorBrain: ObservableObject {
     }
 
     private func proceed(command: String?, updates: [Update], detected: [UUID: String]) {
-        guard let controller, let team = controller.orchestrator(id), busy else { return }
+        guard let controller, let team = controller.ensureTeam(id), busy else { return }
         self.detected = Set(detected.keys)
         let engine = self.engine, tool = engine.flatMap { ToolPath.find($0.rawValue) }
         let context = controller.orchestratorContext(team, agents: installed, detected: detected)

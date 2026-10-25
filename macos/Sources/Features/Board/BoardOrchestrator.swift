@@ -36,8 +36,7 @@ final class OrchestratorContent: CardContent {
         let brain = board.orchestratorBrain(cardID)
         brain.lookUp()
         self.brain = brain
-        let host = NSHostingView(rootView: OrchestratorPanel(controller: board, id: cardID, brain: brain, state: state))
-        host.sizingOptions = []
+        let host = BoardZoomHost(rootView: OrchestratorPanel(controller: board, id: cardID, brain: brain, state: state))
         addSubview(host)
         self.host = host
         needsLayout = true

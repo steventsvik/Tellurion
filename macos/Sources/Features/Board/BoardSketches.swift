@@ -183,7 +183,8 @@ extension BoardController {
     }
 
     /// Types the prompt into a running agent and submits it (a busy agent queues it).
-    func deliver(_ prompt: String, to surface: Ghostty.SurfaceView) {
+    /// `show`: go to the tile too; off for messages the board sends on its own.
+    func deliver(_ prompt: String, to surface: Ghostty.SurfaceView, show: Bool = true) {
         guard let model = surface.surfaceModel else { return }
         model.sendText(prompt)
         Task { @MainActor in
@@ -191,7 +192,7 @@ extension BoardController {
             model.sendKeyEvent(.init(key: .enter, action: .press, text: "\r"))
             model.sendKeyEvent(.init(key: .enter, action: .release))
         }
-        TerminalWindows.show(surface)
+        if show { TerminalWindows.show(surface) }
     }
 
     /// A new Claude Code or Codex tile beside `near`, started on the prompt.

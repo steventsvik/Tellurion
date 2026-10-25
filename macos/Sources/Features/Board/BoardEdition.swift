@@ -33,31 +33,68 @@ enum ExtremeEdition: String, CaseIterable, Identifiable {
     /// Whether the edition has been picked (a fresh install hasn't).
     static var chosen: Bool { UserDefaults.standard.string(forKey: key) != nil }
 
-    /// Switches editions. Turning boards on opens one, unless one is open already.
+    /// Switches editions. Picking Board brings a board to the front (opening one if none is),
+    /// and offers to move the terminals of open classic windows onto it.
     static func set(_ edition: ExtremeEdition) {
         let changed = edition != current || !chosen
         UserDefaults.standard.set(edition.rawValue, forKey: key)
-        guard changed else { return }
-        ExtremeSettings.shared.objectWillChange.send()
-        if edition == .board, BoardController.all.isEmpty, let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty {
-            Board.openAtLaunch(ghostty)
-        }
+        if changed { ExtremeSettings.shared.objectWillChange.send() }
+        guard edition == .board, let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty else { return }
+        Board.activate(ghostty)
     }
 }
 
 /// Opening boards.
 enum Board {
     /// At launch (and from the Dock with no windows): the boards that were open last time,
-    /// or a new one.
-    static func openAtLaunch(_ ghostty: Ghostty.App) {
+    /// or a new one. Returns the one in front.
+    @discardableResult
+    static func openAtLaunch(_ ghostty: Ghostty.App) -> BoardController {
         let open = BoardStore.all().filter(\.open)
-        if open.isEmpty {
-            newBoard(ghostty)
+        guard !open.isEmpty else { return newBoard(ghostty) }
+        // Oldest first, so the most recent ends up in front.
+        var front: BoardController?
+        for workspace in open.reversed() {
+            front = BoardController.open(ghostty, workspace: workspace, restoring: true)
+        }
+        return front ?? newBoard(ghostty)
+    }
+
+    /// Brings a board to the front: the one you were on, else the saved ones, else a new one.
+    @discardableResult
+    static func show(_ ghostty: Ghostty.App) -> BoardController {
+        if let board = BoardController.front {
+            board.show()
+            return board
+        }
+        return openAtLaunch(ghostty)
+    }
+
+    /// Switching to Board from Settings or the welcome window. With classic windows open, asks
+    /// whether their terminals should come along as tiles; the windows close when they do.
+    static func activate(_ ghostty: Ghostty.App) {
+        let terminals = TerminalController.all.filter { !$0.surfaceTree.isEmpty }
+        let views = terminals.flatMap { Array($0.surfaceTree) }
+        guard !views.isEmpty else {
+            show(ghostty)
             return
         }
-        // Oldest first, so the most recent ends up in front.
-        for workspace in open.reversed() {
-            BoardController.open(ghostty, workspace: workspace, restoring: true)
+        let alert = NSAlert()
+        let count = views.count
+        alert.messageText = count == 1 ? "Move your terminal to the board?" : "Move your \(count) terminals to the board?"
+        alert.informativeText = "Each tab and split becomes a tile, laid out by project, and the windows close. "
+            + "Agents keep running. Keep Windows opens the board beside them instead."
+        alert.addButton(withTitle: "Move to Board")
+        alert.addButton(withTitle: "Keep Windows")
+        let decide: (NSApplication.ModalResponse) -> Void = { response in
+            let board = show(ghostty)
+            guard response == .alertFirstButtonReturn else { return }
+            board.adopt(views, from: terminals)
+        }
+        if let window = NSApp.keyWindow, window.sheets.isEmpty, window.attachedSheet == nil {
+            alert.beginSheetModal(for: window, completionHandler: decide)
+        } else {
+            decide(alert.runModal())
         }
     }
 

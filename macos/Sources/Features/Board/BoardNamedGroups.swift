@@ -126,6 +126,7 @@ extension BoardController {
         model.groups = groups
         undoManager?.registerUndo(withTarget: self) { $0.setGroups(old, action: action) }
         undoManager?.setActionName(action)
+        if !model.teams.isEmpty { pruneTeams() }
         updateVisibility()
         scheduleSave()
     }

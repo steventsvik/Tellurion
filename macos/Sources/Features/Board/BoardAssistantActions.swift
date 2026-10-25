@@ -221,7 +221,9 @@ extension BoardController {
                 lines.append("- \(handle) Agent Map of \(card.folder.map(Self.tilde) ?? "no project")")
             case .checklist, .kanban:
                 lines.append("- \(handle) \(card.kind.rawValue) \"\(card.title)\":")
-                for (number, item) in card.items.enumerated() where !item.text.isEmpty {
+                for (number, item) in card.items.filter({ !$0.text.isEmpty }).enumerated() {
+                    // Items move as agents take them, so a reply's number is resolved by this id.
+                    handles.ids["\(handle)#\(number + 1)"] = item.id
                     let state = card.kind == .kanban ? CardItem.columns[min(max(item.column, 0), CardItem.done)] : (item.done ? "done" : "not done")
                     let owner = item.agent.flatMap { id in model.surfaces.firstIndex { $0.id == id } }.map { ", with T\($0 + 1)" } ?? ""
                     lines.append("  \(number + 1). \(Self.clip(item.text, 120)) [\(state)\(owner)]")
@@ -303,6 +305,11 @@ extension BoardController {
         return flat.count > length ? String(flat.prefix(length)) + "…" : flat
     }
 
+    /// The whole text on one line, with its line breaks shown.
+    private static func visible(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ⏎ ")
+    }
+
     // MARK: Doing it
 
     /// Carries out the actions in order. Unless `confirmed`, the ones that need you wait; the
@@ -358,7 +365,9 @@ extension BoardController {
             return model.sketches.first { $0.id == id }.map { "Close \($0.title)" }
         case "message_agent":
             guard let surface = surface(action.tile, handles), let text = action.text, !text.isEmpty else { return nil }
-            return "Send \(tileName(surface)): “\(Self.clip(text, 80))”"
+            // A shell runs what it's sent: show all of it.
+            let shown = VerticalTabsAgents.shared.info(for: surface) == nil ? Self.visible(text) : Self.clip(text, 80)
+            return "Send \(tileName(surface)): “\(shown)”"
         case "hand_item":
             guard let surface = surface(action.tile, handles), let item = item(action, handles) else { return nil }
             return "Give \(tileLabel(surface)): “\(Self.clip(item.item.text, 80))”"
@@ -370,7 +379,8 @@ extension BoardController {
             return "Close \(group.name) and its \(group.tiles.count) tiles"
         case "new_terminal":
             guard let command = action.command, !command.isEmpty else { return nil }
-            return "Open a terminal and run: \(Self.clip(command, 120))"
+            // Shown whole: a clipped command could hide what else it runs.
+            return "Open a terminal and run: \(Self.visible(command))"
         case "command_orchestrator":
             guard let id = handles.id(action.card), orchestrator(id) != nil else { return nil }
             return "Give \(orchestratorName(id)) the command “\(action.text ?? "")” (it messages its agents)"
@@ -391,10 +401,14 @@ extension BoardController {
     }
 
     private func item(_ action: BoardAssistantAction, _ handles: BoardAssistantHandles) -> (card: BoardCard, item: CardItem)? {
-        guard let id = handles.id(action.card), let card = model.cards.first(where: { $0.id == id }) else { return nil }
+        guard let id = handles.id(action.card), let card = model.cards.first(where: { $0.id == id }), let n = action.item else { return nil }
+        // The item the state listed under that number, wherever it has moved since.
+        if let itemID = handles.id((action.card ?? "") + "#\(n)"), let item = card.items.first(where: { $0.id == itemID }) {
+            return item.text.isEmpty ? nil : (card, item)
+        }
         // Numbered as the state listed them: blank items skipped.
         let items = card.items.filter { !$0.text.isEmpty }
-        guard let n = action.item, n >= 1, n <= items.count else { return nil }
+        guard n >= 1, n <= items.count else { return nil }
         return (card, items[n - 1])
     }
 
@@ -414,7 +428,7 @@ extension BoardController {
             let folder = folder(action.folder)
             let task = action.task?.trimmingCharacters(in: .whitespacesAndNewlines)
             if action.agent == nil || action.agent == "shell" {
-                launch(Array(repeating: (agent: nil as BoardAgent?, command: ""), count: count), folder: folder)
+                launch(Array(repeating: (agent: nil as BoardAgent?, command: ""), count: count), folder: folder, adopt: false)
                 return count == 1 ? "Opened a terminal" : "Opened \(count) terminals"
             }
             guard let agent = BoardAgent.catalog.first(where: { $0.binary == action.agent || $0.kind.rawValue == action.agent }) else {
@@ -422,7 +436,8 @@ extension BoardController {
             }
             let lines = (0..<count).map { _ in (agent: Optional(agent), command: agent.command(prompt: task?.isEmpty == false ? task : nil)) }
             let before = Set(model.surfaces.map(\.id))
-            launch(lines, folder: folder)
+            // The folder is these tiles' only; the board keeps its own.
+            launch(lines, folder: folder, adopt: false)
             if let title = action.title, !title.isEmpty {
                 for (n, surface) in model.surfaces.filter({ !before.contains($0.id) }).enumerated() {
                     model.titles[surface.id] = count == 1 ? title : "\(title) \(n + 1)"
@@ -435,12 +450,20 @@ extension BoardController {
                 guard let folder = folder(path) else { return "No folder \(path)" }
                 config.workingDirectory = folder
             }
+            // One command: a second line would run too, unseen in the confirmation.
+            if action.command?.trimmingCharacters(in: .whitespacesAndNewlines).contains("\n") == true {
+                return "A terminal runs one command; put the rest in a script"
+            }
             let command = action.command.map { $0.hasSuffix("\n") ? $0 : $0 + "\n" }
             guard let view = addTile(config: config, command: command) else { return nil }
             if let title = action.title, !title.isEmpty { model.titles[view.id] = title }
             return "Opened " + (action.title.map { "“\($0)”" } ?? "a terminal")
         case "message_agent":
             guard let surface = surface(action.tile, handles), let text = action.text, !text.isEmpty else { return nil }
+            // A shell would run each line; agents take the text as one message.
+            if VerticalTabsAgents.shared.info(for: surface) == nil, text.trimmingCharacters(in: .whitespacesAndNewlines).contains("\n") {
+                return "A terminal takes one line at a time"
+            }
             deliver(text, to: surface)
             return "Sent to \(tileLabel(surface))"
         case "hand_item":

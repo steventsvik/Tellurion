@@ -88,7 +88,13 @@ final class BoardDictation: ObservableObject {
         request.shouldReportPartialResults = true
         if recognizer.supportsOnDeviceRecognition { request.requiresOnDeviceRecognition = true }
         let input = audio.inputNode
-        input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { [weak self] buffer, _ in
+        let format = input.outputFormat(forBus: 0)
+        // No input device: the format is empty, and tapping with it throws (not catchable here).
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            failed("No microphone is connected.")
+            return
+        }
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             request.append(buffer)
             self?.measure(buffer)
         }

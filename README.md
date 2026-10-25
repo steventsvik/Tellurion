@@ -20,6 +20,7 @@
 <p align="center">
   <b><a href="https://github.com/steventsvik/Tellurion/releases/latest">Download</a></b> ·
   <b><a href="https://steventsvik.github.io/Tellurion/">Website</a></b> ·
+  <a href="#boards">Boards</a> ·
   <a href="#watch-your-agents-work-live">Live agents</a> ·
   <a href="#features">Features</a> ·
   <a href="#how-it-compares">Compare</a> ·
@@ -56,6 +57,39 @@ curl -fsSL https://raw.githubusercontent.com/steventsvik/Tellurion/custom/instal
 ```
 
 <sub>Apple silicon, macOS 13 or newer. Free and open source (AGPL-3.0). No account, no telemetry.</sub>
+
+<br>
+
+## Boards
+
+New in 1.8: put your terminals on a board instead of in tabs. Pick **Board** when you first
+open Tellurion, or any time in **Settings → Edition**. Classic stays the default, and nothing
+changes unless you switch.
+
+<p align="center">
+  <a href="images/readme/boards.mp4"><img src="images/readme/boards.gif" alt="A 54-second tour of Tellurion Boards: a board of twelve agent tiles in four projects, flying in to a tile and back out, answering a Claude Code permission prompt from the list, spawning a team from a preset, wiring agents to an orchestrator card, the Mission Map, a web tile, the Agent Map and a kanban card moving to Done" width="100%"></a>
+</p>
+
+<p align="center"><sub>Real app, demo projects. Claude Code and Codex are real; most of the background tiles are stand-ins. <a href="images/readme/boards.mp4">Watch it in higher quality</a>.</sub></p>
+
+- **Every terminal is a tile.** Each one is a full terminal, so Vim, full-screen apps and
+  every agent work as they do in a tab. Pinch or ⌘-scroll to zoom, drag empty space to move
+  around, and double-click a tile to fly to it.
+- **See who needs you.** A tile's edge breathes while its agent works and pulses when it
+  needs you. The list beside the board puts those agents first, with **Allow** and **Deny**
+  right there.
+- **Spin up a team.** Start up to 12 agents at once from the **Group** composer or a preset,
+  each in its own tile, with one first task for all of them.
+- **Orchestrator.** A card that runs a group of agents for you: tap **Connect** and click
+  terminals or a whole group to wire them in. **Mission Map** shows who runs whom.
+- **The board's agent.** The bar at the bottom takes plain requests ("start three Claude
+  agents, one per kanban card") and sets the board up. Type **@** to message one agent or a
+  whole group.
+- **More on the board:** web tiles that lay a page out at a real screen or phone size, the Agent Map of who is in
+  which file, notes, checklists and kanban you can hand to an agent, sketches and diagrams,
+  pen and labels, and **Pause all** to freeze every agent mid-turn.
+
+The full list is in the [1.8.0 notes](CHANGELOG.md#180).
 
 <br>
 

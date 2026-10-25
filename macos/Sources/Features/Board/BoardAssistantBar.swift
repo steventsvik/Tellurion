@@ -372,9 +372,13 @@ struct BoardAssistantBar: View {
     private func startDictation() {
         guard !dictation.listening else { return }
         spokenAfter = text
+        var written = text
         dictation.start(update: { words in
+            // The last words arrive after stopping; they don't replace what was typed since.
+            guard dictation.listening || text == written else { return }
             let before = spokenAfter ?? ""
             text = before.isEmpty ? words : before + " " + words
+            written = text
         }, failed: { reason in
             assistant.record(reason)
             showReply = true

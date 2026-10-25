@@ -85,9 +85,14 @@ final class BoardController: BaseTerminalController {
 
     static let boardsDidChange = Notification.Name("com.steventsvik.ghostty-extreme.boardsDidChange")
 
+    /// The boards that are open, in front or out of sight. A closed board's window can still be
+    /// around (it isn't released on close), so it's left out by its flag.
     static var all: [BoardController] {
-        NSApp.windows.compactMap { $0.windowController as? BoardController }
+        NSApp.windows.compactMap { $0.windowController as? BoardController }.filter { !$0.closed }
     }
+
+    /// Set when the window closes; `all` and `front` never offer a closed board again.
+    private(set) var closed = false
 
     /// The board in front: the main window's, else one on screen, else any (boards you
     /// switched away from stay open out of sight).
@@ -115,6 +120,9 @@ final class BoardController: BaseTerminalController {
     /// Tiles where an agent has reported status. When its status goes away, the agent quit
     /// and isn't started again.
     private var agentSeen: Set<UUID> = []
+    /// Tiles whose agent is being restarted: its status goes away for a moment, which isn't it
+    /// quitting. Cleared when the agent reports again, or after a while.
+    var restarting: Set<UUID> = []
     /// Which tiles were last told they're visible.
     private(set) var visible: [UUID: Bool] = [:]
     private var saveWork: DispatchWorkItem?
@@ -235,6 +243,7 @@ final class BoardController: BaseTerminalController {
             guard let self, let surface = note.object as? Ghostty.SurfaceView, self.surfaceTree.contains(surface) else { return }
             if VerticalTabsAgents.shared.info(for: surface) != nil {
                 self.agentSeen.insert(surface.id)
+                self.restarting.remove(surface.id)
                 self.nameAgentIfNeeded(surface)
             }
             self.model.agentTick &+= 1
@@ -515,10 +524,12 @@ final class BoardController: BaseTerminalController {
 
     /// Starts agents and shells from the composer as a block of tiles, then shows them all.
     /// `skip`: the agents were started without permission prompts (kept for their restarts).
+    /// `adopt`: the folder becomes the board's (the composer); off, it's only these tiles'.
     @discardableResult
-    func launch(_ lines: [(agent: BoardAgent?, command: String)], folder: String?, skip: Bool = false) -> [Ghostty.SurfaceView] {
+    func launch(_ lines: [(agent: BoardAgent?, command: String)], folder: String?, skip: Bool = false,
+                adopt: Bool = true) -> [Ghostty.SurfaceView] {
         guard let app = ghostty.app, !lines.isEmpty else { return [] }
-        if let folder { workspace.folder = folder }
+        if let folder, adopt { workspace.folder = folder }
         let n = lines.count
         let columns = n <= 3 ? n : Int(ceil(Double(n).squareRoot()))
         let rows = Int(ceil(Double(n) / Double(columns)))
@@ -550,6 +561,37 @@ final class BoardController: BaseTerminalController {
         insert(views, undoAction: n == 1 ? "Launch Agent" : "Launch Agents")
         zoom(toFit: area, animated: true)
         return views
+    }
+
+    /// Terminals from classic windows become tiles: a grid beside what's on the board, each
+    /// project's terminals together. The windows they leave close (they're empty then). The
+    /// terminals themselves aren't touched, so their agents keep running.
+    func adopt(_ views: [Ghostty.SurfaceView], from controllers: [TerminalController]) {
+        guard !views.isEmpty else { return }
+        // Taken out of their windows first; the empty tree closes each window. A closed window
+        // with no terminals leaves nothing to undo, so these moves aren't undoable there.
+        for controller in controllers { controller.surfaceTree = .init() }
+        let folders = Dictionary(uniqueKeysWithValues: views.map { ($0.id, $0.pwd) })
+        let keyed = views.enumerated().map { (index: $0.offset, view: $0.element, project: BoardProjects.project(of: folders[$0.element.id] ?? nil) ?? "") }
+        let sorted = keyed.sorted { $0.project == $1.project ? $0.index < $1.index : $0.project < $1.project }.map(\.view)
+        let n = sorted.count
+        let columns = n <= 3 ? n : Int(ceil(Double(n).squareRoot()))
+        let rows = Int(ceil(Double(n) / Double(columns)))
+        let size = n > 4 ? CGSize(width: 640, height: 400) : Self.tileSize
+        let block = CGSize(width: CGFloat(columns) * size.width + CGFloat(columns - 1) * Self.gap,
+                           height: CGFloat(rows) * size.height + CGFloat(rows - 1) * Self.gap)
+        let existing = model.surfaces.compactMap { model.frames[$0.id] }
+        let all = existing.first.map { first in existing.dropFirst().reduce(first) { $0.union($1) } }
+        let area = freeSpot(size: block, near: all)
+        for (index, view) in sorted.enumerated() {
+            let col = index % columns, row = index / columns
+            model.frames[view.id] = CGRect(x: area.minX + CGFloat(col) * (size.width + Self.gap),
+                                           y: area.minY + CGFloat(row) * (size.height + Self.gap),
+                                           width: size.width, height: size.height)
+            if let folder = folders[view.id] ?? nil { launchFolders[view.id] = folder }
+        }
+        insert(sorted, undoAction: n == 1 ? "Move Terminal to Board" : "Move Terminals to Board")
+        zoom(toFit: area, animated: true)
     }
 
     /// The folder new tiles start in, from now on.
@@ -886,7 +928,10 @@ final class BoardController: BaseTerminalController {
         guard let canvas else { return }
         let visible = canvas.documentVisibleRect
         guard !visible.contains(frame) else { return }
-        let origin = CGPoint(x: frame.midX - visible.width / 2, y: frame.midY - visible.height / 2)
+        // Kept on the board, as a drag is: a tile near its edge would otherwise leave the view
+        // off it, and the next pan would snap.
+        let origin = CGPoint(x: min(max(frame.midX - visible.width / 2, 0), Self.boardSize.width - visible.width),
+                             y: min(max(frame.midY - visible.height / 2, 0), Self.boardSize.height - visible.height))
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.25
             canvas.contentView.animator().setBoundsOrigin(origin)
@@ -1028,7 +1073,7 @@ final class BoardController: BaseTerminalController {
         let old = Dictionary(workspace.tiles.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         workspace.tiles = surfaceTree.map { view in
             let info = VerticalTabsAgents.shared.info(for: view)
-            if info == nil, agentSeen.contains(view.id) {
+            if info == nil, agentSeen.contains(view.id), !restarting.contains(view.id) {
                 // The agent quit: start a plain shell next time.
                 agentSeen.remove(view.id)
                 commands[view.id] = nil
@@ -1118,6 +1163,7 @@ final class BoardController: BaseTerminalController {
     }
 
     override func windowWillClose(_ notification: Notification) {
+        closed = true
         setPaused(false)
         for brain in orchestratorBrains.values { brain.stop(quietly: true) }
         // Headless runs end with the board.

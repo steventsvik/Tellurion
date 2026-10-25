@@ -57,6 +57,10 @@ extension BoardController {
     /// command run again. The tile keeps its place, group and wiring.
     func restartTile(_ view: Ghostty.SurfaceView) {
         guard let model = view.surfaceModel else { return }
+        // Its status is gone until the agent is back; a save in between mustn't take that for
+        // the agent quitting (which would drop the tile's command).
+        restarting.insert(view.id)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in self?.restarting.remove(view.id) }
         let info = VerticalTabsAgents.shared.info(for: view)
         let record = BoardTile(id: view.id, frame: .zero, cwd: view.pwd,
                                agent: info?.kind.rawValue, session: info.flatMap(ResumeAfterUpdate.session(for:)),
