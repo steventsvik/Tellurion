@@ -238,7 +238,11 @@ else
 fi
 CRASHES_BEFORE=$(ls ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -ci ghostty)
 # In the background: it starts without taking focus or opening a window in front of you.
-env -i HOME=$HOME USER=$USER PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/open -gna $TEST --args --window-save-state=never
+# Its boards, prompts and hooks go to a folder of its own, not yours.
+TEST_HOME=$OUT/launch-test-home
+rm -rf $TEST_HOME && mkdir -p $TEST_HOME
+env -i HOME=$HOME USER=$USER PATH=/usr/bin:/bin:/usr/sbin:/sbin GHOSTTY_EXTREME_TEST_HOME=$TEST_HOME \
+  /usr/bin/open -gna $TEST --args --window-save-state=never
 sleep 12
 PID=$(pgrep -f "^$TEST/Contents/MacOS/ghostty" | head -1)
 [[ -n $PID ]] || fail "the app quit or crashed on launch"
