@@ -93,22 +93,46 @@ enum Board {
         let decide: (NSApplication.ModalResponse) -> Void = { response in
             let board = show(ghostty)
             guard response == .alertFirstButtonReturn else { return }
-            board.adopt(views, from: terminals)
+            let ids = Set(views.map(\.id))
+            // A terminal that left a board with the switch to Classic goes back to it, reopening
+            // the board when it isn't open; the rest go onto the front board.
+            for workspace in BoardStore.all()
+            where workspace.released?.contains(where: { ids.contains($0.id) }) == true
+                && !BoardController.all.contains(where: { $0.workspace.id == workspace.id }) {
+                reopen(ghostty, workspace)
+            }
+            var homes: [(board: BoardController, views: [Ghostty.SurfaceView])] = []
+            for view in views {
+                let home = BoardController.all.first { $0.model.released.contains { $0.id == view.id } } ?? board
+                if let index = homes.firstIndex(where: { $0.board === home }) {
+                    homes[index].views.append(view)
+                } else {
+                    homes.append((home, [view]))
+                }
+            }
+            // The first adoption empties every window; the others get terminals already out of theirs.
+            for (index, home) in homes.enumerated() { home.board.adopt(home.views, from: index == 0 ? terminals : []) }
+            // Every classic terminal is on a board now: a tile still away was closed in a window,
+            // so its ink, group and wires go with it.
+            for open in BoardController.all { open.forgetReleased() }
+            homes.max { $0.views.count < $1.views.count }?.board.show()
         }
         ask(alert, then: decide)
     }
 
     /// Switching to Classic from Settings or the welcome window. With tiles on the open boards,
     /// asks whether they should become tabs in windows; the boards close either way when
-    /// they're empty, and when their tiles move. A board stays saved without the terminals
-    /// that left it.
+    /// they're empty, and when their tiles move. A board keeps the ink, groups and wires of the
+    /// terminals that left it, and stays open in its file for the switch back (see
+    /// `BoardController.releaseForClassic`).
     static func deactivate(_ ghostty: Ghostty.App) {
         let boards = BoardController.all
         let views = boards.flatMap { Array($0.surfaceTree) }
         guard !views.isEmpty else {
-            closeBoards(boards)
+            _ = leave(boards)
             if let window = TerminalController.preferredParent?.window ?? TerminalController.all.first?.window {
-                window.makeKeyAndOrderFront(nil)
+                // The welcome window is still choosing; a window coming forward would cover it.
+                if !AgentToolWindows.isOpen(WelcomeWindow.windowID) { window.makeKeyAndOrderFront(nil) }
             } else {
                 _ = TerminalController.newWindow(ghostty)
             }
@@ -126,17 +150,16 @@ enum Board {
                 _ = TerminalController.newWindow(ghostty)
                 return
             }
-            release(views, from: boards, ghostty)
+            release(boards, ghostty)
         }
     }
 
     /// Tiles become tabs: a window per project, in the order they were on the board. The
     /// terminals themselves aren't touched, so their agents keep running.
-    private static func release(_ views: [Ghostty.SurfaceView], from boards: [BoardController], _ ghostty: Ghostty.App) {
+    private static func release(_ boards: [BoardController], _ ghostty: Ghostty.App) {
+        // Out of the boards first, which keep their places, ink, groups and wires for them.
+        let views = leave(boards)
         let folders = Dictionary(uniqueKeysWithValues: views.map { ($0.id, $0.pwd) })
-        // Out of the boards first; an empty board closes without asking.
-        for board in boards { board.surfaceTree = .init() }
-        closeBoards(boards)
         var groups: [(project: String, views: [Ghostty.SurfaceView])] = []
         for view in views {
             let project = BoardProjects.project(of: folders[view.id] ?? nil) ?? ""
@@ -169,16 +192,21 @@ enum Board {
         }
     }
 
-    /// Hidden boards first, so none comes forward in a closing one's place.
-    private static func closeBoards(_ boards: [BoardController]) {
+    /// The boards close for Classic: their tiles come out first (returned) and stay with them
+    /// as released tiles, and each board stays open in its file for the switch back. Hidden
+    /// boards close first, so none comes forward in a closing one's place.
+    private static func leave(_ boards: [BoardController]) -> [Ghostty.SurfaceView] {
+        let views = boards.flatMap { $0.releaseForClassic() }
         let hidden = boards.filter { $0.window?.isVisible != true }
         for board in hidden + boards.filter({ $0.window?.isVisible == true }) {
             board.window?.close()
         }
+        return views
     }
 
-    /// Over the key window when it can take a sheet, else on its own. A sheet that's up
-    /// (another question) is key itself; the question goes under its window, not onto it.
+    /// Over the key window when it can take a sheet, else app-modal. A sheet that's up (another
+    /// question) is key itself; its window already has a sheet, so rather than going onto the
+    /// sheet, this question runs app-modal.
     private static func ask(_ alert: NSAlert, then decide: @escaping (NSApplication.ModalResponse) -> Void) {
         var window = NSApp.keyWindow
         while let parent = window?.sheetParent { window = parent }

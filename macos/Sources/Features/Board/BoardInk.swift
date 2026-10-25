@@ -85,7 +85,7 @@ extension BoardController {
 
     /// Closed tiles take their ink with them.
     func pruneInk() {
-        let ids = Set(model.nodeIDs)
+        let ids = Set(model.nodeIDs).union(model.released.map(\.id))
         let ink = model.ink.filter { $0.anchor.map(ids.contains) ?? true }
         if ink != model.ink { model.ink = ink }
     }

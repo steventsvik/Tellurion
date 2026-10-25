@@ -6,6 +6,8 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 
 ## Unreleased
 
+- **The orchestrator's replies show in full.** Its answers were cut after four lines, and only the last two or three entries stayed. The strip under the agent list now shows the latest entries whole, scrolling once they're taller than it, and a chevron on it opens the whole conversation in place of the list.
+- **Switching to Classic keeps the board's drawings, groups and wiring.** Ink drawn on tiles, named groups and orchestrator wiring were dropped when the tiles moved to windows. They stay with the board now, which also stays in your open boards: pick **Board** again and move the terminals back, and each tile returns to its place with its ink, group and wires. Picking Classic in the welcome window no longer puts a terminal window in front of it.
 - **The Agent Map always wakes up.** A map could sit at "0 agents" while agents worked in its project, with no dots moving: it only started following agents once its window reported being visible, and a window just shown can report that late or not at all for that map. A map on a visible window now starts right away, and one that's being drawn starts itself if it missed the signal.
 
 ## 1.8.2
