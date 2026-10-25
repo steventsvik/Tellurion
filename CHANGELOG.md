@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **The Agent Map always wakes up.** A map could sit at "0 agents" while agents worked in its project, with no dots moving: it only started following agents once its window reported being visible, and a window just shown can report that late or not at all for that map. A map on a visible window now starts right away, and one that's being drawn starts itself if it missed the signal.
+
 ## 1.8.2
 
 A small follow-up to 1.8.1 for the edition switch.

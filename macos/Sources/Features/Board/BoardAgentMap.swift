@@ -96,22 +96,36 @@ final class AgentMapContent: CardContent {
     }
 
     private var occlusion: NSObjectProtocol?
+    /// Whether the window has reported its occlusion since the map joined it. A window just
+    /// shown says it's visible a moment later; until it says anything, being on screen counts.
+    private var occlusionReported = false
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if let occlusion { NotificationCenter.default.removeObserver(occlusion) }
+        occlusionReported = false
         occlusion = window.map { window in
             NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main) { [weak self] _ in
+                self?.occlusionReported = true
                 self?.updateRunning()
             }
         }
         updateRunning()
     }
 
+    override func viewDidUnhide() {
+        super.viewDidUnhide()
+        updateRunning()
+    }
+
     /// Follows the agents only while the map can be seen: not in a board out of sight, a
     /// minimized window, or one covered up.
     private func updateRunning() {
-        if let window, window.occlusionState.contains(.visible) { start() } else { stop() }
+        guard let window, window.isVisible, !window.isMiniaturized else {
+            stop()
+            return
+        }
+        if window.occlusionState.contains(.visible) || !occlusionReported { start() } else { stop() }
     }
 
     private func start() {
@@ -262,6 +276,10 @@ final class AgentMapContent: CardContent {
 
     override func draw(_ dirtyRect: NSRect) {
         lastDraw = Date()
+        // Being drawn means being seen: a map that missed its window's wake-up starts here.
+        if timer == nil, window?.isVisible == true {
+            DispatchQueue.main.async { [weak self] in self?.start() }
+        }
         let chrome = Extreme.chrome
         chrome.ink.nsColor.setFill()
         bounds.fill()
@@ -641,8 +659,15 @@ final class AgentMapContent: CardContent {
 
     var testState: String {
         let agents = order.compactMap { tracks[$0] }.map { "\($0.name)@\($0.path ?? "-") [\($0.doing ?? "-")]" }
+        let candidates = TerminalWindows.surfaces.map { pair -> String in
+            let info = VerticalTabsAgents.shared.info(for: pair.surface)
+            return "\(info?.kind.rawValue ?? "-")/\(pair.surface.pwd.map { relative($0, cwd: nil) ?? "outside" } ?? "nopwd")"
+        }
         return "map root=\((root as NSString?)?.lastPathComponent ?? "-") focus=\(focus.isEmpty ? "/" : focus) cells=\(cells.count) "
-            + "heat=\(heat.count) agents=\(agents.joined(separator: ", "))"
+            + "heat=\(heat.count) running=\(timer != nil) window=\(window != nil) "
+            + "occluded=\(window.map { !$0.occlusionState.contains(.visible) }.map { "\($0)" } ?? "-") "
+            + "layer=\(layer != nil) agentLayer=\(agentLayer.superlayer != nil) sublayers=\(agentLayer.sublayers?.count ?? 0) "
+            + "candidates=\(candidates.joined(separator: " ")) agents=\(agents.joined(separator: ", "))"
     }
 }
 
