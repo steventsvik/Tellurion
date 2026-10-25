@@ -5,7 +5,10 @@ import AppKit
 /// an agent CLI with a long prompt in a new tab or split.
 enum AgentTools {
     /// Where races and handoff prompts are kept (no spaces, so paths paste cleanly into shells).
-    static let root = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".ghostty-extreme", isDirectory: true)
+    /// Boards and the board agent's files live here too. Test-only: `GHOSTTY_EXTREME_TEST_HOME`
+    /// moves it, as it does the hooks, so a test copy stays out of your boards (an app's
+    /// NSHomeDirectory ignores HOME).
+    static let root = URL(fileURLWithPath: HookInstaller.home).appendingPathComponent(".ghostty-extreme", isDirectory: true)
 
     struct Result {
         let status: Int32

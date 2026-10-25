@@ -270,6 +270,7 @@ extension BoardController {
         // Taken before the tiles see them, so a click wires whatever the zoom and wherever
         // the keyboard is; Escape is done, as the Done button is.
         wiringMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown]) { [weak self] event in
+            DemoDirector.note("wiring monitor \(event.type == .keyDown ? "key" : "click") ours=\(event.window === self?.window) wiring=\(self?.model.wiring != nil)")
             guard let self, event.window === self.window, let id = self.model.wiring else { return event }
             if event.type == .keyDown {
                 guard event.keyCode == 53 else { return event }
@@ -285,10 +286,16 @@ extension BoardController {
     private func wiringClick(_ event: NSEvent, _ id: UUID) -> Bool {
         guard let document = groupsView?.superview,
               let hit = window?.contentView?.hitTest(event.locationInWindow), hit.isDescendant(of: document),
-              hit !== groupsView else { return false }
+              hit !== groupsView else {
+            DemoDirector.note("wiring click: not on the board")
+            return false
+        }
         let point = document.convert(event.locationInWindow, from: nil)
         guard let top = model.order.reversed().first(where: { model.frames[$0]?.contains(point) == true }),
-              model.surfaces.contains(where: { $0.id == top }) else { return false }
+              model.surfaces.contains(where: { $0.id == top }) else {
+            DemoDirector.note("wiring click: nothing to wire at \(point)")
+            return false
+        }
         var node: NSView? = hit
         while let view = node, !(view is BoardNodeView) { node = view.superview }
         if let node = node as? BoardNodeView, !node.isHandle {
