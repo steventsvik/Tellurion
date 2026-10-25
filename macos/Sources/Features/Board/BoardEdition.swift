@@ -93,8 +93,14 @@ enum Board {
         let decide: (NSApplication.ModalResponse) -> Void = { response in
             let board = show(ghostty)
             guard response == .alertFirstButtonReturn else { return }
-            // A terminal that left a board with the switch to Classic goes back to it (reopened
-            // by `show`) when it's open; the rest go onto the front board.
+            let ids = Set(views.map(\.id))
+            // A terminal that left a board with the switch to Classic goes back to it, reopening
+            // the board when it isn't open; the rest go onto the front board.
+            for workspace in BoardStore.all()
+            where workspace.released?.contains(where: { ids.contains($0.id) }) == true
+                && !BoardController.all.contains(where: { $0.workspace.id == workspace.id }) {
+                reopen(ghostty, workspace)
+            }
             var homes: [(board: BoardController, views: [Ghostty.SurfaceView])] = []
             for view in views {
                 let home = BoardController.all.first { $0.model.released.contains { $0.id == view.id } } ?? board
@@ -106,6 +112,10 @@ enum Board {
             }
             // The first adoption empties every window; the others get terminals already out of theirs.
             for (index, home) in homes.enumerated() { home.board.adopt(home.views, from: index == 0 ? terminals : []) }
+            // Every classic terminal is on a board now: a tile still away was closed in a window,
+            // so its ink, group and wires go with it.
+            for open in BoardController.all { open.forgetReleased() }
+            homes.max { $0.views.count < $1.views.count }?.board.show()
         }
         ask(alert, then: decide)
     }

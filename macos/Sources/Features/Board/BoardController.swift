@@ -449,6 +449,17 @@ final class BoardController: BaseTerminalController {
         return views
     }
 
+    /// Once every classic terminal has come back to a board, the tiles still away were closed in
+    /// their windows: they're forgotten, and the ink, groups and wires that waited for them go.
+    func forgetReleased() {
+        guard !model.released.isEmpty else { return }
+        model.released = []
+        if !model.teams.isEmpty { pruneTeams() }
+        if !model.groups.isEmpty { pruneGroups() }
+        if !model.ink.isEmpty { pruneInk() }
+        scheduleSave()
+    }
+
     /// A tile back from a classic window takes the place it left (see releaseForClassic).
     private func placeIfReturning(_ view: Ghostty.SurfaceView) -> Bool {
         guard let index = model.released.firstIndex(where: { $0.id == view.id }) else { return false }

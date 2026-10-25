@@ -242,7 +242,8 @@ extension BoardController {
         guard let window, let group = namedGroup(id) else { return }
         let alert = NSAlert()
         alert.messageText = "Message \(group.name)"
-        alert.informativeText = "Typed into each of its \(group.tiles.count) tiles once its agent is ready."
+        let present = group.tiles.filter { id in model.surfaces.contains { $0.id == id } }.count
+        alert.informativeText = "Typed into each of its \(present) tiles once its agent is ready."
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 340, height: 60))
         field.placeholderString = "What should they do?"
         alert.accessoryView = field
