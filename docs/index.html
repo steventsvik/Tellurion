@@ -129,6 +129,61 @@ header.site nav a:hover { color: var(--text); text-decoration: none; }
 .filmcap .pausehint { margin-left: 10px; opacity: .7; }
 .filmcap .pausehint::before { content: "·"; margin-right: 10px; }
 
+/* ---------- the edition split: Classic | Board, with a slider ---------- */
+.split { --x: 50; max-width: 1180px; margin: 40px auto 0; }
+.splitbar { display: inline-flex; gap: 2px; padding: 3px; margin: 0 0 16px; border: 1px solid var(--line); border-radius: 999px; background: rgba(16,14,12,.7); }
+.splitbar button { border: 0; background: transparent; color: var(--muted); font: 600 11px var(--mono); letter-spacing: .16em; padding: 7px 16px; border-radius: 999px; cursor: pointer; transition: color .2s ease, background .25s ease; }
+.splitbar button:hover { color: var(--text); }
+.splitbar button[aria-pressed="true"] { background: linear-gradient(180deg, #ecc87f, var(--gold)); color: var(--ink); }
+.splitbar .new { color: var(--gold); margin-left: 6px; }
+.splitbar button[aria-pressed="true"] .new { color: var(--ink); }
+.stage { position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #000; border: 1px solid rgba(239,233,220,.1); box-shadow: 0 1px 2px rgba(0,0,0,.5), 0 14px 44px rgba(0,0,0,.55), 0 40px 120px -20px rgba(0,0,0,.7), 0 0 0 1px rgba(222,184,110,.06); cursor: ew-resize; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.stage .side { position: absolute; inset: 0; margin: 0; }
+.stage video { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.stage .side.board { clip-path: inset(0 0 0 calc(var(--x) * 1%)); }
+/* The side you're pulling away from dims a little, so the eye follows the slider. */
+.stage .side::after { content: ""; position: absolute; inset: 0; background: #000; pointer-events: none; }
+.stage .side.classic::after { opacity: calc((50 - min(var(--x), 50)) / 50 * .45); }
+.stage .side.board::after { opacity: calc((max(var(--x), 50) - 50) / 50 * .45); }
+.stage .tag { position: absolute; top: 16px; z-index: 2; font: 600 10.5px var(--mono); letter-spacing: .22em; color: var(--text); padding: 6px 11px; border-radius: 999px; background: rgba(11,10,9,.78); border: 1px solid var(--line); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); transition: opacity .25s ease, transform .35s cubic-bezier(.2,.8,.2,1); pointer-events: none; }
+.stage .tag.l { left: 16px; transform-origin: left center; }
+.stage .tag.r { right: 16px; transform-origin: right center; }
+.stage .tag.r b { color: var(--gold); font-weight: 600; }
+.stage.lowL .tag.l, .stage.lowR .tag.r { opacity: 0; transform: scale(.85); }
+.divider { position: absolute; top: 0; bottom: 0; left: calc(var(--x) * 1%); width: 44px; margin-left: -22px; z-index: 3; cursor: ew-resize; outline: none; }
+.divider::before { content: ""; position: absolute; top: 0; bottom: 0; left: 21px; width: 2px; background: linear-gradient(180deg, rgba(222,184,110,0), var(--gold) 14%, var(--gold) 86%, rgba(222,184,110,0)); box-shadow: 0 0 18px rgba(222,184,110,.55); }
+/* A spark rides the divider, like the dot on an orchestrator wire. */
+.divider .spark { position: absolute; left: 18px; top: 0; width: 8px; height: 46px; border-radius: 4px; background: radial-gradient(closest-side, #fff4d6, rgba(222,184,110,.0)); opacity: 0; }
+.split.live .divider .spark { animation: spark 3.6s cubic-bezier(.45,0,.55,1) infinite; }
+@keyframes spark { 0% { transform: translateY(-50px); opacity: 0; } 12% { opacity: 1; } 70% { opacity: 1; } 82%, 100% { transform: translateY(var(--h, 600px)); opacity: 0; } }
+.divider .knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; display: grid; place-items: center; background: rgba(11,10,9,.86); border: 1.5px solid var(--gold); color: var(--gold); box-shadow: 0 0 0 6px rgba(222,184,110,.08), 0 8px 24px rgba(0,0,0,.5); transition: transform .2s cubic-bezier(.2,.8,.2,1), background .2s ease; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.divider .knob::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 1px solid rgba(222,184,110,.5); opacity: 0; }
+.split.live .divider .knob::after { animation: ring 2.4s ease-out infinite; }
+@keyframes ring { 0% { transform: scale(.8); opacity: .8; } 100% { transform: scale(1.5); opacity: 0; } }
+.split.dragging .divider .knob, .divider:hover .knob { transform: scale(1.12); background: rgba(222,184,110,.16); }
+.split.dragging .divider .knob::after, .split.touched .divider .knob::after { animation: none; }
+.divider:focus-visible .knob { outline: 2px solid var(--gold); outline-offset: 5px; }
+.splitcap { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 18px 0 0; text-align: left; }
+.splitcap div { transition: opacity .3s ease, transform .45s cubic-bezier(.2,.8,.2,1); }
+.splitcap .r { text-align: right; }
+.splitcap h3 { font-size: clamp(17px, 1.9vw, 21px); margin: 0 0 2px; }
+.splitcap h3 span { font: 600 10.5px var(--mono); letter-spacing: .2em; color: var(--gold); margin-right: 8px; vertical-align: 2px; }
+.splitcap p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.split.leanR .splitcap .l, .split.leanL .splitcap .r { opacity: .35; }
+.split.leanL .splitcap .l { transform: translateX(6px); }
+.split.leanR .splitcap .r { transform: translateX(-6px); }
+.split .filmcap { text-align: center; margin-top: 20px; }
+.filmcap button.linkish { border: 0; background: none; padding: 0; font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--gold); cursor: pointer; }
+@media (max-width: 640px) {
+  .splitcap { grid-template-columns: 1fr; gap: 10px; }
+  .splitcap .r { text-align: left; }
+  .split.leanR .splitcap .l, .split.leanL .splitcap .r { opacity: .45; }
+  .stage .tag { top: 10px; font-size: 9.5px; padding: 4px 8px; }
+  .stage .tag.l { left: 10px; } .stage .tag.r { right: 10px; }
+  .stage .tag.r b { display: none; }
+  .divider .knob { width: 36px; height: 36px; margin: -18px 0 0 -18px; }
+}
+
 /* ---------- sections ---------- */
 section { padding-block: clamp(56px, 8vw, 104px); scroll-margin-top: 70px; position: relative; }
 section.tinted { background: var(--panel); border-block: 1px solid var(--line); }
@@ -138,7 +193,6 @@ h2 { font-size: clamp(32px, 4.4vw, 54px); line-height: 1.05; letter-spacing: -.0
 h3 { font-size: 22px; font-weight: 650; margin: 0 0 10px; color: #EDE3CD; }
 
 /* ---------- boards ---------- */
-#boards .film { margin-top: 0; }
 .bfacts { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px 28px; margin: 34px 0 0; padding: 0; list-style: none; }
 .bfacts li { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line); padding-top: 12px; }
 .bfacts strong { display: block; color: var(--text); font-weight: 650; margin-bottom: 4px; }
@@ -927,10 +981,37 @@ footer.site nav a { color: var(--text); font-size: 14.5px; }
     <div class="heroflags in4">
       <span>OPEN SOURCE · AGPL-3.0</span><span>NO ACCOUNT</span><span>NO TELEMETRY</span><span>YOUR GHOSTTY CONFIG WORKS AS-IS</span>
     </div>
-    <div class="film in4" id="film">
-      <video id="filmvid" src="assets/demo.mp4" poster="assets/img/demo-poster.webp" muted autoplay loop playsinline preload="metadata" tabindex="0"
-        aria-label="A 52-second tour: real Claude Code and Codex sessions in a floating window, the editor following the agent, Mission Control, the review inbox, Visual Fix, a local model chat through Ollama, an agent race, and undoing a turn"></video>
-      <p class="filmcap">52 seconds · real agents, real projects <span class="pausehint" id="pausehint">click to pause</span> <span class="pausehint"><a href="assets/demo.mp4">open the video</a></span></p>
+    <div class="split in4" id="film">
+      <div class="splitbar" role="group" aria-label="Show an edition">
+        <button type="button" data-to="100" aria-pressed="false">CLASSIC</button>
+        <button type="button" data-to="50" aria-pressed="true">BOTH</button>
+        <button type="button" data-to="0" aria-pressed="false">BOARD<span class="new">NEW</span></button>
+      </div>
+      <div class="stage" id="stage">
+        <figure class="side classic">
+          <video id="filmvid" src="assets/demo.mp4" poster="assets/img/demo-poster.webp" muted loop playsinline preload="metadata"
+            aria-label="Classic edition, a 52-second tour: real Claude Code and Codex sessions in a floating window, the editor following the agent, Mission Control, the review inbox, Visual Fix, a local model chat through Ollama, an agent race, and undoing a turn"></video>
+        </figure>
+        <figure class="side board">
+          <video id="boardsvid" src="assets/boards-loop.mp4" poster="assets/img/boards-loop-poster.webp" muted loop playsinline preload="metadata"
+            aria-label="Board edition, a 54-second tour: twelve agent tiles in four projects, flying in to a tile and back out, answering a Claude Code permission prompt, spawning a team from a preset, wiring agents to an orchestrator card, the Mission Map, a web tile, the Agent Map and a kanban card moving to Done"></video>
+        </figure>
+        <span class="tag l" aria-hidden="true">CLASSIC</span>
+        <span class="tag r" aria-hidden="true">BOARD <b>· NEW IN 1.8</b></span>
+        <div class="divider" id="divider" role="slider" tabindex="0" aria-label="Compare Classic and Board: how much of Classic to show"
+          aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" aria-valuetext="Half Classic, half Board">
+          <i class="spark" aria-hidden="true"></i>
+          <span class="knob" aria-hidden="true"><svg width="18" height="12" viewBox="0 0 18 12" fill="none"><path d="M6 1 1 6l5 5M12 1l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </div>
+      </div>
+      <div class="splitcap">
+        <div class="l"><h3><span>CLASSIC</span>Tabs that follow every agent.</h3><p>A sidebar of agents, an editor that types their edits, Mission Control.</p></div>
+        <div class="r"><h3><span>BOARD</span>Every agent, on one board.</h3><p>Every terminal a tile. Zoom out to see them all, wire a team to an orchestrator.</p></div>
+      </div>
+      <p class="filmcap">Pick one when you first open Tellurion · switch any time in Settings → Edition
+        <span class="pausehint"><button type="button" class="linkish" id="pausehint">pause</button></span>
+        <span class="pausehint"><a href="assets/demo.mp4">classic video</a></span>
+        <span class="pausehint"><a href="assets/boards.mp4">board video</a></span></p>
     </div>
   </div>
 </div>
@@ -942,13 +1023,8 @@ footer.site nav a { color: var(--text); font-size: 14.5px; }
     <h2 class="rv">Boards.</h2>
     <p class="section-intro rv" style="--i:1">Your agents, on one board you can see, steer and hand work to.
     Pick <strong>Board</strong> when you first open Tellurion, or any time in <strong>Settings → Edition</strong>.
-    Classic stays the default.</p>
-    <div class="film rv" style="--i:2">
-      <video id="boardsvid" src="assets/boards.mp4" poster="assets/img/boards-poster.webp" muted loop playsinline preload="none" tabindex="0"
-        aria-label="A 54-second tour of Tellurion Boards: twelve agent tiles in four projects, flying in to a tile and back out, answering a Claude Code permission prompt, spawning a team from a preset, wiring agents to an orchestrator card, the Mission Map, a web tile, the Agent Map and a kanban card moving to Done"></video>
-      <p class="filmcap">54 seconds · Claude Code and Codex are real, most background tiles are stand-ins <span class="pausehint" id="boardshint">click to play</span> <span class="pausehint"><a href="assets/boards.mp4">open the video</a></span></p>
-    </div>
-    <ul class="bfacts rv" style="--i:3">
+    Classic stays the default. Drag the slider above to compare.</p>
+    <ul class="bfacts rv" style="--i:2">
       <li><strong>Every terminal is a tile</strong>A full terminal, so Vim and every agent work as in a tab. Zoom, pan, and double-click a tile to fly to it.</li>
       <li><strong>See who needs you</strong>Tile edges breathe while agents work and pulse when they need you. Allow and Deny from the list.</li>
       <li><strong>Spin up a team</strong>Up to 12 agents at once from the Group composer or a preset, with one first task for all of them.</li>
@@ -2510,50 +2586,104 @@ Running the tests…
   }
   } catch (err) { if (window.console && console.error) console.error("select init:", err); }
 
-  /* ---------- the film ---------- */
+  /* ---------- the edition split ---------- */
   try {
-    var film = document.getElementById("filmvid"), hint = document.getElementById("pausehint");
-    if (film) {
-      if (reduced) { film.removeAttribute("autoplay"); film.setAttribute("controls", ""); film.pause(); if (hint) hint.hidden = true; }
-      else {
-        var togglePlay = function () {
-          if (film.paused) { film.play(); if (hint) hint.textContent = "click to pause"; }
-          else { film.pause(); if (hint) hint.textContent = "paused · click to play"; }
-        };
-        film.addEventListener("click", togglePlay);
-        film.addEventListener("keydown", function (e) { if (e.key === " " || e.key === "Enter") { e.preventDefault(); togglePlay(); } });
-        if ("IntersectionObserver" in window) {
-          new IntersectionObserver(function (es) {
-            es.forEach(function (en) { if (!en.isIntersecting) film.pause(); else if (hint && hint.textContent === "click to pause") film.play().catch(function () {}); });
-          }, { threshold: .15 }).observe(film);
+    var split = document.getElementById("film"), stage = document.getElementById("stage"), div = document.getElementById("divider");
+    var vids = [document.getElementById("filmvid"), document.getElementById("boardsvid")];
+    var pbtn = document.getElementById("pausehint"), segs = split ? split.querySelectorAll(".splitbar button") : [];
+    if (split && stage && div) {
+      var x = 50, tgt = 50, anim = 0, wantPlay = !reduced, onScreen = false;
+      var set = function (v) {
+        x = Math.max(0, Math.min(100, v));
+        split.style.setProperty("--x", x.toFixed(2));
+        div.setAttribute("aria-valuenow", Math.round(x));
+        div.setAttribute("aria-valuetext", x > 97 ? "All Classic" : x < 3 ? "All Board" : Math.round(x) + "% Classic, " + Math.round(100 - x) + "% Board");
+        stage.classList.toggle("lowL", x < 14); stage.classList.toggle("lowR", x > 86);
+        split.classList.toggle("leanL", x > 60); split.classList.toggle("leanR", x < 40);
+        for (var k = 0; k < segs.length; k++) segs[k].setAttribute("aria-pressed", Math.abs(+segs[k].dataset.to - x) < 1 ? "true" : "false");
+      };
+      // Glide with a soft overshoot; any touch of the slider cancels it.
+      var glide = function (to, ms, done) {
+        cancelAnimationFrame(anim); tgt = to;
+        if (reduced) { set(to); if (done) done(); return; }
+        var from = x, t0 = performance.now();
+        var ease = function (t) { var c = 1.4; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
+        (function step(now) {
+          var t = Math.min(1, (now - t0) / ms);
+          set(from + (to - from) * ease(t));
+          if (t < 1) anim = requestAnimationFrame(step); else if (done) done();
+        })(t0);
+      };
+      var touched = function () { cancelAnimationFrame(anim); split.classList.add("touched"); };
+      var fromPointer = function (e) { var r = stage.getBoundingClientRect(); return (e.clientX - r.left) / r.width * 100; };
+      var dragging = false, startX = 0, startY = 0, decided = false;
+      stage.addEventListener("pointerdown", function (e) {
+        if (e.button !== 0) return;
+        touched(); dragging = true; decided = e.pointerType === "mouse"; startX = e.clientX; startY = e.clientY;
+        if (decided) { stage.setPointerCapture(e.pointerId); split.classList.add("dragging"); glide(fromPointer(e), 260); }
+      });
+      stage.addEventListener("pointermove", function (e) {
+        if (!dragging) return;
+        if (!decided) {
+          // On touch, only a sideways drag moves the slider; an up-down one scrolls the page.
+          var dx = Math.abs(e.clientX - startX), dy = Math.abs(e.clientY - startY);
+          if (dx < 6 && dy < 6) return;
+          if (dy > dx) { dragging = false; return; }
+          decided = true; stage.setPointerCapture(e.pointerId); split.classList.add("dragging");
         }
-      }
-    }
-  } catch (e) {}
+        cancelAnimationFrame(anim); tgt = fromPointer(e); set(tgt);
+      });
+      var end = function (e) {
+        if (dragging && !decided && e.type === "pointerup") glide(fromPointer(e), 320);
+        dragging = false; split.classList.remove("dragging");
+      };
+      stage.addEventListener("pointerup", end); stage.addEventListener("pointercancel", end);
+      div.addEventListener("keydown", function (e) {
+        var step = e.shiftKey ? 10 : 4, to = null, x = tgt;
+        if (e.key === "ArrowLeft" || e.key === "ArrowDown") to = x - step;
+        else if (e.key === "ArrowRight" || e.key === "ArrowUp") to = x + step;
+        else if (e.key === "Home") to = 0; else if (e.key === "End") to = 100;
+        else if (e.key === "PageDown") to = x - 25; else if (e.key === "PageUp") to = x + 25;
+        if (to === null) return;
+        e.preventDefault(); touched(); glide(Math.max(0, Math.min(100, to)), 220);
+      });
+      for (var k = 0; k < segs.length; k++) segs[k].addEventListener("click", function () { touched(); glide(+this.dataset.to, 700); });
 
-  /* ---------- the boards film: plays only once it's on screen ---------- */
-  try {
-    var bv = document.getElementById("boardsvid"), bh = document.getElementById("boardshint");
-    if (bv) {
-      if (reduced) { bv.setAttribute("controls", ""); if (bh) bh.hidden = true; }
-      else {
-        var bwant = true;
-        var btoggle = function () {
-          bwant = bv.paused;
-          if (bwant) { bv.play().catch(function () {}); } else { bv.pause(); }
-          if (bh) bh.textContent = bwant ? "click to pause" : "paused · click to play";
-        };
-        bv.addEventListener("click", btoggle);
-        bv.addEventListener("keydown", function (e) { if (e.key === " " || e.key === "Enter") { e.preventDefault(); btoggle(); } });
-        if ("IntersectionObserver" in window) {
-          new IntersectionObserver(function (es) {
-            es.forEach(function (en) {
-              if (!en.isIntersecting) bv.pause();
-              else if (bwant) { bv.play().then(function () { if (bh) bh.textContent = "click to pause"; }).catch(function () {}); }
-            });
-          }, { threshold: .35 }).observe(bv);
-        }
-      }
+      var playAll = function () { vids.forEach(function (v) { if (v) v.play().catch(function () {}); }); };
+      var pauseAll = function () { vids.forEach(function (v) { if (v) v.pause(); }); };
+      var syncBtn = function () { if (pbtn) pbtn.textContent = wantPlay ? "pause" : "play"; };
+      if (pbtn) pbtn.addEventListener("click", function () { wantPlay = !wantPlay; syncBtn(); if (wantPlay && onScreen) playAll(); else pauseAll(); });
+      syncBtn();
+      // The spark's run is the stage's height.
+      var size = function () { split.style.setProperty("--h", (stage.clientHeight + 50) + "px"); };
+      size(); window.addEventListener("resize", size);
+
+      var introDone = false;
+      var intro = function () {
+        if (introDone || reduced || split.classList.contains("touched")) return;
+        introDone = true;
+        // Show off both halves once: lean to Classic, sweep across to Board, settle in the middle.
+        setTimeout(function () {
+          if (split.classList.contains("touched")) return;
+          glide(78, 900, function () {
+            if (split.classList.contains("touched")) return;
+            setTimeout(function () { glide(22, 1300, function () {
+              if (split.classList.contains("touched")) return;
+              setTimeout(function () { glide(50, 900); }, 260);
+            }); }, 220);
+          });
+        }, 700);
+      };
+      set(50);
+      if ("IntersectionObserver" in window) {
+        new IntersectionObserver(function (es) {
+          es.forEach(function (en) {
+            onScreen = en.isIntersecting;
+            split.classList.toggle("live", onScreen && !reduced);
+            if (onScreen) { if (wantPlay) playAll(); intro(); } else pauseAll();
+          });
+        }, { threshold: .3 }).observe(stage);
+      } else if (wantPlay) { onScreen = true; playAll(); }
     }
   } catch (e) {}
 
