@@ -187,6 +187,8 @@ private struct OrchestratorPanel: View {
             inputBar.padding(.horizontal, 10).padding(.bottom, 10).padding(.top, 8)
         }
         .background(Extreme.panel)
+        // Start Over empties the log: back to the agents, since there's nothing to show.
+        .onChange(of: brain.log.isEmpty) { empty in if empty { showLog = false } }
     }
 
     // MARK: Top
@@ -389,7 +391,7 @@ private struct OrchestratorPanel: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Extreme.raised.opacity(0.5)))
             .overlay(alignment: .topTrailing) {
-                if !brain.log.isEmpty {
+                if !brain.log.isEmpty || showLog {
                     Button {
                         withAnimation(.easeInOut(duration: 0.15)) { showLog.toggle() }
                     } label: {
