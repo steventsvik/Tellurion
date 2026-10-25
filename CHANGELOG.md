@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **The orchestrator's replies show in full.** Its answers were cut after four lines, and only the last two or three entries stayed. The strip under the agent list now shows the latest entries whole, scrolling once they're taller than it, and a chevron on it opens the whole conversation in place of the list.
+
 ## 1.8.2
 
 A small follow-up to 1.8.1 for the edition switch.
