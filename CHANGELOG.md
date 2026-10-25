@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Switching to Classic keeps the board's drawings, groups and wiring.** Ink drawn on tiles, named groups and orchestrator wiring were dropped when the tiles moved to windows. They stay with the board now, which also stays in your open boards: pick **Board** again and move the terminals back, and each tile returns to its place with its ink, group and wires. Picking Classic in the welcome window no longer puts a terminal window in front of it.
+
 ## 1.8.2
 
 A small follow-up to 1.8.1 for the edition switch.

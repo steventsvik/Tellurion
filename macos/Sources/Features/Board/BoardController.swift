@@ -49,6 +49,11 @@ final class BoardModel: ObservableObject {
     /// Big text on the board, and ink drawn on it.
     @Published var labels: [BoardLabelNode] = []
     @Published var ink: [BoardInkStroke] = []
+    /// Tiles that moved to classic windows with the switch to Classic, and where they were. Not on
+    /// the board until they come back; their ink, groups and wires wait for them (see releaseForClassic).
+    var released: [BoardTile] = []
+    /// The tiles on the board and those away in windows: what ink, groups and wires may refer to.
+    var tileIDs: Set<UUID> { Set(surfaces.map(\.id)).union(released.map(\.id)) }
     /// What a click on the board does (see BoardPalettes).
     @Published var tool: BoardTool = .select
     @Published var inkColor = UserDefaults.standard.integer(forKey: "BoardInkColor") {
@@ -106,6 +111,8 @@ final class BoardController: BaseTerminalController {
     private(set) var lastShown = Date()
     /// Deleting the board: closing its window removes it instead of saving it.
     private var deleteOnClose = false
+    /// Closing for the switch to Classic: the board stays open in its file for the switch back.
+    private var leavingForClassic = false
 
     /// Quitting: windows closing now stay open in the saved board.
     private static var terminating = false
@@ -228,6 +235,7 @@ final class BoardController: BaseTerminalController {
             model.order.append(label.id)
         }
         model.ink = workspace.ink ?? []
+        model.released = (workspace.released ?? []).filter { tile in !workspace.tiles.contains { $0.id == tile.id } }
         model.teams = (workspace.teams ?? []).filter { team in model.cards.contains { $0.id == team.id } }
         model.name = workspace.name
         model.colors = workspace.colors ?? [:]
@@ -376,12 +384,13 @@ final class BoardController: BaseTerminalController {
             BoardPause.queue.async { BoardPause.set(false, surfaces: gone) }
         }
         let anchor = focusedSurface.flatMap { model.frames[$0.id] }
-        for view in surfaces where model.frames[view.id] == nil {
+        for view in surfaces where model.frames[view.id] == nil && !placeIfReturning(view) {
             // A split, a new tab from a keybinding, or an undone close.
             model.frames[view.id] = freeSpot(size: Self.tileSize, near: anchor)
         }
         for view in surfaces where !model.order.contains(view.id) { model.order.append(view.id) }
         let before = Set(from.map(\.id)), after = Set(surfaces.map(\.id))
+        if !model.released.isEmpty { model.released.removeAll { after.contains($0.id) } }
         for id in before.subtracting(after) {
             closedTiles[id] = ClosedTile(
                 group: model.groups.first { $0.tiles.contains(id) },
@@ -419,6 +428,34 @@ final class BoardController: BaseTerminalController {
                   !model.teams[index].members.contains(where: { $0.tile == id }) else { continue }
             model.teams[index].members.append(member)
         }
+    }
+
+    // MARK: Switching editions
+
+    /// Switching to Classic: the tiles leave for windows, and the board closes after. They stay
+    /// with the board as released tiles, so their ink, groups and wires are kept and each comes
+    /// back to its place when its terminal is moved onto this board again. The board stays open
+    /// in its file, so switching back to Board reopens it. Returns the terminals.
+    func releaseForClassic() -> [Ghostty.SurfaceView] {
+        leavingForClassic = true
+        let views = Array(surfaceTree)
+        guard !views.isEmpty else { return [] }
+        let old = Dictionary(workspace.tiles.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        model.released.removeAll { tile in views.contains { $0.id == tile.id } }
+        model.released += views.map { view in
+            BoardTile(id: view.id, frame: model.frames[view.id] ?? .zero, cwd: view.pwd ?? old[view.id]?.cwd, title: model.titles[view.id])
+        }
+        surfaceTree = .init()
+        return views
+    }
+
+    /// A tile back from a classic window takes the place it left (see releaseForClassic).
+    private func placeIfReturning(_ view: Ghostty.SurfaceView) -> Bool {
+        guard let index = model.released.firstIndex(where: { $0.id == view.id }) else { return false }
+        let tile = model.released.remove(at: index)
+        model.frames[view.id] = tile.frame
+        if let title = tile.title, model.titles[view.id] == nil { model.titles[view.id] = title }
+        return true
     }
 
     // MARK: Projects
@@ -572,26 +609,33 @@ final class BoardController: BaseTerminalController {
         // with no terminals leaves nothing to undo, so these moves aren't undoable there.
         for controller in controllers { controller.surfaceTree = .init() }
         let folders = Dictionary(uniqueKeysWithValues: views.map { ($0.id, $0.pwd) })
-        let keyed = views.enumerated().map { (index: $0.offset, view: $0.element, project: BoardProjects.project(of: folders[$0.element.id] ?? nil) ?? "") }
+        for view in views { if let folder = folders[view.id] ?? nil { launchFolders[view.id] = folder } }
+        // Tiles that left with the switch to Classic go back where they were; the rest form a grid.
+        let returning = views.filter(placeIfReturning)
+        var fit = returning.compactMap { model.frames[$0.id] }.reduce(nil as CGRect?) { fit, frame in fit.map { $0.union(frame) } ?? frame }
+        let fresh = views.filter { view in !returning.contains { $0 === view } }
+        let keyed = fresh.enumerated().map { (index: $0.offset, view: $0.element, project: BoardProjects.project(of: folders[$0.element.id] ?? nil) ?? "") }
         let sorted = keyed.sorted { $0.project == $1.project ? $0.index < $1.index : $0.project < $1.project }.map(\.view)
         let n = sorted.count
-        let columns = n <= 3 ? n : Int(ceil(Double(n).squareRoot()))
-        let rows = Int(ceil(Double(n) / Double(columns)))
-        let size = n > 4 ? CGSize(width: 640, height: 400) : Self.tileSize
-        let block = CGSize(width: CGFloat(columns) * size.width + CGFloat(columns - 1) * Self.gap,
-                           height: CGFloat(rows) * size.height + CGFloat(rows - 1) * Self.gap)
-        let existing = model.surfaces.compactMap { model.frames[$0.id] }
-        let all = existing.first.map { first in existing.dropFirst().reduce(first) { $0.union($1) } }
-        let area = freeSpot(size: block, near: all)
-        for (index, view) in sorted.enumerated() {
-            let col = index % columns, row = index / columns
-            model.frames[view.id] = CGRect(x: area.minX + CGFloat(col) * (size.width + Self.gap),
-                                           y: area.minY + CGFloat(row) * (size.height + Self.gap),
-                                           width: size.width, height: size.height)
-            if let folder = folders[view.id] ?? nil { launchFolders[view.id] = folder }
+        if n > 0 {
+            let columns = n <= 3 ? n : Int(ceil(Double(n).squareRoot()))
+            let rows = Int(ceil(Double(n) / Double(columns)))
+            let size = n > 4 ? CGSize(width: 640, height: 400) : Self.tileSize
+            let block = CGSize(width: CGFloat(columns) * size.width + CGFloat(columns - 1) * Self.gap,
+                               height: CGFloat(rows) * size.height + CGFloat(rows - 1) * Self.gap)
+            let existing = model.surfaces.compactMap { model.frames[$0.id] } + (fit.map { [$0] } ?? [])
+            let all = existing.first.map { first in existing.dropFirst().reduce(first) { $0.union($1) } }
+            let area = freeSpot(size: block, near: all)
+            for (index, view) in sorted.enumerated() {
+                let col = index % columns, row = index / columns
+                model.frames[view.id] = CGRect(x: area.minX + CGFloat(col) * (size.width + Self.gap),
+                                               y: area.minY + CGFloat(row) * (size.height + Self.gap),
+                                               width: size.width, height: size.height)
+            }
+            fit = fit.map { $0.union(area) } ?? area
         }
-        insert(sorted, undoAction: n == 1 ? "Move Terminal to Board" : "Move Terminals to Board")
-        zoom(toFit: area, animated: true)
+        insert(returning + sorted, undoAction: views.count == 1 ? "Move Terminal to Board" : "Move Terminals to Board")
+        if let fit { zoom(toFit: fit, animated: true) }
     }
 
     /// The folder new tiles start in, from now on.
@@ -1099,6 +1143,7 @@ final class BoardController: BaseTerminalController {
             return label
         }
         workspace.ink = model.ink.isEmpty ? nil : model.ink
+        workspace.released = model.released.isEmpty ? nil : model.released
         workspace.cards = model.cards.isEmpty ? nil : model.cards.map { card in
             var card = card
             card.frame = model.frames[card.id] ?? card.frame
@@ -1176,7 +1221,7 @@ final class BoardController: BaseTerminalController {
         if deleteOnClose {
             BoardStore.delete(workspace.id)
         } else {
-            if !Self.terminating { workspace.open = false }
+            if !Self.terminating, !leavingForClassic { workspace.open = false }
             saveNow()
         }
         // The board you were on before comes back in its place.

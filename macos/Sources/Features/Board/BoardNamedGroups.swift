@@ -320,7 +320,7 @@ extension BoardController {
 
     /// Closed tiles leave their groups; empty groups go.
     func pruneGroups() {
-        let ids = Set(model.surfaces.map(\.id))
+        let ids = model.tileIDs
         var groups = model.groups
         for index in groups.indices { groups[index].tiles.removeAll { !ids.contains($0) } }
         groups.removeAll { $0.tiles.isEmpty }
