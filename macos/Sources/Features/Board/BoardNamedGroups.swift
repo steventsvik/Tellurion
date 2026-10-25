@@ -242,7 +242,8 @@ extension BoardController {
         guard let window, let group = namedGroup(id) else { return }
         let alert = NSAlert()
         alert.messageText = "Message \(group.name)"
-        alert.informativeText = "Typed into each of its \(group.tiles.count) tiles once its agent is ready."
+        let present = group.tiles.filter { id in model.surfaces.contains { $0.id == id } }.count
+        alert.informativeText = "Typed into each of its \(present) tiles once its agent is ready."
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 340, height: 60))
         field.placeholderString = "What should they do?"
         alert.accessoryView = field
@@ -320,7 +321,7 @@ extension BoardController {
 
     /// Closed tiles leave their groups; empty groups go.
     func pruneGroups() {
-        let ids = Set(model.surfaces.map(\.id))
+        let ids = model.tileIDs
         var groups = model.groups
         for index in groups.indices { groups[index].tiles.removeAll { !ids.contains($0) } }
         groups.removeAll { $0.tiles.isEmpty }

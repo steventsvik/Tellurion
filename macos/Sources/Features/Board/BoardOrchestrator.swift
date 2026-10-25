@@ -141,6 +141,12 @@ final class OrchestratorState: ObservableObject {
     }
 }
 
+/// The height of the activity strip's entries (see OrchestratorPanel.activity).
+private struct ActivityHeight: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 // MARK: - The panel
 
 private struct OrchestratorPanel: View {
@@ -151,6 +157,10 @@ private struct OrchestratorPanel: View {
     @StateObject private var dictation = BoardDictation()
     @State private var text = ""
     @State private var spokenAfter: String?
+    /// The whole conversation in place of the agent list (the chevron on the activity strip).
+    @State private var showLog = false
+    /// What the activity strip's entries measure, so it hugs them up to `activityCap`.
+    @State private var activityHeight: CGFloat = 0
 
     private var snapshot: OrchestratorSnapshot { state.snapshot }
     private var accent: Color { BoardProjects.color(snapshot.color) }
@@ -161,6 +171,8 @@ private struct OrchestratorPanel: View {
             Group {
                 if snapshot.wiring {
                     connectList
+                } else if showLog {
+                    logView
                 } else if snapshot.agents == 0 {
                     emptyState
                 } else {
@@ -175,6 +187,8 @@ private struct OrchestratorPanel: View {
             inputBar.padding(.horizontal, 10).padding(.bottom, 10).padding(.top, 8)
         }
         .background(Extreme.panel)
+        // Start Over empties the log: back to the agents, since there's nothing to show.
+        .onChange(of: brain.log.isEmpty) { empty in if empty { showLog = false } }
     }
 
     // MARK: Top
@@ -329,19 +343,32 @@ private struct OrchestratorPanel: View {
 
     // MARK: Activity
 
+    /// The strip under the list: the latest entries in full, scrolling past this height.
+    private static let activityCap: CGFloat = 170
+
+    /// The latest entries, whole: the orchestrator's answers are never cut. Past
+    /// `activityCap` the strip scrolls, and the chevron shows the whole conversation above.
     @ViewBuilder
     private var activity: some View {
-        let recent = Array(brain.log.suffix(brain.running || brain.busy ? 2 : 3))
-        if !recent.isEmpty || brain.running {
+        let recent = showLog ? [] : Array(brain.log.suffix(brain.running || brain.busy ? 2 : 3))
+        if !recent.isEmpty || brain.running || showLog {
             VStack(alignment: .leading, spacing: 4) {
-                ForEach(recent) { entry in
-                    HStack(alignment: .top, spacing: 6) {
-                        Image(systemName: Self.symbol(entry.kind)).font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(entry.kind == .error ? .red : entry.kind == .say ? accent : Extreme.dim)
-                            .frame(width: 12).padding(.top, 2)
-                        Text(entry.text).font(Extreme.font(11)).foregroundColor(entry.kind == .say ? Extreme.text : Extreme.muted)
-                            .lineLimit(entry.kind == .say ? 4 : 2)
-                            .textSelection(.enabled)
+                if !recent.isEmpty {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(recent) { entry in entryRow(entry).id(entry.id) }
+                            }
+                            .padding(.trailing, 20)
+                            .background(GeometryReader { geometry in
+                                Color.clear.preference(key: ActivityHeight.self, value: geometry.size.height)
+                            })
+                        }
+                        .frame(height: min(activityHeight, Self.activityCap))
+                        .onPreferenceChange(ActivityHeight.self) { activityHeight = $0 }
+                        .onChange(of: brain.log.count) { _ in
+                            if let last = recent.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                        }
                     }
                 }
                 if brain.running {
@@ -353,13 +380,61 @@ private struct OrchestratorPanel: View {
                         Button("Stop") { brain.stop() }
                             .buttonStyle(.plain)
                             .font(Extreme.font(10.5, weight: .semibold)).foregroundColor(Extreme.muted)
+                            .padding(.trailing, recent.isEmpty ? 20 : 0)
                     }
+                } else if showLog {
+                    Text("\(brain.log.count) \(brain.log.count == 1 ? "entry" : "entries")")
+                        .font(Extreme.font(10.5, weight: .medium)).foregroundColor(Extreme.dim)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Extreme.raised.opacity(0.5)))
+            .overlay(alignment: .topTrailing) {
+                if !brain.log.isEmpty || showLog {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { showLog.toggle() }
+                    } label: {
+                        Image(systemName: showLog ? "chevron.down" : "chevron.up")
+                            .font(.system(size: 9, weight: .bold)).foregroundColor(Extreme.muted)
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4).padding(.trailing, 6)
+                    .help(showLog ? "Back to the agents" : "Show the whole conversation")
+                    .accessibilityLabel(showLog ? "Hide conversation" : "Show conversation")
+                }
+            }
             .padding(.horizontal, 10).padding(.top, 8)
+        }
+    }
+
+    /// Every entry since the orchestrator was last reset, newest at the bottom.
+    private var logView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(brain.log) { entry in entryRow(entry).id(entry.id) }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .onAppear { if let last = brain.log.last { proxy.scrollTo(last.id, anchor: .bottom) } }
+            .onChange(of: brain.log.count) { _ in
+                if let last = brain.log.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
+            }
+        }
+    }
+
+    private func entryRow(_ entry: OrchestratorBrain.Entry) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: Self.symbol(entry.kind)).font(.system(size: 9, weight: .semibold))
+                .foregroundColor(entry.kind == .error ? .red : entry.kind == .say ? accent : Extreme.dim)
+                .frame(width: 12).padding(.top, 2)
+            Text(entry.text).font(Extreme.font(11)).foregroundColor(entry.kind == .say ? Extreme.text : Extreme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
         }
     }
 

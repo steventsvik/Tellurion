@@ -48,6 +48,9 @@ struct BoardWorkspace: Codable, Identifiable, Equatable {
     var labels: [BoardLabelNode]?
     /// Ink drawn on the board (see BoardInk).
     var ink: [BoardInkStroke]?
+    /// Tiles that left for classic windows with the switch to Classic, and where they were. Their
+    /// ink, groups and wires stay with the board until they come back (see BoardController.releaseForClassic).
+    var released: [BoardTile]?
     /// Open when Tellurion last quit; reopened at launch.
     var open = true
     var updated = Date()

@@ -314,7 +314,7 @@ extension BoardController {
 
     /// Closed tiles and ungrouped groups come unwired.
     func pruneTeams() {
-        let ids = Set(model.surfaces.map(\.id))
+        let ids = model.tileIDs
         let groups = Set(model.groups.map(\.id))
         let teams = model.teams.map { team -> BoardTeam in
             var team = team
