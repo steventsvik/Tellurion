@@ -52,7 +52,13 @@ The maintainer runs Tellurion all day with live agent sessions.
   maintainer's go-ahead first; they may be using the Mac. Screenshots and recordings
   capture a single window (`screencapture -l <window id>`), never the whole screen.
 - Test-only switches: `GHOSTTY_EXTREME_TEST_TABS=N`, `GHOSTTY_EXTREME_DEMO=<script>`
-  (see `DemoDirector.swift`), `GHOSTTY_EXTREME_TEST_LOG=<file>`.
+  (see `DemoDirector.swift`), `GHOSTTY_EXTREME_TEST_BOARD=<script>` (see `BoardTest.swift`),
+  `GHOSTTY_EXTREME_TEST_LOG=<file>`.
+- Always set `GHOSTTY_EXTREME_TEST_HOME=<empty folder>` on a test copy: it moves
+  `~/.ghostty-extreme` (boards, prompts, hooks) there. Setting `HOME` alone does nothing,
+  since an app's `NSHomeDirectory()` ignores it, and the copy would then write into the
+  maintainer's boards. The copy's preferences are its own bundle id's domain:
+  `defaults write com.steventsvik.ghostty-extreme.test ExtremeEdition board` picks its edition.
 
 ## Performance rules
 
