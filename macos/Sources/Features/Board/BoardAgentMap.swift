@@ -74,7 +74,10 @@ final class AgentMapContent: CardContent {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    deinit { stop() }
+    deinit {
+        stop()
+        if let occlusion { NotificationCenter.default.removeObserver(occlusion) }
+    }
 
     // MARK: Card
 
@@ -116,6 +119,12 @@ final class AgentMapContent: CardContent {
     override func viewDidUnhide() {
         super.viewDidUnhide()
         updateRunning()
+    }
+
+    /// Off the board's screen (the board hides what's out of view) or otherwise hidden.
+    override func viewDidHide() {
+        super.viewDidHide()
+        stop()
     }
 
     /// Follows the agents only while the map can be seen: not in a board out of sight, a
@@ -276,9 +285,10 @@ final class AgentMapContent: CardContent {
 
     override func draw(_ dirtyRect: NSRect) {
         lastDraw = Date()
-        // Being drawn means being seen: a map that missed its window's wake-up starts here.
-        if timer == nil, window?.isVisible == true {
-            DispatchQueue.main.async { [weak self] in self?.start() }
+        // Being drawn usually means being seen: a map that missed its window's wake-up starts
+        // here, under the same rules (a window that reported itself covered stays stopped).
+        if timer == nil {
+            DispatchQueue.main.async { [weak self] in self?.updateRunning() }
         }
         let chrome = Extreme.chrome
         chrome.ink.nsColor.setFill()
