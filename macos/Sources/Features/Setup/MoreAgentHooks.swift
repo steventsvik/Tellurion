@@ -403,12 +403,7 @@ extension HookInstaller {
         let fm = FileManager.default
         do {
             try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if fm.fileExists(atPath: url.path) {
-                let backup = url.deletingLastPathComponent()
-                    .appendingPathComponent("\(url.lastPathComponent).ghostty-extreme-backup-\(AgentTools.timestamp())")
-                try? fm.removeItem(at: backup)
-                try fm.copyItem(at: url, to: backup)
-            }
+            try backUp(url)
             try Data(text.utf8).write(to: url, options: .atomic)
         } catch {
             throw Failure(message: "Couldn't update \(display(link)): \((error as NSError).localizedFailureReason ?? error.localizedDescription)")
@@ -428,12 +423,7 @@ extension HookInstaller {
     private static func writeJSONFile(_ config: [String: Any], to url: URL) throws {
         let fm = FileManager.default
         try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if fm.fileExists(atPath: url.path) {
-            let backup = url.deletingLastPathComponent()
-                .appendingPathComponent("\(url.lastPathComponent).ghostty-extreme-backup-\(AgentTools.timestamp())")
-            try? fm.removeItem(at: backup)
-            try fm.copyItem(at: url, to: backup)
-        }
+        try backUp(url)
         var data = try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         data.append(0x0A)
         try data.write(to: url, options: .atomic)
