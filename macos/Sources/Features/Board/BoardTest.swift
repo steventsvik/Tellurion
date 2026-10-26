@@ -38,6 +38,8 @@ import GhosttyKit
 ///     pause|resume [n…] | procs <n>  pause tiles; log tile n's process states
 ///     orchnew [n…] | orchconnect | orchdone | orchclick <n> | orchgroup <n> | orchstate
 ///     orchcanned <reply JSON> | orchcmd <text> | orchclose    orchestrators (see BoardTeams)
+///     pasteprobe                 ⌘V in the first orchestrator's command field; logs what took it
+///     imageprobe <file.png>      the picture, as pasted into that field; orchsend <text> sends with it
 ///     minsize                    log the window's minimum and fitting sizes
 @MainActor
 enum BoardTest {
@@ -638,6 +640,56 @@ enum BoardTest {
         case "orchclose":
             guard let team = controller.model.teams.first else { return }
             controller.removeCard(team.id)
+        case "pasteprobe":
+            // pasteprobe: ⌘V in the first orchestrator's command field, as a key press; logs whether
+            // the field's editor got the paste, what has the keyboard, and which menu items own ⌘V.
+            guard let team = controller.model.teams.first, let view = controller.cardView(team.id) else { return }
+            NSApp.activate(ignoringOtherApps: true)
+            view.beginTyping()
+            let before = BoardFieldEditor.pastes
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { MainActor.assumeIsolated { keys("cmd+v") } }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                MainActor.assumeIsolated {
+                    let field = view.descendants.compactMap { $0 as? NSTextField }.first { $0.isEditable }
+                    let window = controller.window
+                    let pressed = BoardFieldEditor.pastes - before
+                    // The same press, asked of each tile directly (a tile used to take it).
+                    let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+                                                 timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window?.windowNumber ?? 0,
+                                                 context: nil, characters: "v", charactersIgnoringModifiers: "v", isARepeat: false, keyCode: 9)
+                    let tiles = event.map { press in controller.model.surfaces.map { $0.performKeyEquivalent(with: press) } } ?? []
+                    func items(_ menu: NSMenu) -> [NSMenuItem] { menu.items.flatMap { [$0] + ($0.submenu.map(items) ?? []) } }
+                    let owners = (NSApp.mainMenu.map(items) ?? []).filter { $0.keyEquivalent == "v" && $0.keyEquivalentModifierMask == .command }
+                    // What the Paste item sends, sent to the first responder here (the app may not be active).
+                    let sent = NSApp.sendAction(#selector(NSText.paste(_:)), to: window?.firstResponder, from: nil)
+                    let direct = BoardFieldEditor.pastes - before - pressed
+                    DemoDirector.note("pasteprobe pasted=\(pressed) tiles=\(tiles) length=\(field?.stringValue.count ?? -1) "
+                                      + "direct=\(direct) sent=\(sent) "
+                                      + "responder=\(window?.firstResponder.map { "\(type(of: $0))" } ?? "-") "
+                                      + "key=\(window?.isKeyWindow ?? false) active=\(NSApp.isActive) "
+                                      + "cmdV=\(owners.map { "\"\($0.title)\" enabled=\($0.isEnabled)" }) images=\(orchestratorImages(view).count)")
+                }
+            }
+        case "imageprobe":
+            // imageprobe <file.png>: the picture, as pasted into the first orchestrator's command field.
+            guard let team = controller.model.teams.first, let view = controller.cardView(team.id),
+                  let field = view.descendants.compactMap({ $0 as? BoardAssistantTextField }).first,
+                  let image = NSImage(contentsOfFile: args.joined(separator: " ")) else {
+                DemoDirector.note("imageprobe: no orchestrator field or picture")
+                return
+            }
+            let pasteboard = NSPasteboard(name: NSPasteboard.Name("com.steventsvik.ghostty-extreme.test-images"))
+            pasteboard.clearContents()
+            pasteboard.writeObjects([image])
+            let attached = field.attach(from: pasteboard)
+            DemoDirector.note("imageprobe attached=\(attached) images=\(orchestratorImages(view).map { "\(Int($0.pixelSize.width))x\(Int($0.pixelSize.height))" })")
+        case "orchsend":
+            // orchsend <text>: the first orchestrator's command, with the pictures pasted so far.
+            guard let team = controller.model.teams.first, let view = controller.cardView(team.id),
+                  let content = view.descendants.compactMap({ $0 as? OrchestratorContent }).first else { return }
+            let images = content.state.images
+            content.state.images = []
+            controller.orchestratorBrain(team.id).command(args.joined(separator: " "), images: images)
         case "agentconfirm":
             controller.assistant.confirm()
         case "agentcancel":
@@ -861,6 +913,10 @@ enum BoardTest {
                                                isARepeat: false, keyCode: code) else { continue }
             NSApp.postEvent(event, atStart: false)
         }
+    }
+
+    private static func orchestratorImages(_ view: BoardCardView) -> [ImageAttachment] {
+        view.descendants.compactMap { $0 as? OrchestratorContent }.first?.state.images ?? []
     }
 
     private static func openTool(_ name: String, on controller: BoardController) {
