@@ -25,13 +25,19 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: SwiftLint
-        working-directory: macos
+        # The runner image doesn't carry SwiftLint; this is the release used locally.
+        env:
+          SWIFTLINT_VERSION: 0.65.1
         run: |
-          swiftlint version
-          swiftlint lint --quiet
+          curl -sSL --retry 3 -o "$RUNNER_TEMP/swiftlint.zip" \
+            "https://github.com/realm/SwiftLint/releases/download/$SWIFTLINT_VERSION/portable_swiftlint.zip"
+          mkdir -p "$RUNNER_TEMP/swiftlint"
+          unzip -q -o "$RUNNER_TEMP/swiftlint.zip" -d "$RUNNER_TEMP/swiftlint"
+          "$RUNNER_TEMP/swiftlint/swiftlint" version
+          cd macos && "$RUNNER_TEMP/swiftlint/swiftlint" lint --quiet
 
       - name: Editor scripts
         run: node --check macos/EditorWeb/*.js
@@ -61,7 +67,7 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/.zig-global-cache
       ZIG_LOCAL_CACHE_DIR: ${{ github.workspace }}/.zig-cache
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: mlugg/setup-zig@v2
         with:
@@ -78,6 +84,16 @@ jobs:
           key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-zig0.15.2-${{ hashFiles('build.zig', 'build.zig.zon', 'src/**', 'pkg/**', 'include/**', 'vendor/**') }}
           restore-keys: |
             ghosttykit-${{ runner.os }}-${{ runner.arch }}-zig0.15.2-
+
+      - name: Toolchain
+        run: |
+          xcode-select -p
+          xcrun --sdk macosx --show-sdk-path
+          xcrun --sdk macosx --show-sdk-version
+          head -n 3 "$(xcrun --sdk macosx --show-sdk-path)/usr/lib/libSystem.tbd"
+          ls /Applications | grep -i xcode || true
+          zig version
+          zig env
 
       - name: Build the Zig core
         if: steps.core.outputs.cache-hit != 'true'
