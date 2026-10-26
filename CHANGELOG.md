@@ -6,6 +6,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 
 ## Unreleased
 
+- **Setup's changes to your files are easier to undo, and failures aren't quiet.** Every rewrite of an agent's settings file, and now of `~/.zshrc` too, leaves a fresh dated backup beside it; two changes in the same second no longer overwrite each other's copy. Settings → Agents → **Remove…** takes its lines out of `~/.zshrc` even after you've re-indented or re-spaced them, and says so when the only line it finds is one it didn't write, instead of silently leaving it. The README's Security and privacy section now lists every file Tellurion writes outside itself and how to undo each one. A board that couldn't be saved, hooks that couldn't be refreshed after an update, and a system command that couldn't start are now reported in Console.app (subsystem `com.steventsvik.ghostty-extreme`) instead of being ignored.
 - **The shipped app carries no test switches.** The scripted test and demo hooks that drive test copies (`GHOSTTY_EXTREME_TEST_*`, `GHOSTTY_EXTREME_DEMO`) are left out of release builds, and the release check confirms it. `GHOSTTY_EXTREME_TEST_HOME`, which keeps a test copy's files apart from yours, keeps working.
 
 ## 1.8.4

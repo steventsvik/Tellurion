@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import OSLog
 
 /// Installs the agent hooks the app carries (in `Contents/Resources/agent-hooks`) and
 /// connects them to Claude Code, Codex and zsh. Every config file is backed up next to
@@ -9,6 +10,8 @@ enum HookInstaller {
         let message: String
         var errorDescription: String? { message }
     }
+
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "Setup")
 
     /// The home folder. Test-only: `GHOSTTY_EXTREME_TEST_HOME` points the installer and the
     /// setup check at a scratch folder instead of the user's real configs.
@@ -95,7 +98,12 @@ enum HookInstaller {
     static func refreshIfInstalled() {
         guard Bundle.main.bundleIdentifier == "com.steventsvik.ghostty-extreme",
               filesState() == .outdated else { return }
-        try? installFiles()
+        do {
+            try installFiles()
+        } catch {
+            // The older hooks keep working; the Setup Check offers a repair.
+            log.error("Couldn't refresh the installed agent hooks: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private static func copy(_ source: URL, to destination: URL, executable: Bool) throws {
@@ -149,15 +157,29 @@ enum HookInstaller {
         let url = link.resolvingSymlinksInPath()
         let fm = FileManager.default
         try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if fm.fileExists(atPath: url.path) {
-            let backup = url.deletingLastPathComponent()
-                .appendingPathComponent("\(url.lastPathComponent).ghostty-extreme-backup-\(AgentTools.timestamp())")
-            try? fm.removeItem(at: backup)
-            try fm.copyItem(at: url, to: backup)
-        }
+        try backUp(url)
         var data = try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         data.append(0x0A)
         try data.write(to: url, options: .atomic)
+    }
+
+    /// Copies the file, when there is one, to `<name>.ghostty-extreme-backup-<timestamp>` beside
+    /// it before it's rewritten. Every write gets its own copy: a backup from the same second
+    /// is kept, and the new one gets a `-2`, `-3`… suffix.
+    @discardableResult
+    static func backUp(_ url: URL, stamp: String = AgentTools.timestamp()) throws -> URL? {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return nil }
+        let folder = url.deletingLastPathComponent()
+        let base = "\(url.lastPathComponent).ghostty-extreme-backup-\(stamp)"
+        var backup = folder.appendingPathComponent(base)
+        var n = 2
+        while fm.fileExists(atPath: backup.path) {
+            backup = folder.appendingPathComponent("\(base)-\(n)")
+            n += 1
+        }
+        try fm.copyItem(at: url, to: backup)
+        return backup
     }
 
     // MARK: Everything at once
@@ -192,16 +214,31 @@ enum HookInstaller {
     static func addShellIntegration() throws {
         let text = (try? String(contentsOf: zshrc, encoding: .utf8)) ?? ""
         guard !HookConfig.zshrcHasIntegration(text) else { return }
+        // A symlinked .zshrc (a dotfiles repo) stays a link: write to what it points at.
+        let url = zshrc.resolvingSymlinksInPath()
+        try backUp(url)
         // Appended, not rewritten: the rest of the file is untouched.
-        let handle = try FileHandle(forWritingTo: ensureExists(zshrc))
+        let handle = try FileHandle(forWritingTo: ensureExists(url))
         defer { try? handle.close() }
         try handle.seekToEnd()
         try handle.write(contentsOf: Data(HookConfig.zshrcBlock.utf8))
     }
 
+    /// Takes our lines out of ~/.zshrc, spacing changes and all. A line that mentions the
+    /// script but isn't ours (the user's own `source`, say) is left alone, and that's an
+    /// error rather than a silent no-op, so "Remove" never claims more than it did.
     static func removeShellIntegration() throws {
-        guard let text = try? String(contentsOf: zshrc, encoding: .utf8), text.contains(HookConfig.zshrcBlock) else { return }
-        try HookConfig.zshrcRemovingIntegration(text).write(to: zshrc, atomically: true, encoding: .utf8)
+        // A symlinked .zshrc (a dotfiles repo) stays a link: rewrite what it points at.
+        let url = zshrc.resolvingSymlinksInPath()
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let text = try String(contentsOf: url, encoding: .utf8)
+        guard HookConfig.zshrcHasIntegration(text) else { return }
+        let cleaned = HookConfig.zshrcRemovingIntegration(text)
+        guard cleaned != text else {
+            throw Failure(message: "\(display(zshrc)) loads ghostty-extreme.zsh on a line Tellurion didn't write, so it was left alone. Remove that line by hand.")
+        }
+        try backUp(url)
+        try cleaned.write(to: url, atomically: true, encoding: .utf8)
     }
 
     private static func ensureExists(_ url: URL) -> URL {

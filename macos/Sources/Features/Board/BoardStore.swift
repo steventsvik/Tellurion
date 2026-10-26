@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import OSLog
 
 /// One terminal on a board: where it sits, and what to start in it again after a relaunch.
 struct BoardTile: Codable, Identifiable, Equatable {
@@ -63,6 +64,8 @@ struct BoardWorkspace: Codable, Identifiable, Equatable {
 }
 
 enum BoardStore {
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "Board")
+
     static var folder: URL { AgentTools.root.appendingPathComponent("boards", isDirectory: true) }
 
     private static func file(_ id: UUID) -> URL { folder.appendingPathComponent(id.uuidString + ".json") }
@@ -82,9 +85,14 @@ enum BoardStore {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(workspace) else { return }
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try? data.write(to: file(workspace.id), options: .atomic)
+        do {
+            let data = try encoder.encode(workspace)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: file(workspace.id), options: .atomic)
+        } catch {
+            // The board stays open with its last saved state on disk; the next change tries again.
+            log.error("Couldn't save board \(workspace.id.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     static func delete(_ id: UUID) {
