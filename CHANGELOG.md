@@ -7,10 +7,15 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 ## Unreleased
 
 - **Paste works in the orchestrator's command field, pictures included.** ⌘V in an orchestrator's command (and in the board's own bar) did nothing, for two reasons: the Edit menu's Paste and Copy had no shortcut, so ⌘V reached no text field, and a terminal on the board that had never had the keyboard still answered to ⌘V as if it had. Edit → Paste and Copy show ⌘V and ⌘C again, only the terminal you're typing in takes them, and text pastes where you're typing. A picture on the clipboard (a screenshot, a copied image, an image file) pastes as a thumbnail under the orchestrator's field and goes with your command: the orchestrator sees it, and an agent you @mention is told where it's saved.
+- **"Codex isn't connected" can be turned off.** A `~/.codex` folder without the codex command (an editor extension leaves one, so does trying Codex once) made the Setup Check, the sidebar and the welcome window flag Codex in red for good, even for people who don't use it. The Setup Check row now has **I don't use Codex** beside **Connect Codex**, and leaving **Connect Codex** unchecked in the welcome window means the same thing. A skipped agent shows as a quiet note with a way back, and `tellurion doctor` leaves it out too. The same goes for Claude Code.
+
+## 1.8.3
+
+Three fixes for Boards: the orchestrator's replies, the switch back to Classic, and the Agent Map.
+
 - **The orchestrator's replies show in full.** Its answers were cut after four lines, and only the last two or three entries stayed. The strip under the agent list now shows the latest entries whole, scrolling once they're taller than it, and a chevron on it opens the whole conversation in place of the list.
 - **Switching to Classic keeps the board's drawings, groups and wiring.** Ink drawn on tiles, named groups and orchestrator wiring were dropped when the tiles moved to windows. They stay with the board now, which also stays in your open boards: pick **Board** again and move the terminals back, and each tile returns to its place with its ink, group and wires. Picking Classic in the welcome window no longer puts a terminal window in front of it.
-- **The Agent Map always wakes up.** A map could sit at "0 agents" while agents worked in its project, with no dots moving: it only started following agents once its window reported being visible, and a window just shown can report that late or not at all for that map. A map on a visible window now starts right away, and one that's being drawn starts itself if it missed the signal.
-- **"Codex isn't connected" can be turned off.** A `~/.codex` folder without the codex command (an editor extension leaves one, so does trying Codex once) made the Setup Check, the sidebar and the welcome window flag Codex in red for good, even for people who don't use it. The Setup Check row now has **I don't use Codex** beside **Connect Codex**, and leaving **Connect Codex** unchecked in the welcome window means the same thing. A skipped agent shows as a quiet note with a way back, and `tellurion doctor` leaves it out too. The same goes for Claude Code.
+- **The Agent Map always wakes up.** A map could sit at "0 agents" with no dots moving while agents worked in its project: it only started following them once its window said it was visible, which a window just shown can report late or never. A map on a visible window now starts right away, and one being drawn starts itself if it missed the signal.
 
 ## 1.8.2
 
