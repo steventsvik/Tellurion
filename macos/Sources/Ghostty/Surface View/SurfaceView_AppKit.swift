@@ -1250,7 +1250,12 @@ extension Ghostty {
             // Besides C-/, its important we don't process key equivalents if unfocused
             // because there are other event listeners for that (i.e. AppDelegate's
             // local event handler).
-            if !focused {
+            //
+            // Being focused isn't enough: a surface starts out focused and only hears
+            // otherwise when it resigns first responder, so a surface that never had the
+            // keyboard (a board tile beside the one in use) would take ⌘V from the field
+            // that does. The keyboard has to be here.
+            if !focused || window?.firstResponder !== self {
                 return false
             }
 

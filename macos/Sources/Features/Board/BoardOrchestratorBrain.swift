@@ -16,6 +16,8 @@ final class OrchestratorBrain: ObservableObject {
         let id = UUID()
         let kind: Kind
         let text: String
+        /// Pictures that went with it.
+        var images = 0
     }
 
     /// What happened to a wired agent since the last turn.
@@ -59,6 +61,8 @@ final class OrchestratorBrain: ObservableObject {
     private var pass = 0
     /// Wired tiles found running an agent that hasn't reported a status (see BoardPause.agents).
     private(set) var detected: Set<UUID> = []
+    /// Pictures pasted with the command, for its first turn.
+    private var pictures: [ImageAttachment] = []
     /// Tests: replies to use instead of running the engine, in order.
     var canned: [OrchestratorReply] = []
 
@@ -82,20 +86,24 @@ final class OrchestratorBrain: ObservableObject {
 
     // MARK: Commands
 
-    /// Your command: to the agents you @mentioned as it is, or to the brain.
-    func command(_ raw: String) {
+    /// Your command: to the agents you @mentioned as it is, or to the brain. Pictures pasted
+    /// with it go to the brain in its prompt; an @mentioned agent is told where they're saved.
+    func command(_ raw: String, images: [ImageAttachment] = []) {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let controller, !text.isEmpty else { return }
         let (mentioned, rest) = controller.mentions(in: text)
         if !mentioned.isEmpty {
             guard !rest.isEmpty else { return }
-            for surface in mentioned { controller.deliverToAgent(rest, to: surface, label: "From you") }
-            add(.user, text)
+            let files = ImageAttachment.save(images)
+            let message = files.isEmpty ? rest : rest + "\n\n" + files.map { "Image: \($0.path)" }.joined(separator: "\n")
+            for surface in mentioned { controller.deliverToAgent(message, to: surface, label: "From you") }
+            add(.user, text, images: images.count)
             add(.action, "Sent to " + ListFormatter.localizedString(byJoining: mentioned.map { controller.tileLabel($0) }))
             return
         }
         stop(quietly: true)
-        add(.user, text)
+        pictures = images
+        add(.user, text, images: images.count)
         goal = text
         if controller.orchestrator(id)?.goal != text {
             controller.model.teams = controller.model.teams.map { team in
@@ -223,6 +231,9 @@ final class OrchestratorBrain: ObservableObject {
                 return line
             }.joined(separator: "\n")
         }
+        let pictures = self.pictures
+        self.pictures = []
+        if !pictures.isEmpty { body += "\n\nThe user attached \(pictures.count) image\(pictures.count == 1 ? "" : "s") to this command." }
         DemoDirector.note("orchestrator turn \(turn): \(body.replacingOccurrences(of: "\n", with: " / "))")
         if !canned.isEmpty {
             let reply = canned.removeFirst()
@@ -239,12 +250,15 @@ final class OrchestratorBrain: ObservableObject {
             return
         }
         let prompt = HeadlessAgent.prompt(engine, instructions: OrchestratorPrompt.instructions, session: session, body: body)
+        // Saved for both: Codex reads the files; for Claude Code they switch its prompt to a stream.
+        let files = ImageAttachment.save(pictures)
         let arguments = HeadlessAgent.arguments(engine, instructions: OrchestratorPrompt.instructions,
-                                                schema: OrchestratorPrompt.schema, session: session)
+                                                schema: OrchestratorPrompt.schema, session: session, images: files)
+        let input = HeadlessAgent.input(engine, prompt: prompt, images: pictures.map(\.png))
         let run = HeadlessAgent.Run()
         self.run = run
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = HeadlessAgent.run(run, tool: tool, arguments: arguments, input: prompt)
+            let result = HeadlessAgent.run(run, tool: tool, arguments: arguments, input: input)
             DispatchQueue.main.async {
                 guard let self, self.run === run else { return }
                 self.run = nil
@@ -317,8 +331,8 @@ final class OrchestratorBrain: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
     }
 
-    func add(_ kind: Entry.Kind, _ text: String) {
-        log.append(Entry(kind: kind, text: text))
+    func add(_ kind: Entry.Kind, _ text: String, images: Int = 0) {
+        log.append(Entry(kind: kind, text: text, images: images))
         if log.count > 80 { log.removeFirst(log.count - 80) }
         DemoDirector.note("orchestrator[\(controller?.orchestratorName(id) ?? "")] \(kind): \(text.replacingOccurrences(of: "\n", with: " / "))")
     }

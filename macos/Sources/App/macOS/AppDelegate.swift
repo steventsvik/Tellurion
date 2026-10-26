@@ -1246,8 +1246,15 @@ extension AppDelegate {
 
         syncMenuShortcut(config, action: "undo", menuItem: self.menuUndo)
         syncMenuShortcut(config, action: "redo", menuItem: self.menuRedo)
-        syncMenuShortcut(config, action: "copy_to_clipboard", menuItem: self.menuCopy)
-        syncMenuShortcut(config, action: "paste_from_clipboard", menuItem: self.menuPaste)
+        // Copy and Paste keep ⌘C and ⌘V when the config has nothing to show for them, which is
+        // the default: their bindings are performable (the terminal passes ⌘C on when there's no
+        // selection), and the config's reverse lookup leaves performable bindings out, so the
+        // items came up with no shortcut and ⌘V reached no text field (an orchestrator's command,
+        // the board's bar). A focused terminal still sees its own bindings before the menu does.
+        syncMenuShortcut(config, action: "copy_to_clipboard", menuItem: self.menuCopy,
+                         fallback: KeyboardShortcut("c", modifiers: .command))
+        syncMenuShortcut(config, action: "paste_from_clipboard", menuItem: self.menuPaste,
+                         fallback: KeyboardShortcut("v", modifiers: .command))
         syncMenuShortcut(config, action: "paste_from_selection", menuItem: self.menuPasteSelection)
         syncMenuShortcut(config, action: "select_all", menuItem: self.menuSelectAll)
         syncMenuShortcut(config, action: "start_search", menuItem: self.menuFind)
@@ -1295,10 +1302,11 @@ extension AppDelegate {
 
     /// Syncs a single menu shortcut for the given action. The action string is the same
     /// action string used for the Ghostty configuration.
-    private func syncMenuShortcut(_ config: Ghostty.Config, action: String, menuItem: NSMenuItem?) {
+    private func syncMenuShortcut(_ config: Ghostty.Config, action: String, menuItem: NSMenuItem?,
+                                  fallback: KeyboardShortcut? = nil) {
         guard let menu = menuItem else { return }
 
-        guard let shortcut = config.keyboardShortcut(for: action) else {
+        guard let shortcut = config.keyboardShortcut(for: action) ?? fallback else {
             // No shortcut, clear the menu item
             menu.keyEquivalent = ""
             menu.keyEquivalentModifierMask = []
