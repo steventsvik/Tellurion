@@ -61,7 +61,10 @@ jobs:
 
   build-and-test:
     name: Build and test the app
-    runs-on: macos-26
+    # The Xcode 27 image: the app's Swift needs its compiler (Xcode 26's gives up
+    # type-checking one expression), and Zig 0.15 links against its SDK. On the macOS 26
+    # image, Zig links against the SDKs of Xcode 26.0 to 26.3 only, not 26.4 and later.
+    runs-on: xcode-27
     timeout-minutes: 120
     env:
       ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/.zig-global-cache
@@ -87,29 +90,12 @@ jobs:
 
       - name: Toolchain
         run: |
-          xcode-select -p
-          xcrun --sdk macosx --show-sdk-path
+          xcodebuild -version
           xcrun --sdk macosx --show-sdk-version
-          head -n 3 "$(xcrun --sdk macosx --show-sdk-path)/usr/lib/libSystem.tbd"
-          ls /Applications | grep -i xcode || true
           zig version
-          zig env
-
-      - name: Which SDKs Zig can link against
-        run: |
-          printf 'const std = @import("std");\npub fn main() void { std.debug.print("hi\\n", .{}); }\n' > "$RUNNER_TEMP/hello.zig"
-          for x in /Applications/Xcode_26.*.app; do
-            if DEVELOPER_DIR="$x/Contents/Developer" zig build-exe "$RUNNER_TEMP/hello.zig" -femit-bin="$RUNNER_TEMP/hello" >/dev/null 2>&1; then
-              echo "ok    $x ($(DEVELOPER_DIR="$x/Contents/Developer" xcrun --sdk macosx --show-sdk-version))"
-            else
-              echo "fails $x ($(DEVELOPER_DIR="$x/Contents/Developer" xcrun --sdk macosx --show-sdk-version))"
-            fi
-          done
 
       - name: Build the Zig core
         if: steps.core.outputs.cache-hit != 'true'
-        env:
-          DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
         run: zig build -Doptimize=ReleaseFast -Dxcframework-target=native -Demit-macos-app=false
 
       - name: Build the app
