@@ -135,8 +135,9 @@ rm -rf macos/build/ReleaseLocal/Ghostty.app \
 # The hooks folder is copied into the app whole: Python's caches from running the scripts
 # locally (ignored by git) would ship, with home-folder paths in them.
 rm -rf agent-hooks/__pycache__
+# TELLURION_TEST_HOOKS= : the test and demo switches (TestHooks.swift) stay out of the release.
 (cd macos && xcodebuild -project Ghostty.xcodeproj -scheme Ghostty -configuration ReleaseLocal \
-  SYMROOT="$PWD/build" ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build > $OUT/xcode.log 2>&1) \
+  SYMROOT="$PWD/build" ARCHS=arm64 ONLY_ACTIVE_ARCH=YES TELLURION_TEST_HOOKS= build > $OUT/xcode.log 2>&1) \
   || { grep -E "error:" $OUT/xcode.log | head -10; fail "app build failed (log: $OUT/xcode.log)"; }
 pass "app"
 LINT=$(cd macos && swiftlint lint --quiet 2>/dev/null | grep -c ' error: ')
@@ -164,6 +165,12 @@ find $APP -type f -perm +111 -exec sh -c 'file "$1" | grep -q Mach-O && strip -S
 LEAKS=$(LC_ALL=C grep -rl -a "/Users/$USER" $APP | wc -l | xargs)
 [[ $LEAKS == 0 ]] || { LC_ALL=C grep -rl -a "/Users/$USER" $APP | head -5; fail "$LEAKS files in the app contain your home path"; }
 pass "no home-folder paths in the app"
+# The test and demo switches were compiled out above; the binary shows whether that held.
+# GHOSTTY_EXTREME_TEST_HOME is the one that stays: the launch test below and test copies need it.
+BIN=$APP/Contents/MacOS/ghostty
+! LC_ALL=C grep -a -q -E 'GHOSTTY_EXTREME_(TEST_TABS|TEST_BOARD|TEST_LOG|DEMO)' $BIN || fail "the app contains test hooks (built with TELLURION_TEST_HOOKS set)"
+LC_ALL=C grep -a -q 'GHOSTTY_EXTREME_TEST_HOME' $BIN || fail "the app lost GHOSTTY_EXTREME_TEST_HOME, which test copies and the launch test need"
+pass "no test or demo switches in the app (GHOSTTY_EXTREME_TEST_HOME kept)"
 # Ghostty's icons are its trademark; the only icon file in the app is Tellurion's.
 ICONS=$(cd $APP/Contents/Resources && ls *.icns(N) | grep -vx Tellurion.icns | xargs)
 [[ -z $ICONS ]] || fail "the app contains other icons: $ICONS"

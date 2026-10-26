@@ -313,15 +313,7 @@ private final class EditorFileBridge: NSObject, WKScriptMessageHandlerWithReply 
         if op == "log" {
             let line = "[editor] \(body["message"] ?? "")"
             NSLog("%@", line)
-            if let path = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_LOG"],
-               let handle = FileHandle(forWritingAtPath: path) ?? {
-                   FileManager.default.createFile(atPath: path, contents: nil)
-                   return FileHandle(forWritingAtPath: path)
-               }() {
-                handle.seekToEndOfFile()
-                handle.write((line + "\n").data(using: .utf8)!)
-                handle.closeFile()
-            }
+            TestHooks.note(line)
             replyHandler(true, nil)
             return
         }

@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **The shipped app carries no test switches.** The scripted test and demo hooks that drive test copies (`GHOSTTY_EXTREME_TEST_*`, `GHOSTTY_EXTREME_DEMO`) are left out of release builds, and the release check confirms it. `GHOSTTY_EXTREME_TEST_HOME`, which keeps a test copy's files apart from yours, keeps working.
+
 ## 1.8.4
 
 A small follow-up to 1.8.3: paste in the orchestrator, and a way to tell the Setup Check you don't use Codex.

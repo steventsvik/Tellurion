@@ -53,9 +53,9 @@ final class WindowMotion: ObservableObject {
 }
 
 /// Test hook: `GHOSTTY_EXTREME_TEST_NOANIM=comet,spinner,bar,dot,film,bracket` turns those off, to
-/// measure what each costs the window server.
+/// measure what each costs the window server. Empty in release builds (see `TestHooks`).
 enum MotionTest {
-    static let off = Set((ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_NOANIM"] ?? "").split(separator: ",").map(String.init))
+    static let off = TestHooks.motionOff
 }
 
 /// Frame rate for the chrome's smooth motion. At the display's full 120 Hz, a sweeping bar
