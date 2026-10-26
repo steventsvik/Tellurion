@@ -1057,17 +1057,20 @@ final class BoardController: BaseTerminalController {
         guard let fit = BoardCamera.fit(rect, in: size, covered: assistantBarHeight,
                                         zooms: canvas.minMagnification...canvas.maxMagnification,
                                         board: Self.boardSize) else { return }
-        // The board point that ends up in the middle of the view.
-        let center = CGPoint(x: fit.origin.x + size.width / fit.zoom / 2, y: fit.origin.y + size.height / fit.zoom / 2)
+        // What the view shows afterwards, in board points. Fitting that rect sets the zoom and
+        // scrolls there in one go; setMagnification(_:centeredAt:) would only zoom around the
+        // point where it already is, and not move at all when the zoom is the same.
+        let target = CGRect(origin: fit.origin, size: CGSize(width: size.width / fit.zoom, height: size.height / fit.zoom))
         if animated {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.3
-                canvas.animator().setMagnification(fit.zoom, centeredAt: center)
+                context.allowsImplicitAnimation = true
+                canvas.animator().magnify(toFit: target)
             } completionHandler: { [weak self] in
                 self?.zoomDidSettle()
             }
         } else {
-            canvas.setMagnification(fit.zoom, centeredAt: center)
+            canvas.magnify(toFit: target)
             zoomDidSettle()
         }
     }
