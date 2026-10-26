@@ -4,9 +4,9 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
-## 1.9.0
+## 1.8.4
 
-Pictures for the orchestrator, and a way to tell the Setup Check you don't use Codex.
+A small follow-up to 1.8.3: paste in the orchestrator, and a way to tell the Setup Check you don't use Codex.
 
 - **Paste works in the orchestrator's command field, pictures included.** ⌘V in an orchestrator's command (and in the board's own bar) did nothing, for two reasons: the Edit menu's Paste and Copy had no shortcut, so ⌘V reached no text field, and a terminal on the board that had never had the keyboard still answered to ⌘V as if it had. Edit → Paste and Copy show ⌘V and ⌘C again, only the terminal you're typing in takes them, and text pastes where you're typing. A picture on the clipboard (a screenshot, a copied image, an image file) pastes as a thumbnail under the orchestrator's field and goes with your command: the orchestrator sees it, and an agent you @mention is told where it's saved.
 - **"Codex isn't connected" can be turned off.** A `~/.codex` folder without the codex command (an editor extension leaves one, so does trying Codex once) made the Setup Check, the sidebar and the welcome window flag Codex in red for good, even for people who don't use it. The Setup Check row now has **I don't use Codex** beside **Connect Codex**, and leaving **Connect Codex** unchecked in the welcome window means the same thing. A skipped agent shows as a quiet note with a way back, and `tellurion doctor` leaves it out too. The same goes for Claude Code.
