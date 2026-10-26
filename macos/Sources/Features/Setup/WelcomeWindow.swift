@@ -49,8 +49,8 @@ private struct WelcomeView: View {
     @ObservedObject private var store = SetupChecks.shared
     @State private var page = 0
     @State private var setUpResult: [String]?
-    @State private var connectClaude = true
-    @State private var connectCodex = true
+    @State private var connectClaude = !SetupChecks.skipped.contains(.claude)
+    @State private var connectCodex = !SetupChecks.skipped.contains(.codex)
     @State private var addShell = true
 
     private let pages = ["Welcome", "Agent status", "Features", "Try it"]
@@ -178,10 +178,12 @@ private struct WelcomeView: View {
             VStack(alignment: .leading, spacing: 8) {
                 plan(true, "Install the hooks", "Into ~/.ghostty-extreme, outside folders macOS protects", locked: true)
                 if usesClaude {
-                    plan($connectClaude, "Connect Claude Code", "Adds 9 hook entries to ~/.claude/settings.json. Your other hooks and settings stay")
+                    plan($connectClaude, "Connect Claude Code", "Adds 9 hook entries to ~/.claude/settings.json. Your other hooks and settings stay"
+                         + (store.tools["claude"] == nil ? ". Leave it off if you don't use Claude Code" : ""))
                 }
                 if usesCodex {
-                    plan($connectCodex, "Connect Codex", "Adds 10 entries to ~/.codex/hooks.json. Codex asks you to approve them once")
+                    plan($connectCodex, "Connect Codex", "Adds 10 entries to ~/.codex/hooks.json. Codex asks you to approve them once"
+                         + (store.tools["codex"] == nil ? ". Leave it off if you don't use Codex" : ""))
                 }
                 if HookInstaller.zshIsLoginShell {
                     plan($addShell, "Add to ~/.zshrc", "One line, so an agent's logo shows the moment it starts. Does nothing in other terminals")
@@ -240,6 +242,11 @@ private struct WelcomeView: View {
 
     private func setUp() {
         store.fixError = nil
+        // An agent left unchecked isn't used here: stop asking about it (until it's checked again).
+        for (agent, found, connect) in [(HookConfig.Agent.claude, usesClaude, connectClaude), (.codex, usesCodex, connectCodex)]
+        where found && SetupChecks.skipped.contains(agent) == connect {
+            store.setSkipped(agent, !connect)
+        }
         do {
             setUpResult = try HookInstaller.setUp(claude: usesClaude && connectClaude, codex: usesCodex && connectCodex,
                                                   shell: addShell)

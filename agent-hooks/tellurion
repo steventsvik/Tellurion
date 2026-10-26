@@ -122,11 +122,16 @@ doctor() {
     note "Localhost sessions are turned off in Settings"
   fi
   if command -v jq >/dev/null 2>&1; then
-    if command -v claude >/dev/null 2>&1 || [ -d "$HOME/.claude" ]; then
+    # An agent marked "I don't use it" in Tellurion's Setup Check is left out.
+    if [ -e "$HOME/.ghostty-extreme/features/claude-off" ]; then
+      note "Claude Code is skipped: marked as not used in Tellurion > Check Setup…"
+    elif command -v claude >/dev/null 2>&1 || [ -d "$HOME/.claude" ]; then
       check_agent "Claude Code" "$HOME/.claude/settings.json" claude \
         session_start prompt_submit tool_complete permission_request notification stop stop_failure session_end pre_tool_use
     fi
-    if command -v codex >/dev/null 2>&1 || [ -d "$HOME/.codex" ]; then
+    if [ -e "$HOME/.ghostty-extreme/features/codex-off" ]; then
+      note "Codex is skipped: marked as not used in Tellurion > Check Setup…"
+    elif command -v codex >/dev/null 2>&1 || [ -d "$HOME/.codex" ]; then
       check_agent "Codex" "$HOME/.codex/hooks.json" codex \
         session_start prompt_submit pre_tool_use permission_request tool_complete stop session_end subagent_start subagent_stop interrupt
     fi

@@ -157,6 +157,10 @@ struct SetupCheckRow: View {
                 }
             }
             Spacer(minLength: 8)
+            if let alternative = check.alternative {
+                Button(alternative.title) { SetupChecks.shared.apply(alternative) }
+                    .buttonStyle(ExtremeButtonStyle())
+            }
             if let fix = check.fix {
                 Button(fix.title) { SetupChecks.shared.apply(fix) }
                     .buttonStyle(ExtremeButtonStyle(prominent: check.status >= .warning && fix != .liveTest))
