@@ -98,8 +98,11 @@ final class SetupChecks: ObservableObject {
     /// red with nothing to do about it. Skipped agents show as a quiet note instead.
     static let skippedKey = "ExtremeSkippedAgents"
 
-    static var skipped: Set<HookConfig.Agent> {
-        Set((UserDefaults.standard.stringArray(forKey: skippedKey) ?? []).compactMap(HookConfig.Agent.init(rawValue:)))
+    static var skipped: Set<HookConfig.Agent> { skipped(from: UserDefaults.standard.stringArray(forKey: skippedKey)) }
+
+    /// The saved preference as agents; names from another build are ignored.
+    static func skipped(from saved: [String]?) -> Set<HookConfig.Agent> {
+        Set((saved ?? []).compactMap(HookConfig.Agent.init(rawValue:)))
     }
 
     /// Remembers the choice, mirrors it for `tellurion doctor`, and checks again.
@@ -114,8 +117,10 @@ final class SetupChecks: ObservableObject {
     /// Mirrors the skipped agents into `~/.ghostty-extreme/features/<agent>-off`, which the
     /// doctor script reads. Called at launch and on every change.
     static func writeSkipFlags() {
-        let folder = ExtremeSettings.flagsFolder
-        let skipped = skipped
+        writeSkipFlags(skipped, in: ExtremeSettings.flagsFolder)
+    }
+
+    static func writeSkipFlags(_ skipped: Set<HookConfig.Agent>, in folder: URL) {
         for agent in [HookConfig.Agent.claude, .codex] {
             let flag = folder.appendingPathComponent(agent.rawValue + "-off")
             if skipped.contains(agent) {
