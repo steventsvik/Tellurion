@@ -41,6 +41,7 @@ jobs:
           # Every script by its shebang: the hooks and commands in agent-hooks/, and the
           # scripts at the root (release.sh is zsh).
           for f in agent-hooks/* ./*.sh; do
+            [ -f "$f" ] || continue
             case "$(head -n 1 "$f")" in
               '#!/bin/bash'* | '#!/usr/bin/env bash'*) echo "bash -n $f"; bash -n "$f" ;;
               '#!/bin/zsh'* | '#!/usr/bin/env zsh'*) echo "zsh -n $f"; zsh -n "$f" ;;
