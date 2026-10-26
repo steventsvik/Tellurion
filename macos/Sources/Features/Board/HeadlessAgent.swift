@@ -42,7 +42,8 @@ enum HeadlessAgent {
             let options = ["--json", "--skip-git-repo-check", "--sandbox", "read-only", "-c", "notify=[]"]
                 + images.flatMap { ["-i", $0.path] }
             if let session { return ["exec", "resume"] + options + [session, "-"] }
-            return ["exec"] + options + ["-"]
+            // `-i` takes several files: without "--", the prompt's "-" would be read as one more.
+            return ["exec"] + options + ["--", "-"]
         }
     }
 

@@ -5,12 +5,20 @@ import Testing
 /// Pictures pasted into an orchestrator's command: read off a pasteboard, kept as PNG no
 /// larger than the models read, and handed to Claude Code in its prompt or to Codex as files.
 struct OrchestratorImageTests {
-    private func picture(_ width: Int, _ height: Int) -> NSImage {
-        NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
-            NSColor.red.setFill()
-            rect.fill()
-            return true
-        }
+    /// A red picture of exactly these pixels. It's bitmap-backed on purpose: a drawing-handler
+    /// image rasterizes at the screen's scale, so it would come out twice the size on a Retina Mac.
+    private func picture(_ width: Int, _ height: Int) throws -> NSImage {
+        let rep = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8,
+                                                samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                                bytesPerRow: 0, bitsPerPixel: 0))
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSColor.red.setFill()
+        NSRect(x: 0, y: 0, width: width, height: height).fill()
+        NSGraphicsContext.restoreGraphicsState()
+        let image = NSImage(size: NSSize(width: width, height: height))
+        image.addRepresentation(rep)
+        return image
     }
 
     private func pasteboard() -> NSPasteboard {
@@ -24,7 +32,7 @@ struct OrchestratorImageTests {
     @Test func pictureOnPasteboardBecomesAPNGAttachment() throws {
         let pasteboard = pasteboard()
         defer { pasteboard.releaseGlobally() }
-        pasteboard.writeObjects([picture(40, 30)])
+        pasteboard.writeObjects([try picture(40, 30)])
         let images = ImageAttachment.read(from: pasteboard)
         #expect(images.count == 1)
         let image = try #require(images.first)
@@ -38,7 +46,7 @@ struct OrchestratorImageTests {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let file = folder.appendingPathComponent("shot.png")
-        try #require(ImageAttachment.png(picture(24, 24))).0.write(to: file)
+        try #require(ImageAttachment.png(try picture(24, 24))).0.write(to: file)
         let pasteboard = pasteboard()
         defer { pasteboard.releaseGlobally() }
         pasteboard.writeObjects([file as NSURL])
@@ -56,9 +64,9 @@ struct OrchestratorImageTests {
     }
 
     @Test func bigPicturesAreScaledToWhatTheModelsRead() throws {
-        let image = try #require(ImageAttachment(image: picture(4000, 1000)))
+        let image = try #require(ImageAttachment(image: try picture(4000, 1000)))
         #expect(image.pixelSize == CGSize(width: 1568, height: 392))
-        let small = try #require(ImageAttachment(image: picture(300, 200)))
+        let small = try #require(ImageAttachment(image: try picture(300, 200)))
         #expect(small.pixelSize == CGSize(width: 300, height: 200))
     }
 
@@ -73,7 +81,7 @@ struct OrchestratorImageTests {
         #expect(!streamed.contains("json"))
         #expect(streamed.contains("--resume"))
 
-        let png = try #require(ImageAttachment.png(picture(8, 8))).0
+        let png = try #require(ImageAttachment.png(try picture(8, 8))).0
         let input = HeadlessAgent.input(.claude, prompt: "What is this?", images: [png])
         let json = try #require(JSONSerialization.jsonObject(with: input) as? [String: Any])
         #expect(json["type"] as? String == "user")
@@ -98,9 +106,10 @@ struct OrchestratorImageTests {
         let one = URL(fileURLWithPath: "/tmp/one.png"), two = URL(fileURLWithPath: "/tmp/two.png")
         let fresh = HeadlessAgent.arguments(.codex, instructions: "i", schema: "{}", session: nil, images: [one, two])
         #expect(fresh.first == "exec")
-        #expect(fresh.last == "-")
+        // `-i` takes several files, so the options end before the prompt's "-" or it would be read as a file.
+        #expect(fresh.suffix(2) == ["--", "-"])
         let joined = fresh.joined(separator: " ")
-        #expect(joined.contains("-i /tmp/one.png -i /tmp/two.png"))
+        #expect(joined.contains("-i /tmp/one.png -i /tmp/two.png -- -"))
         let resumed = HeadlessAgent.arguments(.codex, instructions: "i", schema: "{}", session: "thread", images: [one])
         #expect(resumed.prefix(2) == ["exec", "resume"])
         #expect(resumed.suffix(2) == ["thread", "-"])
@@ -134,7 +143,7 @@ struct OrchestratorImageTests {
     @Test func savedPicturesAreFilesAndOldOnesGo() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: folder) }
-        let image = try #require(ImageAttachment(image: picture(10, 10)))
+        let image = try #require(ImageAttachment(image: try picture(10, 10)))
         let now = Date()
         let first = ImageAttachment.save([image], in: folder, now: now.addingTimeInterval(-3 * 86_400))
         #expect(first.count == 1)
