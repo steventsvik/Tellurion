@@ -487,13 +487,16 @@ final class BoardAssistantOrbView: NSView {
 // MARK: - The text field
 
 /// The bar's text field (and an orchestrator's): Return sends, ↑ recalls, Escape goes back to
-/// the board, @ lists the tiles, and holding Space in an empty field dictates.
+/// the board, @ lists the tiles, and holding Space in an empty field dictates. Where `onImages`
+/// is set, pasting a picture hands it over instead of pasting (see BoardFieldEditor).
 struct BoardAssistantField: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
     let controller: BoardController
     /// An orchestrator's field: @ lists only these tiles, and ⌘L stays with the bar.
     var mentions: Set<UUID>?
+    /// Takes the pictures pasted into the field, if it takes any.
+    var onImages: (([ImageAttachment]) -> Void)?
     let onSubmit: () -> Void
     let onRecall: () -> Void
     let onHold: (Bool) -> Void
@@ -501,7 +504,8 @@ struct BoardAssistantField: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
+        let field = BoardAssistantTextField()
+        field.onImages = onImages
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
@@ -525,6 +529,7 @@ struct BoardAssistantField: NSViewRepresentable {
 
     func updateNSView(_ field: NSTextField, context: Context) {
         context.coordinator.parent = self
+        (field as? BoardAssistantTextField)?.onImages = onImages
         if field.stringValue != text { field.stringValue = text }
         field.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
             .foregroundColor: Extreme.chrome.dim.nsColor, .font: NSFont.systemFont(ofSize: mentions == nil ? 13.5 : 12.5),
@@ -682,6 +687,59 @@ struct BoardAssistantField: NSViewRepresentable {
                 return false
             }
         }
+    }
+}
+
+/// The bar's and the orchestrators' text field; it edits with BoardFieldEditor.
+final class BoardAssistantTextField: NSTextField {
+    /// Takes the pictures pasted into the field; nil where the field takes text only.
+    var onImages: (([ImageAttachment]) -> Void)?
+    /// Its field editor, handed to the window when it starts editing.
+    private(set) lazy var editor: BoardFieldEditor = {
+        let editor = BoardFieldEditor()
+        editor.isFieldEditor = true
+        return editor
+    }()
+
+    var acceptsImages: Bool { onImages != nil }
+
+    /// The pasteboard's pictures become attachments; true when there were any.
+    @discardableResult
+    func attach(from pasteboard: NSPasteboard) -> Bool {
+        guard let onImages else { return false }
+        let images = ImageAttachment.read(from: pasteboard)
+        guard !images.isEmpty else { return false }
+        onImages(images)
+        return true
+    }
+}
+
+/// The field editor behind BoardAssistantTextField: a pasted picture attaches to a field that
+/// takes pictures; text pastes as it always did.
+final class BoardFieldEditor: NSTextView {
+    /// Tests: how many pastes reached a field editor.
+    static var pastes = 0
+
+    override func paste(_ sender: Any?) {
+        Self.pastes += 1
+        if let field = delegate as? BoardAssistantTextField, field.attach(from: .general) { return }
+        super.paste(sender)
+    }
+
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(paste(_:)), let field = delegate as? BoardAssistantTextField, field.acceptsImages,
+           ImageAttachment.mayHoldImages(.general) {
+            return true
+        }
+        return super.validateUserInterfaceItem(item)
+    }
+}
+
+extension BoardController {
+    /// The board's fields edit with their own editor (see BoardFieldEditor), so a picture
+    /// pasted into an orchestrator's command attaches to it.
+    func windowWillReturnFieldEditor(_ sender: NSWindow, to client: Any?) -> Any? {
+        (client as? BoardAssistantTextField)?.editor
     }
 }
 #endif

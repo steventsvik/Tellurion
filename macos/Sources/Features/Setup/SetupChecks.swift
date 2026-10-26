@@ -22,6 +22,8 @@ struct SetupCheck: Identifiable, Equatable {
     var status: Status
     var detail: String
     var fix: SetupFix?
+    /// A quieter second choice beside the fix, like saying an agent isn't used.
+    var alternative: SetupFix?
 }
 
 /// Something the setup check can fix with one click.
@@ -29,6 +31,8 @@ enum SetupFix: Equatable {
     case installHooks
     case connect(HookConfig.Agent)
     case connectMore(MoreAgent)
+    /// The user doesn't use this agent: stop asking to connect it.
+    case skip(HookConfig.Agent)
     case addShellIntegration
     case installJq
     case notifications
@@ -43,6 +47,8 @@ enum SetupFix: Equatable {
         case .connect(.claude): return "Connect Claude Code"
         case .connect(.codex): return "Connect Codex"
         case .connectMore(let agent): return "Connect \(agent.title)"
+        case .skip(.claude): return "I don't use Claude Code"
+        case .skip(.codex): return "I don't use Codex"
         case .addShellIntegration: return "Add to ~/.zshrc"
         case .installJq: return "Install jq"
         case .notifications: return "Allow notifications"
@@ -84,6 +90,47 @@ final class SetupChecks: ObservableObject {
 
     /// Whether Claude Code or Codex is installed (or has been used here).
     var hasAgents: Bool { tools["claude"] != nil || tools["codex"] != nil }
+
+    // MARK: Agents not used
+
+    /// Agents the user said they don't use. A `~/.codex` folder can exist without Codex
+    /// (an editor extension, one try long ago), and then "Codex isn't connected" would stay
+    /// red with nothing to do about it. Skipped agents show as a quiet note instead.
+    static let skippedKey = "ExtremeSkippedAgents"
+
+    static var skipped: Set<HookConfig.Agent> { skipped(from: UserDefaults.standard.stringArray(forKey: skippedKey)) }
+
+    /// The saved preference as agents; names from another build are ignored.
+    static func skipped(from saved: [String]?) -> Set<HookConfig.Agent> {
+        Set((saved ?? []).compactMap(HookConfig.Agent.init(rawValue:)))
+    }
+
+    /// Remembers the choice, mirrors it for `tellurion doctor`, and checks again.
+    func setSkipped(_ agent: HookConfig.Agent, _ skip: Bool) {
+        var set = Self.skipped
+        if skip { set.insert(agent) } else { set.remove(agent) }
+        UserDefaults.standard.set(set.map(\.rawValue).sorted(), forKey: Self.skippedKey)
+        Self.writeSkipFlags()
+        refresh()
+    }
+
+    /// Mirrors the skipped agents into `~/.ghostty-extreme/features/<agent>-off`, which the
+    /// doctor script reads. Called at launch and on every change.
+    static func writeSkipFlags() {
+        writeSkipFlags(skipped, in: ExtremeSettings.flagsFolder)
+    }
+
+    static func writeSkipFlags(_ skipped: Set<HookConfig.Agent>, in folder: URL) {
+        for agent in [HookConfig.Agent.claude, .codex] {
+            let flag = folder.appendingPathComponent(agent.rawValue + "-off")
+            if skipped.contains(agent) {
+                try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                FileManager.default.createFile(atPath: flag.path, contents: Data())
+            } else {
+                try? FileManager.default.removeItem(at: flag)
+            }
+        }
+    }
 
     // MARK: Events
 
@@ -149,8 +196,12 @@ final class SetupChecks: ObservableObject {
                             lastEventAt: Date?, liveCheckAt: Date?) -> [SetupCheck] {
         var checks: [SetupCheck] = []
         let home = HookInstaller.home
-        let usesClaude = tools["claude"] != nil || FileManager.default.fileExists(atPath: home + "/.claude")
-        let usesCodex = tools["codex"] != nil || FileManager.default.fileExists(atPath: home + "/.codex")
+        let skipped = skipped
+        // Found: installed, or its folder is there. Used: found and not skipped by the user.
+        let foundClaude = tools["claude"] != nil || FileManager.default.fileExists(atPath: home + "/.claude")
+        let foundCodex = tools["codex"] != nil || FileManager.default.fileExists(atPath: home + "/.codex")
+        let usesClaude = foundClaude && !skipped.contains(.claude)
+        let usesCodex = foundCodex && !skipped.contains(.codex)
 
         // The hook files.
         switch HookInstaller.filesState() {
@@ -170,8 +221,14 @@ final class SetupChecks: ObservableObject {
         }
 
         // Each agent's config.
-        for (agent, used, name) in [(HookConfig.Agent.claude, usesClaude, "Claude Code"), (.codex, usesCodex, "Codex")] where used {
+        for (agent, found, name) in [(HookConfig.Agent.claude, foundClaude, "Claude Code"), (.codex, foundCodex, "Codex")] where found {
             let file = HookInstaller.display(HookInstaller.file(for: agent))
+            if skipped.contains(agent) {
+                let why = tools[agent.rawValue] == nil ? "The \(agent.rawValue) command isn't installed; only its folder is here" : "You said you don't use it"
+                checks.append(.init(id: agent.rawValue, section: .agentStatus, title: "\(name) isn't connected", status: .info,
+                                    detail: "\(why). Connect it if that changes", fix: .connect(agent)))
+                continue
+            }
             do {
                 let report = HookConfig.report(try HookInstaller.readConfig(agent), agent: agent, home: home)
                 if report.isComplete {
@@ -188,9 +245,12 @@ final class SetupChecks: ObservableObject {
                         parts.append("\(report.elsewhere.joined(separator: ", ")) run from outside ~/.ghostty-extreme, which macOS can block")
                     }
                     if agent == .codex { parts.append("Codex asks you to approve new hooks once") }
+                    // Only its folder, no command: it may well not be used here, so say so.
+                    if tools[agent.rawValue] == nil { parts.append("The \(agent.rawValue) command isn't installed") }
                     checks.append(.init(id: agent.rawValue, section: .agentStatus,
                                         title: report.isEmpty ? "\(name) isn't connected" : "\(name) is partly connected",
-                                        status: .problem, detail: parts.joined(separator: ". "), fix: .connect(agent)))
+                                        status: .problem, detail: parts.joined(separator: ". "), fix: .connect(agent),
+                                        alternative: .skip(agent)))
                 }
             } catch {
                 checks.append(.init(id: agent.rawValue, section: .agentStatus, title: "\(name): can't read \(file)",
@@ -435,8 +495,11 @@ final class SetupChecks: ObservableObject {
             case .connect(let agent):
                 if HookInstaller.filesState() != .current { try HookInstaller.installFiles() }
                 try HookInstaller.connect(agent)
+                if Self.skipped.contains(agent) { setSkipped(agent, false) }
             case .connectMore(let agent):
                 try HookInstaller.connect(agent)
+            case .skip(let agent):
+                setSkipped(agent, true)
             case .addShellIntegration:
                 if HookInstaller.filesState() != .current { try HookInstaller.installFiles() }
                 try HookInstaller.addShellIntegration()
@@ -450,8 +513,10 @@ final class SetupChecks: ObservableObject {
                 requestNotifications()
             case .repair:
                 try HookInstaller.installFiles()
-                if checks.contains(where: { $0.id == "claude" }) { try HookInstaller.connect(.claude) }
-                if checks.contains(where: { $0.id == "codex" }) { try HookInstaller.connect(.codex) }
+                for agent in [HookConfig.Agent.claude, .codex]
+                where checks.contains(where: { $0.id == agent.rawValue && $0.status != .info }) {
+                    try HookInstaller.connect(agent)
+                }
             case .liveTest:
                 if HookInstaller.filesState() != .current { try HookInstaller.installFiles() }
                 Self.openTab(running: "~/.ghostty-extreme/bin/tellurion doctor")

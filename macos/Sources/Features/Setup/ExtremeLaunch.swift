@@ -11,6 +11,7 @@ enum ExtremeLaunch {
         started = true
         // The hooks read feature switches from files.
         ExtremeSettings.writeFlags()
+        SetupChecks.writeSkipFlags()
         DispatchQueue.global(qos: .utility).async {
             // A rebuilt app brings already-installed hooks up to date.
             HookInstaller.refreshIfInstalled()

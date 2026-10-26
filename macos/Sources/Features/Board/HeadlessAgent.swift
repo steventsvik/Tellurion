@@ -24,20 +24,40 @@ enum HeadlessAgent {
 
     /// The command line for one turn. Claude Code gets the instructions as its system prompt
     /// and the schema for structured output; Codex reads them at the top of the first prompt.
-    static func arguments(_ engine: Engine, instructions: String, schema: String, session: String?) -> [String] {
+    /// Pictures (PNG files) go to Codex by path; Claude Code gets them inside its prompt (see
+    /// `input`), which it only takes, and answers, as a stream.
+    static func arguments(_ engine: Engine, instructions: String, schema: String, session: String?,
+                          images: [URL] = []) -> [String] {
         switch engine {
         case .claude:
             // No tools, MCP servers, hooks or settings: it can only answer, and the board acts.
-            var arguments = ["-p", "--output-format", "json", "--model", "sonnet", "--tools", "",
+            let streamed = !images.isEmpty
+            var arguments = ["-p", "--output-format", streamed ? "stream-json" : "json", "--model", "sonnet", "--tools", "",
                              "--strict-mcp-config", "--setting-sources", "",
                              "--system-prompt", instructions, "--json-schema", schema]
+            if streamed { arguments += ["--input-format", "stream-json", "--verbose"] }
             if let session { arguments += ["--resume", session] }
             return arguments
         case .codex:
             let options = ["--json", "--skip-git-repo-check", "--sandbox", "read-only", "-c", "notify=[]"]
+                + images.flatMap { ["-i", $0.path] }
             if let session { return ["exec", "resume"] + options + [session, "-"] }
-            return ["exec"] + options + ["-"]
+            // `-i` takes several files: without "--", the prompt's "-" would be read as one more.
+            return ["exec"] + options + ["--", "-"]
         }
+    }
+
+    /// What goes in on stdin: the prompt, or for Claude Code with pictures, one user message
+    /// (a JSON line) with the prompt and each picture as PNG. Codex takes its pictures as files.
+    static func input(_ engine: Engine, prompt: String, images: [Data]) -> Data {
+        guard engine == .claude, !images.isEmpty else { return Data(prompt.utf8) }
+        var content: [[String: Any]] = [["type": "text", "text": prompt]]
+        for png in images {
+            content.append(["type": "image",
+                            "source": ["type": "base64", "media_type": "image/png", "data": png.base64EncodedString()]])
+        }
+        let message: [String: Any] = ["type": "user", "message": ["role": "user", "content": content]]
+        return ((try? JSONSerialization.data(withJSONObject: message)) ?? Data()) + Data([0x0A])
     }
 
     /// Claude Code, Codex and the other agents on this Mac, found once (off the main thread)
@@ -64,6 +84,10 @@ enum HeadlessAgent {
     /// login shell's PATH and nothing else from Tellurion's environment (no event token).
     /// Call it off the main thread; `handle` stops it.
     static func run(_ handle: Run, tool: String, arguments: [String], input: String) -> AgentTools.Result {
+        run(handle, tool: tool, arguments: arguments, input: Data(input.utf8))
+    }
+
+    static func run(_ handle: Run, tool: String, arguments: [String], input: Data) -> AgentTools.Result {
         let folder = AgentTools.root.appendingPathComponent("board-agent", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let process = Process()
@@ -83,7 +107,7 @@ enum HeadlessAgent {
         // A stuck run gives up after two minutes (set first: the write below can wait on it).
         let timeout = DispatchWorkItem { [weak handle] in handle?.stop() }
         DispatchQueue.global().asyncAfter(deadline: .now() + 120, execute: timeout)
-        try? stdin.fileHandleForWriting.write(contentsOf: Data(input.utf8))
+        try? stdin.fileHandleForWriting.write(contentsOf: input)
         try? stdin.fileHandleForWriting.close()
         var errData = Data()
         let reader = DispatchQueue(label: "board-agent-stderr")
@@ -314,8 +338,7 @@ enum HeadlessAgent {
     }
 
     static func parseClaude(_ result: AgentTools.Result) -> Parsed {
-        guard let data = result.output.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        guard let json = claudeAnswer(in: result.output) else {
             return Parsed(error: failure(result, "Claude Code"))
         }
         var parsed = Parsed(session: json["session_id"] as? String)
@@ -327,6 +350,20 @@ enum HeadlessAgent {
             parsed.error = (json["is_error"] as? Bool == true ? json["result"] as? String : nil) ?? failure(result, "Claude Code")
         }
         return parsed
+    }
+
+    /// Claude Code's answer object: its whole output (`--output-format json`), or the `result`
+    /// line of a stream (how it answers a prompt with pictures).
+    static func claudeAnswer(in output: String) -> [String: Any]? {
+        if let data = output.data(using: .utf8), let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            return json
+        }
+        for line in output.split(separator: "\n").reversed() {
+            guard let json = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  json["type"] as? String == "result" else { continue }
+            return json
+        }
+        return nil
     }
 
     static func parseCodex(_ result: AgentTools.Result) -> Parsed {

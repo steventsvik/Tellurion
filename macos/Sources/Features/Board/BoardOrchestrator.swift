@@ -7,7 +7,7 @@ import SwiftUI
 /// the command field. The list is a snapshot taken when the board syncs (agents changing,
 /// wiring, pauses), so drags and zooms don't redraw it.
 final class OrchestratorContent: CardContent {
-    private let state = OrchestratorState()
+    let state = OrchestratorState()
     private var host: NSView?
     private var brain: OrchestratorBrain?
 
@@ -135,6 +135,8 @@ struct OrchestratorSnapshot: Equatable {
 
 final class OrchestratorState: ObservableObject {
     @Published private(set) var snapshot = OrchestratorSnapshot()
+    /// Pictures pasted into the command field, waiting to go with the next command.
+    @Published var images: [ImageAttachment] = []
 
     func update(_ snapshot: OrchestratorSnapshot) {
         if snapshot != self.snapshot { self.snapshot = snapshot }
@@ -435,6 +437,11 @@ private struct OrchestratorPanel: View {
             Text(entry.text).font(Extreme.font(11)).foregroundColor(entry.kind == .say ? Extreme.text : Extreme.muted)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
+            if entry.images > 0 {
+                Label("\(entry.images)", systemImage: "photo").font(Extreme.font(10)).foregroundColor(Extreme.dim)
+                    .padding(.top, 1)
+                    .help("\(entry.images) image\(entry.images == 1 ? "" : "s") went with it")
+            }
         }
     }
 
@@ -457,15 +464,55 @@ private struct OrchestratorPanel: View {
     // MARK: Input
 
     private var inputBar: some View {
+        VStack(spacing: 0) {
+            if !state.images.isEmpty { attachments }
+            commandRow
+        }
+    }
+
+    /// Pictures pasted in, as thumbnails; each has a remove button. They go with the next command.
+    private var attachments: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(state.images) { image in
+                    ZStack(alignment: .topTrailing) {
+                        Image(nsImage: image.image).resizable().scaledToFill()
+                            .frame(width: 44, height: 44)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Extreme.line, lineWidth: 1))
+                            .accessibilityLabel("Attached image, \(Int(image.pixelSize.width)) by \(Int(image.pixelSize.height))")
+                        Button { state.images.removeAll { $0.id == image.id } } label: {
+                            Image(systemName: "xmark.circle.fill").font(.system(size: 13))
+                                .foregroundColor(Extreme.text)
+                                .background(Circle().fill(Extreme.panel).padding(2))
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 5, y: -5)
+                        .help("Remove")
+                        .accessibilityLabel("Remove image")
+                    }
+                    .help("\(Int(image.pixelSize.width)) × \(Int(image.pixelSize.height))")
+                }
+            }
+            .padding(.top, 6).padding(.trailing, 6).padding(.leading, 2)
+        }
+        .frame(height: 52)
+        .padding(.bottom, 6)
+    }
+
+    private var canSend: Bool { !text.trimmingCharacters(in: .whitespaces).isEmpty || !state.images.isEmpty }
+
+    private var commandRow: some View {
         HStack(spacing: 6) {
             BoardAssistantField(text: $text, placeholder: placeholder, controller: controller, mentions: snapshot.wired,
+                                onImages: { state.images += $0 },
                                 onSubmit: submit, onRecall: recall, onHold: { $0 ? startDictation() : dictation.stop() })
                 .frame(height: 20)
             if brain.busy {
                 button("stop.fill", "Stop", filled: true) { brain.stop() }
             } else {
-                button("arrow.up", "Send (Return)", filled: !text.trimmingCharacters(in: .whitespaces).isEmpty) { submit() }
-                    .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+                button("arrow.up", "Send (Return)", filled: canSend) { submit() }
+                    .disabled(!canSend)
             }
             button(dictation.listening ? "mic.fill" : "mic", dictation.listening ? "Stop listening" : "Speak (or hold Space)") {
                 if dictation.listening { dictation.stop() } else { startDictation() }
@@ -481,6 +528,7 @@ private struct OrchestratorPanel: View {
     private var placeholder: String {
         if dictation.listening { return "Listening…" }
         if brain.engines?.isEmpty == true { return "Install Claude Code or Codex to command agents" }
+        if !state.images.isEmpty { return "Say what to do with the image\(state.images.count == 1 ? "" : "s")…" }
         if snapshot.agents == 0 { return "Try “start two reviewers”" }
         return "Command \(snapshot.agents) agent\(snapshot.agents == 1 ? "" : "s") · @ to direct…"
     }
@@ -499,11 +547,14 @@ private struct OrchestratorPanel: View {
     }
 
     private func submit() {
-        let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty, !brain.busy else { return }
+        var message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let images = state.images
+        guard !message.isEmpty || !images.isEmpty, !brain.busy else { return }
+        if message.isEmpty { message = images.count == 1 ? "What do you make of this image?" : "What do you make of these images?" }
         dictation.cancel()
         text = ""
-        brain.command(message)
+        state.images = []
+        brain.command(message, images: images)
     }
 
     private func recall() {
