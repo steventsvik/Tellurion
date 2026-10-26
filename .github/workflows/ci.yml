@@ -1,0 +1,122 @@
+# Checks every pull request and every push to dev and custom.
+#
+# The first job runs the quick checks from CLAUDE.md: SwiftLint, the editor scripts, the
+# shell scripts, the Python files and the Codex hook's tests. The second builds the app and
+# runs its unit tests. That needs the Zig core (GhosttyKit.xcframework), whose ReleaseFast
+# build takes a long while, so the core is cached by its inputs and only rebuilt when
+# something under src/ (or the build files) changes.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, custom]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint and scripts
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: SwiftLint
+        # The runner image doesn't carry SwiftLint; this is the release used locally.
+        env:
+          SWIFTLINT_VERSION: 0.65.1
+        run: |
+          curl -sSL --retry 3 -o "$RUNNER_TEMP/swiftlint.zip" \
+            "https://github.com/realm/SwiftLint/releases/download/$SWIFTLINT_VERSION/portable_swiftlint.zip"
+          mkdir -p "$RUNNER_TEMP/swiftlint"
+          unzip -q -o "$RUNNER_TEMP/swiftlint.zip" -d "$RUNNER_TEMP/swiftlint"
+          "$RUNNER_TEMP/swiftlint/swiftlint" version
+          cd macos && "$RUNNER_TEMP/swiftlint/swiftlint" lint --quiet
+
+      - name: Editor scripts
+        run: node --check macos/EditorWeb/*.js
+
+      - name: Shell scripts
+        run: |
+          # Every script by its shebang: the hooks and commands in agent-hooks/, and the
+          # scripts at the root (release.sh is zsh).
+          for f in agent-hooks/* ./*.sh; do
+            [ -f "$f" ] || continue
+            case "$(head -n 1 "$f")" in
+              '#!/bin/bash'* | '#!/usr/bin/env bash'*) echo "bash -n $f"; bash -n "$f" ;;
+              '#!/bin/zsh'* | '#!/usr/bin/env zsh'*) echo "zsh -n $f"; zsh -n "$f" ;;
+            esac
+          done
+
+      - name: Python
+        run: |
+          python3 -m py_compile agent-hooks/*.py
+          python3 agent-hooks/test_codex_hook.py
+
+  build-and-test:
+    name: Build and test the app
+    # The Xcode 27 image, the toolchain the app is built with: Xcode 26's Swift gives up
+    # type-checking one expression in BoardTiles.swift.
+    runs-on: xcode-27
+    timeout-minutes: 120
+    env:
+      ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/.zig-global-cache
+      ZIG_LOCAL_CACHE_DIR: ${{ github.workspace }}/.zig-cache
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Zig 0.15 from Homebrew
+        # The same build CLAUDE.md uses. Homebrew's zig@0.15 is built from source with its
+        # own LLVM and patches; the official 0.15.2 binary can't link against the macOS 26.4
+        # and later SDKs (every symbol of libSystem comes up undefined).
+        run: |
+          brew install zig@0.15
+          echo "$(brew --prefix zig@0.15)/bin" >> "$GITHUB_PATH"
+
+      - name: Restore the Zig core
+        id: core
+        uses: actions/cache@v4
+        with:
+          path: |
+            macos/GhosttyKit.xcframework
+            .zig-global-cache
+            .zig-cache
+          key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-brew-zig0.15-${{ hashFiles('build.zig', 'build.zig.zon', 'src/**', 'pkg/**', 'include/**', 'vendor/**') }}
+          restore-keys: |
+            ghosttykit-${{ runner.os }}-${{ runner.arch }}-brew-zig0.15-
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          zig version
+
+      - name: Build the Zig core
+        if: steps.core.outputs.cache-hit != 'true'
+        run: zig build -Doptimize=ReleaseFast -Dxcframework-target=native -Demit-macos-app=false
+
+      - name: Build the app
+        working-directory: macos
+        run: |
+          xcodebuild -quiet -project Ghostty.xcodeproj -scheme Ghostty -configuration ReleaseLocal \
+            SYMROOT="$PWD/build" ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build
+
+      - name: Unit tests
+        working-directory: macos
+        env:
+          # The test host is the app itself; this keeps its boards, prompts and hooks out of
+          # the runner's home and keeps its welcome window closed.
+          TEST_RUNNER_GHOSTTY_EXTREME_TEST_HOME: ${{ runner.temp }}/tellurion-home
+        run: |
+          mkdir -p "${{ runner.temp }}/tellurion-home"
+          xcodebuild -quiet -project Ghostty.xcodeproj -scheme Ghostty \
+            SYMROOT="$PWD/build" ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO \
+            -only-testing:GhosttyTests test

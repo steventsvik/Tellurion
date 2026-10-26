@@ -15,6 +15,7 @@
   <img alt="Apple silicon" src="https://raw.githubusercontent.com/steventsvik/Tellurion/badges/arm64.svg">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://raw.githubusercontent.com/steventsvik/Tellurion/badges/license.svg"></a>
   <a href="https://ghostty.org"><img alt="Based on Ghostty" src="https://raw.githubusercontent.com/steventsvik/Tellurion/badges/ghostty.svg"></a>
+  <a href="https://github.com/steventsvik/Tellurion/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/steventsvik/Tellurion/actions/workflows/ci.yml/badge.svg?branch=dev"></a>
 </p>
 
 <p align="center">
