@@ -61,9 +61,8 @@ jobs:
 
   build-and-test:
     name: Build and test the app
-    # The Xcode 27 image: the app's Swift needs its compiler (Xcode 26's gives up
-    # type-checking one expression), and Zig 0.15 links against its SDK. On the macOS 26
-    # image, Zig links against the SDKs of Xcode 26.0 to 26.3 only, not 26.4 and later.
+    # The Xcode 27 image, the toolchain the app is built with: Xcode 26's Swift gives up
+    # type-checking one expression in BoardTiles.swift.
     runs-on: xcode-27
     timeout-minutes: 120
     env:
@@ -72,9 +71,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
+      - name: Zig 0.15 from Homebrew
+        # The same build CLAUDE.md uses. Homebrew's zig@0.15 is built from source with its
+        # own LLVM and patches; the official 0.15.2 binary can't link against the macOS 26.4
+        # and later SDKs (every symbol of libSystem comes up undefined).
+        run: |
+          brew install zig@0.15
+          echo "$(brew --prefix zig@0.15)/bin" >> "$GITHUB_PATH"
 
       - name: Restore the Zig core
         id: core
@@ -84,9 +87,9 @@ jobs:
             macos/GhosttyKit.xcframework
             .zig-global-cache
             .zig-cache
-          key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-zig0.15.2-${{ hashFiles('build.zig', 'build.zig.zon', 'src/**', 'pkg/**', 'include/**', 'vendor/**') }}
+          key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-brew-zig0.15-${{ hashFiles('build.zig', 'build.zig.zon', 'src/**', 'pkg/**', 'include/**', 'vendor/**') }}
           restore-keys: |
-            ghosttykit-${{ runner.os }}-${{ runner.arch }}-zig0.15.2-
+            ghosttykit-${{ runner.os }}-${{ runner.arch }}-brew-zig0.15-
 
       - name: Toolchain
         run: |
