@@ -169,7 +169,8 @@ struct HookConfigTests {
         #expect(!HookConfig.zshrcHasIntegration(before))
         #expect(HookConfig.zshrcHasIntegration(after))
         #expect(HookConfig.zshrcHasIntegration("source ~/.ghostty-custom/agent-hooks/ghostty-custom.zsh"))
-        #expect(HookConfig.zshrcRemovingIntegration(after) == before + "\n")
+        // Removal gives the file back exactly: the blank line the block starts with goes too.
+        #expect(HookConfig.zshrcRemovingIntegration(after) == before)
         #expect(!HookConfig.zshrcHasIntegration(HookConfig.zshrcRemovingIntegration(after)))
         #expect(HookConfig.zshrcRemovingIntegration(before) == before)
     }
