@@ -61,11 +61,14 @@ jobs:
 
   build-and-test:
     name: Build and test the app
-    # The Xcode 27 image, the toolchain the app is built with: Xcode 26's Swift gives up
-    # type-checking one expression in BoardTiles.swift.
+    # The Xcode 27 image, and Xcode 27.0 on it: the toolchain the app is built with.
+    # Xcode 26's Swift gives up type-checking one expression in BoardTiles.swift, and
+    # Xcode 27.1's libtool drops every object Zig puts in an archive ("64-bit mach-o not
+    # 8-byte aligned"), which leaves the core with no symbols.
     runs-on: xcode-27
     timeout-minutes: 120
     env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
       ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/.zig-global-cache
       ZIG_LOCAL_CACHE_DIR: ${{ github.workspace }}/.zig-cache
     steps:
@@ -87,9 +90,9 @@ jobs:
             macos/GhosttyKit.xcframework
             .zig-global-cache
             .zig-cache
-          key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-brew-zig0.15-${{ hashFiles('build.zig', 'build.zig.zon', 'src/**', 'pkg/**', 'include/**', 'vendor/**') }}
+          key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-brew-zig0.15-xcode27.0-${{ hashFiles('build.zig', 'build.zig.zon', 'src/**', 'pkg/**', 'include/**', 'vendor/**') }}
           restore-keys: |
-            ghosttykit-${{ runner.os }}-${{ runner.arch }}-brew-zig0.15-
+            ghosttykit-${{ runner.os }}-${{ runner.arch }}-brew-zig0.15-xcode27.0-
 
       - name: Toolchain
         run: |
