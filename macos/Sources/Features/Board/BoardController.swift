@@ -120,6 +120,9 @@ final class BoardController: BaseTerminalController {
     let model: BoardModel
     private(set) var workspace: BoardWorkspace
     weak var canvas: BoardCanvasView?
+    /// How much of the canvas's bottom the agent bar covers, in points (0 while it's collapsed);
+    /// the bar reports it. The camera fits and reveals things in the part above it.
+    var assistantBarHeight: CGFloat = 0
 
     /// The line each tile was opened with, started again after a relaunch.
     /// The line each tile was started with, to start it again after a relaunch.
@@ -978,15 +981,12 @@ final class BoardController: BaseTerminalController {
         if let frame = model.frames[view.id] { revealRect(frame) }
     }
 
-    /// Scrolls just enough to show a rect, keeping the zoom.
+    /// Scrolls just enough to show a rect, keeping the zoom, in the part of the view above the
+    /// agent bar.
     func revealRect(_ frame: CGRect) {
-        guard let canvas else { return }
-        let visible = canvas.documentVisibleRect
-        guard !visible.contains(frame) else { return }
-        // Kept on the board, as a drag is: a tile near its edge would otherwise leave the view
-        // off it, and the next pan would snap.
-        let origin = CGPoint(x: min(max(frame.midX - visible.width / 2, 0), Self.boardSize.width - visible.width),
-                             y: min(max(frame.midY - visible.height / 2, 0), Self.boardSize.height - visible.height))
+        guard let canvas,
+              let origin = BoardCamera.reveal(frame, visible: canvas.documentVisibleRect, zoom: canvas.magnification,
+                                              covered: assistantBarHeight, board: Self.boardSize) else { return }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.25
             canvas.contentView.animator().setBoundsOrigin(origin)
@@ -1049,18 +1049,25 @@ final class BoardController: BaseTerminalController {
         }
     }
 
+    /// Zooms so the rect fills the part of the view above the agent bar, centred there.
     func zoom(toFit rect: CGRect, animated: Bool) {
         guard let canvas else { return }
+        // The clip view's frame is in points; its bounds would be in board points, scaled by the zoom.
+        let size = canvas.contentView.frame.size
+        guard let fit = BoardCamera.fit(rect, in: size, covered: assistantBarHeight,
+                                        zooms: canvas.minMagnification...canvas.maxMagnification,
+                                        board: Self.boardSize) else { return }
+        // The board point that ends up in the middle of the view.
+        let center = CGPoint(x: fit.origin.x + size.width / fit.zoom / 2, y: fit.origin.y + size.height / fit.zoom / 2)
         if animated {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.3
-                context.allowsImplicitAnimation = true
-                canvas.animator().magnify(toFit: rect)
+                canvas.animator().setMagnification(fit.zoom, centeredAt: center)
             } completionHandler: { [weak self] in
                 self?.zoomDidSettle()
             }
         } else {
-            canvas.magnify(toFit: rect)
+            canvas.setMagnification(fit.zoom, centeredAt: center)
             zoomDidSettle()
         }
     }

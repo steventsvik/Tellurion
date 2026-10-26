@@ -52,9 +52,24 @@ struct BoardAssistantBar: View {
         .padding(.horizontal, 24)
         .padding(.bottom, collapsed ? 14 : 6)
         .background(focusShortcut)
+        // The canvas keeps what it zooms to or reveals above the bar, whatever it's showing.
+        .background(GeometryReader { proxy in
+            Color.clear
+                .onAppear { report(height: proxy.size.height) }
+                .onChange(of: proxy.size.height) { report(height: $0) }
+                .onChange(of: collapsed) { _ in report(height: proxy.size.height) }
+        })
         .onAppear { assistant.lookUp() }
         .onChange(of: assistant.messages.count) { _ in showReply = true }
-        .onDisappear { dictation.stop() }
+        .onDisappear {
+            dictation.stop()
+            controller.assistantBarHeight = 0
+        }
+    }
+
+    /// The collapsed pill is small and in the middle: nothing worth keeping clear of.
+    private func report(height: CGFloat) {
+        controller.assistantBarHeight = collapsed ? 0 : height
     }
 
     // MARK: Parts
