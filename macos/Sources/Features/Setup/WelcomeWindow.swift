@@ -18,11 +18,10 @@ enum WelcomeWindow {
     /// At launch: checks the setup, then shows the welcome window if agent status isn't set
     /// up (and it hasn't been finished or skipped before). Already set up: never shown.
     static func showIfNeeded() {
-        let env = ProcessInfo.processInfo.environment
-        let forced = env["GHOSTTY_EXTREME_TEST_WELCOME"] == "1"
+        let forced = TestHooks.welcome
         let store = SetupChecks.shared
         // Test launches stay quiet unless they ask for it.
-        let testing = env.keys.contains { $0.hasPrefix("GHOSTTY_EXTREME_TEST_") || $0 == "GHOSTTY_EXTREME_DEMO" }
+        let testing = TestHooks.isTestLaunch
         guard forced || (!UserDefaults.standard.bool(forKey: doneKey) && !testing) else {
             store.refresh()
             return

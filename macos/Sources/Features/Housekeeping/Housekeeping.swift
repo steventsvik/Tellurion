@@ -115,9 +115,7 @@ final class Housekeeping: ObservableObject {
     private var history: [String: Seen] = [:]
     /// Test-only: sample items closed this run (see `refresh`).
     private var closedSamples: Set<String> = []
-    private static var showsSample: Bool {
-        ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_BACKGROUND_SAMPLE"] == "1"
-    }
+    private static var showsSample: Bool { TestHooks.showsBackgroundSample }
     private var timer: Timer?
     private var fastTimer: Timer?
     private var watchers = 0
@@ -175,7 +173,7 @@ final class Housekeeping: ObservableObject {
         scanning = true
         queue.async { [self] in
             let (found, usage) = scan()
-            if let log = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_LOG"] {
+            if let log = TestHooks.log {
                 let lines = found.map { "\($0.kind.rawValue)\t\($0.score)\t\($0.rating.label)\t\($0.title)\t\($0.detail)\t\(Self.bytes(max($0.memory, $0.reserved)))\t\($0.reasons.joined(separator: "; "))" }
                 try? (lines.joined(separator: "\n") + "\n---\n").write(toFile: log, atomically: true, encoding: .utf8)
             }

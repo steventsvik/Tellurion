@@ -7,7 +7,7 @@ extension UpdateDriver: SPUUpdaterDelegate {
         // key (SUPublicEDKey). Ghostty's feeds would offer official Ghostty, which would replace
         // this app. There's one channel; the `auto-update-channel` setting doesn't apply.
         // Test-only: `GHOSTTY_EXTREME_TEST_FEED=<url>` points a test copy at a local feed.
-        ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_FEED"]
+        TestHooks.updateFeed
             ?? "https://github.com/steventsvik/Tellurion/releases/latest/download/appcast.xml"
     }
 

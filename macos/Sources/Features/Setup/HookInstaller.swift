@@ -15,7 +15,7 @@ enum HookInstaller {
 
     /// The home folder. Test-only: `GHOSTTY_EXTREME_TEST_HOME` points the installer and the
     /// setup check at a scratch folder instead of the user's real configs.
-    static let home = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_HOME"] ?? NSHomeDirectory()
+    static let home = TestHooks.home ?? NSHomeDirectory()
     static var hooksFolder: URL { URL(fileURLWithPath: HookConfig.hooksFolder(home: home), isDirectory: true) }
     static var binFolder: URL { URL(fileURLWithPath: home + "/.ghostty-extreme/bin", isDirectory: true) }
     static var claudeSettings: URL { URL(fileURLWithPath: home + "/.claude/settings.json") }

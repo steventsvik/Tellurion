@@ -146,7 +146,7 @@ final class SetupChecks: ObservableObject {
 
     /// The doctor's test event made it through the hook, the terminal and the app.
     func liveCheckArrived() {
-        Self.testLog("live check arrived")
+        TestHooks.note("live check arrived")
         liveCheckAt = Date()
         lastEventAt = Date()
         showLivePass = true
@@ -171,7 +171,7 @@ final class SetupChecks: ObservableObject {
                 DispatchQueue.main.async {
                     self.tools = tools
                     self.checks = checks
-                    Self.testLog("checks: " + checks.map { "\($0.id)=\($0.status)" }.joined(separator: " "))
+                    TestHooks.note("checks: " + checks.map { "\($0.id)=\($0.status)" }.joined(separator: " "))
                     self.lastRun = Date()
                     self.running = false
                     if self.pendingRefresh {
@@ -474,13 +474,6 @@ final class SetupChecks: ObservableObject {
             }
         }
         return (count, latest?.1)
-    }
-
-    /// Test-only: `GHOSTTY_EXTREME_TEST_LOG=<file>` collects what the checks found.
-    private static func testLog(_ line: String) {
-        guard let path = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_LOG"] else { return }
-        let old = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-        try? (old + line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
     }
 
     // MARK: Fixing
