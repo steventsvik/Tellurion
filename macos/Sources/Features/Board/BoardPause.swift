@@ -37,6 +37,14 @@ enum BoardPause {
                 current = parent
             }
         }
+        for pid in order(found, parents: parents, paused: paused) {
+            kill(pid, paused ? SIGSTOP : SIGCONT)
+        }
+    }
+
+    /// The processes in the order to signal them: outermost first (the shell, then what it
+    /// runs) when pausing, and the reverse when resuming.
+    static func order(_ found: [Int32], parents: [Int32: Int32], paused: Bool) -> [Int32] {
         let mine = Set(found)
         // How many of a process's ancestors are in the tile: 0 for the shell.
         func depth(_ pid: Int32) -> Int {
@@ -48,9 +56,7 @@ enum BoardPause {
             return depth
         }
         let outermostFirst = found.sorted { depth($0) < depth($1) }
-        for pid in paused ? outermostFirst : outermostFirst.reversed() {
-            kill(pid, paused ? SIGSTOP : SIGCONT)
-        }
+        return paused ? outermostFirst : outermostFirst.reversed()
     }
 }
 

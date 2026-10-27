@@ -3,6 +3,7 @@ import AppKit
 import WebKit
 import GhosttyKit
 
+#if TELLURION_TEST_HOOKS
 /// Test-only: `GHOSTTY_EXTREME_TEST_BOARD=<file>` plays a timed script against the boards, like
 /// `DemoDirector` does for tabs. Each line is `<seconds since launch> <action> [args]`; `#`
 /// starts a comment. Actions go to the key board (or the first one). Tiles are 1-based, in
@@ -1018,4 +1019,11 @@ enum BoardTest {
         try? lines.joined(separator: "\n").write(toFile: path + ".txt", atomically: true, encoding: .utf8)
     }
 }
+#else
+/// Release builds have no board test script; see `TestHooks`.
+@MainActor
+enum BoardTest {
+    static func startIfRequested(_ controller: BoardController) {}
+}
+#endif
 #endif

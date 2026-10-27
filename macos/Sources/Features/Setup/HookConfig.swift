@@ -182,8 +182,38 @@ enum HookConfig {
         text.contains("ghostty-extreme.zsh") || text.contains("ghostty-custom.zsh")
     }
 
+    /// The comment above the `source` line, as this and earlier versions wrote it.
+    private static let zshrcComments = Set([
+        "# Tellurion: shows which coding agent each pane runs (does nothing in other terminals)",
+        "# GhosttyEXTREME: shows which coding agent each pane runs (does nothing in other terminals)",
+    ].map(squeezed))
+
+    /// The `source` line, with its spacing squeezed.
+    private static let zshrcSource = squeezed(String(zshrcBlock.split(whereSeparator: \.isNewline).last ?? ""))
+
+    /// `text` without our lines: the `source` line, the comment above it and the blank line
+    /// the block starts with. Spacing doesn't matter (a re-indented or re-spaced block
+    /// still goes), but any other wording stays: only lines we wrote are removed.
     static func zshrcRemovingIntegration(_ text: String) -> String {
-        text.replacingOccurrences(of: zshrcBlock, with: "\n")
+        var lines = text.components(separatedBy: "\n")
+        var i = 0
+        while i < lines.count {
+            guard squeezed(lines[i]) == zshrcSource else {
+                i += 1
+                continue
+            }
+            var start = i
+            if start > 0, zshrcComments.contains(squeezed(lines[start - 1])) { start -= 1 }
+            if start > 0, squeezed(lines[start - 1]).isEmpty { start -= 1 }
+            lines.removeSubrange(start...i)
+            i = start
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Runs of spaces and tabs become one space, and the ends are trimmed.
+    private static func squeezed(_ line: String) -> String {
+        line.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     // MARK: Helpers

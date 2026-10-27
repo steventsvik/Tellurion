@@ -53,9 +53,12 @@ The maintainer runs Tellurion all day with live agent sessions.
   capture a single window (`screencapture -l <window id>`), never the whole screen.
 - Test-only switches: `GHOSTTY_EXTREME_TEST_TABS=N`, `GHOSTTY_EXTREME_DEMO=<script>`
   (see `DemoDirector.swift`), `GHOSTTY_EXTREME_TEST_BOARD=<script>` (see `BoardTest.swift`),
-  `GHOSTTY_EXTREME_TEST_LOG=<file>`.
+  `GHOSTTY_EXTREME_TEST_LOG=<file>`. They're read through `TestHooks.swift` and exist only
+  in builds made with the `TELLURION_TEST_HOOKS` flag: Debug, and ReleaseLocal as built
+  above. `release.sh` builds without it and checks that the shipped app has none of them.
 - Always set `GHOSTTY_EXTREME_TEST_HOME=<empty folder>` on a test copy: it moves
-  `~/.ghostty-extreme` (boards, prompts, hooks) there. Setting `HOME` alone does nothing,
+  `~/.ghostty-extreme` (boards, prompts, hooks) there. It works in every build, the release
+  included. Setting `HOME` alone does nothing,
   since an app's `NSHomeDirectory()` ignores it, and the copy would then write into the
   maintainer's boards. The copy's preferences are its own bundle id's domain:
   `defaults write com.steventsvik.ghostty-extreme.test ExtremeEdition board` picks its edition.

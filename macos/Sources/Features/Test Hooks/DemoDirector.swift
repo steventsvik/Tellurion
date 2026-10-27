@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 
+#if TELLURION_TEST_HOOKS
 /// Test-only: `GHOSTTY_EXTREME_DEMO=<file>` plays a timed script against the first window so
 /// a demo can be screen-recorded without UI scripting. Each line is
 /// `<seconds since launch> <action> [args]`; `#` starts a comment. Tabs are 1-based.
@@ -45,14 +46,10 @@ enum DemoDirector {
         }
     }
 
-    /// Appends a line to GHOSTTY_EXTREME_TEST_LOG, where a test run reads it.
-    nonisolated static func note(_ line: String) {
-        guard let path = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_LOG"] else { return }
-        if !FileManager.default.fileExists(atPath: path) { FileManager.default.createFile(atPath: path, contents: nil) }
-        guard let handle = FileHandle(forWritingAtPath: path) else { return }
-        handle.seekToEndOfFile()
-        handle.write(Data("[demo] \(line)\n".utf8))
-        handle.closeFile()
+    /// Appends a line to the test log (`GHOSTTY_EXTREME_TEST_LOG`), where a test run reads it.
+    nonisolated static func note(_ line: @autoclosure () -> String) {
+        guard TestHooks.log != nil else { return }
+        TestHooks.note("[demo] \(line())")
     }
 
     private static func tab(_ n: String, of controller: TerminalController) -> TerminalController? {
@@ -149,4 +146,11 @@ enum DemoDirector {
         }
     }
 }
+#else
+/// Release builds have no demo director. Its notes, left at points a recording may want to
+/// line up with, are dropped without building the message.
+enum DemoDirector {
+    static func note(_ line: @autoclosure () -> String) {}
+}
+#endif
 #endif

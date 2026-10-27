@@ -35,7 +35,7 @@ final class DesignStore: ObservableObject {
     /// Where `design.json` and `designs/` live. Test-only: `GHOSTTY_EXTREME_TEST_HOME`
     /// moves them, so a test copy never changes the maintainer's design.
     static var folder: URL {
-        if let home = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_HOME"], !home.isEmpty {
+        if let home = TestHooks.home {
             return URL(fileURLWithPath: home).appendingPathComponent(".ghostty-extreme", isDirectory: true)
         }
         return AgentTools.root

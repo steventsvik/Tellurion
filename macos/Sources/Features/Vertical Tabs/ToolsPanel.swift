@@ -30,9 +30,11 @@ struct ToolsButton: View {
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.15), value: lit)
         .help("Every tool, with its shortcut")
+#if TELLURION_TEST_HOOKS
         .onReceive(NotificationCenter.default.publisher(for: VerticalTabsTestSupport.showOverlay)) { _ in
             if VerticalTabsTestSupport.overlayMode == "tools", owner.window?.isKeyWindow ?? false { open = true }
         }
+#endif
         .popover(isPresented: $open, arrowEdge: .bottom) {
             ToolsPanel(owner: owner, condensed: $condensed) { action in
                 open = false
@@ -158,7 +160,7 @@ private struct ToolsPanel: View {
         .frame(width: 300)
         .onAppear {
             // `GHOSTTY_EXTREME_TEST_TOOL=<title>`: choose that tool once the panel is open.
-            guard let title = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_TOOL"],
+            guard let title = TestHooks.tool,
                   let tool = sections.flatMap(\.tools).first(where: { $0.title == title }) else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { run(tool.action) }
         }

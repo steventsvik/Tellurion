@@ -15,6 +15,7 @@
   <img alt="Apple silicon" src="https://raw.githubusercontent.com/steventsvik/Tellurion/badges/arm64.svg">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://raw.githubusercontent.com/steventsvik/Tellurion/badges/license.svg"></a>
   <a href="https://ghostty.org"><img alt="Based on Ghostty" src="https://raw.githubusercontent.com/steventsvik/Tellurion/badges/ghostty.svg"></a>
+  <a href="https://github.com/steventsvik/Tellurion/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/steventsvik/Tellurion/actions/workflows/ci.yml/badge.svg?branch=dev"></a>
 </p>
 
 <p align="center">
@@ -828,6 +829,34 @@ Apple silicon MacBook).
   an agent does. Any agent settings file is backed up before it's changed.
 - **The editor stays local.** It can only show its own pages, and Visual Fix only talks
   to your local dev server.
+
+<details>
+<summary><b>Every file Tellurion writes outside itself, and how to undo each</b></summary>
+
+<br>
+
+Nothing below happens on its own: each file is only touched when you click the button that
+names it (the welcome window's **Set up**, **Check Setup → Connect**, Tools → Design).
+Before a file you already had is rewritten, a copy is made beside it as
+`<name>.ghostty-extreme-backup-<date>`, a new one every time, so the previous version is
+always one rename away.
+
+| What | Where | Undo |
+|---|---|---|
+| Tellurion's own folder: the hooks and the `localhost` and `tellurion` commands (`agent-hooks/`, `bin/`), boards, sketches, documents, designs, presets, localhost session records, review snapshots, Codex tracking, the board agent's images and the feature flags the hooks read | `~/.ghostty-extreme/` | Remove the hooks first (Settings → Agents → **Remove…**, so no agent still points at them), then delete the folder |
+| Claude Code hooks: entries whose command ends in `agent-hook.sh claude <event>` | `~/.claude/settings.json` | Settings → Agents → **Remove…** takes out only those entries. Or delete them yourself, or put a backup back |
+| Codex hooks: entries whose command ends in `agent-hook.sh codex <event>` | `~/.codex/hooks.json` | Same |
+| Shell integration: a comment and a `source` line at the end | `~/.zshrc` | **Remove…** deletes those two lines, even if you re-spaced them, and tells you if it finds a line it didn't write. Or delete them yourself |
+| Other agents, each connected from **Check Setup → Connect**: Copilot CLI `~/.copilot/hooks/ghostty-extreme.json`, Kiro `~/.kiro/hooks/ghostty-extreme.json`, Goose `~/.agents/plugins/tellurion/hooks/hooks.json`, OpenCode `~/.config/opencode/plugins/ghostty-extreme.js` and Amp `~/.config/amp/plugins/tellurion.ts` are files of Tellurion's own; Droid `~/.factory/settings.json` (or `hooks.json`), Gemini CLI `~/.gemini/settings.json`, Antigravity `~/.gemini/config/hooks.json`, Cursor CLI `~/.cursor/hooks.json`, Qwen Code `~/.qwen/settings.json`, Kimi Code `~/.kimi-code/config.toml` and Mistral Vibe `~/.vibe/hooks.toml` get entries running `agent-event.py` | the agent's own settings | **Check Setup → Disconnect** (or **Remove…** for all at once) deletes the files that are Tellurion's and takes only its entries out of the shared ones |
+| Design: the look you build in Tools → Design, as a Ghostty config fragment plus a marker comment and a `config-file = ?tellurion-design.ghostty` line in your Ghostty config | `tellurion-design.ghostty` next to your Ghostty config (`~/.config/ghostty/` or `~/Library/Application Support/com.mitchellh.ghostty/`) | Delete the two lines from your config and the fragment file |
+| Claude Code's memory notes, only when you edit or delete a note in the Memory view | `~/.claude/projects/<project>/memory/` | They're Claude Code's own files; edit them back or delete them |
+| Preferences, paired phones, Docker session files, Supabase probe caches, and the web tiles' cookies and cache | `~/Library/Preferences/com.steventsvik.ghostty-extreme.plist`, `~/Library/Application Support/GhosttyEXTREME/`, `~/Library/WebKit/com.steventsvik.ghostty-extreme/` | `defaults delete com.steventsvik.ghostty-extreme` and delete the folders |
+
+Everything else the app reads (agents' session logs, your Ghostty config, git repositories)
+is read only. The `ghostty-extreme` names are from the app's earlier name and stay so that
+existing setups keep working.
+
+</details>
 
 <br>
 

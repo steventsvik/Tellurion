@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import Combine
+import OSLog
 import SwiftUI
 
 /// A dev server running in its own tab, so it keeps running after the agent (or tab) that
@@ -207,6 +208,8 @@ struct LocalhostFramework: Equatable {
 }
 
 final class LocalhostSessions: ObservableObject {
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "Localhost")
+
     static let shared = LocalhostSessions()
 
     static let eventTitle = "ghostty-extreme://localhost"
@@ -772,7 +775,13 @@ final class LocalhostSessions: ObservableObject {
         let out = Pipe()
         process.standardOutput = out
         process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return "" }
+        do {
+            try process.run()
+        } catch {
+            // Without ps or lsof the list is just empty, but that's worth knowing about.
+            log.error("Couldn't run \(path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return ""
+        }
         let data = out.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         return String(decoding: data, as: UTF8.self)

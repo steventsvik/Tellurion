@@ -302,11 +302,8 @@ private struct HandoffView: View {
 
     private func gather() {
         guard let surface else { return }
-        // Test-only: which pane the window works from (`GHOSTTY_EXTREME_TEST_LOG`).
-        if let path = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_LOG"] {
-            let old = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-            try? (old + "handoff source: \(surface.pwd ?? "?")\n").write(toFile: path, atomically: true, encoding: .utf8)
-        }
+        // Test-only: which pane the window works from.
+        TestHooks.note("handoff source: \(surface.pwd ?? "?")")
         loading = true
         AgentContext.gather(from: surface, parts: parts) { gathered in
             context = gathered

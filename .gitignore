@@ -9,7 +9,7 @@
 .flatpak-builder/
 zig-cache/
 .zig-cache/
-zig-out/
+zig-out
 /build.zig.zon.bak
 /result*
 /.nixos-test-history
