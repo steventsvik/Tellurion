@@ -97,8 +97,10 @@ jobs:
           xcrun --sdk macosx --show-sdk-version
           zig version
 
+      # Always: the cache holds the xcframework and Zig's caches, so this is quick when it hits,
+      # and it is what writes zig-out/share (shell completions, themes, locales), which the
+      # app copies in as resources and the cache leaves out.
       - name: Build the Zig core
-        if: steps.core.outputs.cache-hit != 'true'
         run: zig build -Doptimize=ReleaseFast -Dxcframework-target=native -Demit-macos-app=false
 
       - name: Build the app
