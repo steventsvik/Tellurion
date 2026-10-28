@@ -202,9 +202,7 @@ final class BoardController: BaseTerminalController {
                 config.workingDirectory = tile.cwd ?? workspace.folder
                 if restoring, let line = BoardAgent.resumeCommand(for: tile) { config.initialInput = line }
                 // The same account profiles as before.
-                let chosen = Dictionary(uniqueKeysWithValues: (tile.accounts ?? [:]).compactMap { key, value in
-                    BoardAccount.Provider(rawValue: key).map { ($0, value) }
-                })
+                let chosen = tile.chosenAccounts
                 for (key, value) in BoardAccounts.shared.environment(chosen) { config.environmentVariables[key] = value }
                 if !chosen.isEmpty { model.tileAccounts[tile.id] = chosen }
                 let view = Ghostty.SurfaceView(app, baseConfig: config, uuid: tile.id)
@@ -445,11 +443,27 @@ final class BoardController: BaseTerminalController {
         guard !views.isEmpty else { return [] }
         let old = Dictionary(workspace.tiles.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         model.released.removeAll { tile in views.contains { $0.id == tile.id } }
-        model.released += views.map { view in
-            BoardTile(id: view.id, frame: model.frames[view.id] ?? .zero, cwd: view.pwd ?? old[view.id]?.cwd, title: model.titles[view.id])
-        }
+        // The whole tile, as it's saved: its agent, session, command and accounts come back with it.
+        model.released += views.map { tile(for: $0, old: old[$0.id]) }
         surfaceTree = .init()
         return views
+    }
+
+    /// A tile as it's saved: its place, folder, agent and session, command, title and accounts.
+    /// `old` is its last saved record, for the folder when the terminal hasn't reported one.
+    private func tile(for view: Ghostty.SurfaceView, old: BoardTile?) -> BoardTile {
+        let info = VerticalTabsAgents.shared.info(for: view)
+        let kind = info?.kind
+        return BoardTile(id: view.id,
+                         frame: model.frames[view.id] ?? .zero,
+                         cwd: view.pwd ?? old?.cwd,
+                         agent: kind.flatMap { $0 == .unknown ? nil : $0.rawValue },
+                         session: info.flatMap(ResumeAfterUpdate.session(for:)),
+                         command: commands[view.id],
+                         title: model.titles[view.id],
+                         accounts: model.tileAccounts[view.id].map { chosen in
+                             Dictionary(uniqueKeysWithValues: chosen.map { ($0.key.rawValue, $0.value) })
+                         })
     }
 
     /// Once every classic terminal has come back to a board, the tiles still away were closed in
@@ -469,6 +483,10 @@ final class BoardController: BaseTerminalController {
         let tile = model.released.remove(at: index)
         model.frames[view.id] = tile.frame
         if let title = tile.title, model.titles[view.id] == nil { model.titles[view.id] = title }
+        // What the board knew about it (its command for a relaunch, its account profiles) came
+        // along in the tile; the terminal itself is the same one that left.
+        if commands[view.id] == nil, let command = tile.command { commands[view.id] = command }
+        if model.tileAccounts[view.id] == nil, !tile.chosenAccounts.isEmpty { model.tileAccounts[view.id] = tile.chosenAccounts }
         return true
     }
 
@@ -1137,23 +1155,12 @@ final class BoardController: BaseTerminalController {
         saveWork = nil
         let old = Dictionary(workspace.tiles.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         workspace.tiles = surfaceTree.map { view in
-            let info = VerticalTabsAgents.shared.info(for: view)
-            if info == nil, agentSeen.contains(view.id), !restarting.contains(view.id) {
+            if VerticalTabsAgents.shared.info(for: view) == nil, agentSeen.contains(view.id), !restarting.contains(view.id) {
                 // The agent quit: start a plain shell next time.
                 agentSeen.remove(view.id)
                 commands[view.id] = nil
             }
-            let kind = info?.kind
-            return BoardTile(id: view.id,
-                             frame: model.frames[view.id] ?? .zero,
-                             cwd: view.pwd ?? old[view.id]?.cwd,
-                             agent: kind.flatMap { $0 == .unknown ? nil : $0.rawValue },
-                             session: info.flatMap(ResumeAfterUpdate.session(for:)),
-                             command: commands[view.id],
-                             title: model.titles[view.id],
-                             accounts: model.tileAccounts[view.id].map { chosen in
-                                 Dictionary(uniqueKeysWithValues: chosen.map { ($0.key.rawValue, $0.value) })
-                             })
+            return tile(for: view, old: old[view.id])
         }
         workspace.colors = model.colors.isEmpty ? nil : model.colors
         workspace.teams = model.teams.isEmpty ? nil : model.teams

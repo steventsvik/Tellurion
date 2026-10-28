@@ -6,6 +6,8 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 
 ## Unreleased
 
+- **Tiles that went to Classic and back keep their agent.** A tile moved into a window by the switch to Classic and back onto the board forgot its agent, session and accounts, so after the next relaunch it opened a plain shell. It now resumes like any other tile.
+- **No empty group frames after the switch back.** A group whose terminals were all still in windows showed as an empty frame on the board, and a board that wasn't open kept the drawings, groups and wiring of terminals that had since been closed. Both are tidied now.
 - **Removing the shell integration leaves your own blank lines alone.** Settings → Agents → **Remove…** took the blank line above its line out of `~/.zshrc` even when its comment wasn't there, which joined two of your lines. And when the line it finds is one you wrote, its message now names the file that line actually loads.
 - **Pictures sent to an orchestrator on Codex work after its first command.** A second command with a pasted picture failed, because Codex read the conversation's id as one more picture.
 - **"@agent" with only a picture sends the picture.** It used to send nothing and drop the pasted picture; the agent now gets the picture's path, and a mention with neither words nor picture says so.
