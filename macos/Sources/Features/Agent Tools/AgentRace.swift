@@ -301,6 +301,7 @@ final class AgentRaces: ObservableObject {
 /// Keeps one window per id for Mission Control and races.
 enum AgentToolWindows {
     private static var windows: [String: NSWindow] = [:]
+    private static var closeObservers: [String: NSObjectProtocol] = [:]
 
     /// `followsDesign`: the view is rebuilt whenever the design changes (and loses its
     /// state). The Design window passes `false`: it recolors itself and keeps its state.
@@ -330,10 +331,11 @@ enum AgentToolWindows {
         }
         window.center()
         windows[id] = window
-        var observer: NSObjectProtocol?
-        observer = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { _ in
+        closeObservers[id] = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { _ in
             windows.removeValue(forKey: id)
-            if let observer { NotificationCenter.default.removeObserver(observer) }
+            if let observer = closeObservers.removeValue(forKey: id) {
+                NotificationCenter.default.removeObserver(observer)
+            }
             // Drop the SwiftUI view (and its timers) with the window, then the window itself.
             DispatchQueue.main.async { window.contentView = nil }
         }

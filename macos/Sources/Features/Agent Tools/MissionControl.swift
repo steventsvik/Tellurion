@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import Combine
 import SwiftUI
 
 /// One screen with every agent (or every pane) as a live card: status, task, last action, how

@@ -51,8 +51,8 @@ final class AgentAlerts {
             : "\(info.name) has a question"
         let body = info.detail ?? info.task ?? "Waiting for you"
         let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in
-            center.getNotificationSettings { settings in
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { [surface] _, _ in
+            center.getNotificationSettings { [surface] settings in
                 guard settings.authorizationStatus == .authorized else { return }
                 DispatchQueue.main.async { [weak surface] in
                     // Permission prompts get Allow / Deny buttons (see AgentPermissions).

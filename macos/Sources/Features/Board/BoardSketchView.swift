@@ -518,7 +518,7 @@ struct SketchStylePanel: View {
         }
         .padding(14)
         .frame(width: 330)
-        .onAppear {
+        .onAppear { [selection] in
             canvas.onSelectionChange = { [weak selection] in selection?.tick += 1 }
         }
         .onDisappear { canvas.onSelectionChange = nil }

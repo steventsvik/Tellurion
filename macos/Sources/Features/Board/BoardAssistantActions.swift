@@ -333,7 +333,7 @@ extension BoardController {
         // scroll into view.
         let added = model.nodeIDs.filter { !before.contains($0) }
         if !added.isEmpty, !actions.contains(where: { $0.type == "show" }) {
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [self] in
                 DispatchQueue.main.async { [weak self] in self?.showAdded(added) }
             }
         }
