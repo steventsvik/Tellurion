@@ -7,6 +7,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 ## Unreleased
 
 - **Removing the shell integration leaves your own blank lines alone.** Settings → Agents → **Remove…** took the blank line above its line out of `~/.zshrc` even when its comment wasn't there, which joined two of your lines. And when the line it finds is one you wrote, its message now names the file that line actually loads.
+- **A board file can no longer run a command of its own in a restored tile.** A board is saved as plain JSON that any program running as you can write, and a tile without a resumable session was started again by typing the command stored in that file, whatever it said. A restored tile now only resumes its Claude Code or Codex session, or starts its agent afresh; a tile with no known agent comes back as a plain shell.
 
 ## 1.8.4
 
