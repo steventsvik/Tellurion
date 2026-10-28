@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Removing the shell integration leaves your own blank lines alone.** Settings → Agents → **Remove…** took the blank line above its line out of `~/.zshrc` even when its comment wasn't there, which joined two of your lines. And when the line it finds is one you wrote, its message now names the file that line actually loads.
+
 ## 1.8.4
 
 A follow-up to 1.8.3: paste in the orchestrator, a way to tell the Setup Check you don't use Codex, tiles that stay above the board's agent bar when you zoom to them, and safer handling of your config files. The shipped app no longer carries its test switches.
