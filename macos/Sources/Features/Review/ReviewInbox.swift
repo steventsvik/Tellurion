@@ -443,7 +443,7 @@ final class ReviewInbox: ObservableObject {
         environment["GIT_TERMINAL_PROMPT"] = "0"
         environment["GIT_OPTIONAL_LOCKS"] = "0"
         for (key, value) in env { environment[key] = value }
-        process.environment = environment
+        process.environment = EventToken.scrubbed(environment)
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err

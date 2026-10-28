@@ -4,6 +4,11 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **The code editor's Backend view only runs a wrangler you installed.** With a Cloudflare project open, it used the project's own `node_modules/.bin/wrangler` if there was one, or fetched wrangler with `npx`, which follows the project's own `.npmrc`. A folder you opened could so bring the program that ran. It now uses only a `wrangler` installed on your Mac, and says so when there is none. Names from the project's config (a Vercel project, a wrangler environment or database) can no longer start with a dash and pass for an option. Links to the project's own domains are shown in full and opened only after you confirm; provider dashboards open as before.
+- **Programs Tellurion starts by itself no longer get the secret its hooks use.** git, gh, Tailscale, the providers' CLIs and the cleanup tools ran with the per-launch secret that proves an agent event came from Tellurion's hooks. Only terminals get it now.
+
 ## 1.8.4
 
 A follow-up to 1.8.3: paste in the orchestrator, a way to tell the Setup Check you don't use Codex, tiles that stay above the board's agent bar when you zoom to them, and safer handling of your config files. The shipped app no longer carries its test switches.

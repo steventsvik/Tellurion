@@ -65,8 +65,9 @@ enum BackendProbe {
                        "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%'"]
                     : ["d1", "migrations", "list", database, "--remote"]
             }
+            guard let wrangler = wranglerCommand() else { return ["error": "wrangler isn't installed", "missing": "wrangler"] }
             return cached("w:\(what):\(dir):\(extra.joined(separator: ",")):\(command.joined(separator: " "))", ttl: 30) {
-                cli(wranglerCommand(dir) + command + extra, in: dir)
+                cli(wrangler + command + extra, in: dir)
             }
         case "refs":
             let strings = (body["strings"] as? [String] ?? []).filter { !$0.isEmpty && $0.count < 200 }.prefix(150)
@@ -74,10 +75,16 @@ enum BackendProbe {
         case "gitState":
             return gitState(root: root)
         case "openURL":
-            guard let raw = body["url"] as? String, let url = URL(string: raw), isDashboard(url) else {
-                return ["error": "Not a provider dashboard"]
+            guard let raw = body["url"] as? String, let url = URL(string: raw), url.scheme == "https", url.host != nil else {
+                return ["error": "Not a web address"]
             }
-            DispatchQueue.main.async { NSWorkspace.shared.open(url) }
+            DispatchQueue.main.async {
+                // A provider's own pages open straight away. Anything else (a custom domain
+                // from the project's config files) is shown in full first, since the files
+                // may come from anyone.
+                guard isDashboard(url) || confirmOpening(url) else { return }
+                NSWorkspace.shared.open(url)
+            }
             return true
         default:
             return ["error": "Unknown request"]
@@ -122,7 +129,7 @@ enum BackendProbe {
         let tools: [String: Bool] = [
             "supabase": which("supabase") != nil,
             "vercel": which("vercel") != nil,
-            "wrangler": which("wrangler") != nil || which("npx") != nil,
+            "wrangler": which("wrangler") != nil,
             "git": true,
         ]
         return ["envFiles": envFiles, "services": Array(services.values), "tools": tools]
@@ -247,13 +254,13 @@ enum BackendProbe {
         "d1Migrations": [],
     ]
 
-    /// The project's own wrangler if it has one, else a global one, else npx.
-    private static func wranglerCommand(_ dir: String) -> [String] {
-        for candidate in ["\(dir)/node_modules/.bin/wrangler"] where FileManager.default.isExecutableFile(atPath: candidate) {
-            return [candidate]
-        }
-        if which("wrangler") != nil { return ["wrangler"] }
-        return ["npx", "--yes", "wrangler"]
+    /// The wrangler installed on this Mac, if any.
+    ///
+    /// Never the project's own `node_modules/.bin/wrangler`, and never `npx wrangler`, which
+    /// would fetch one from the registry the project's `.npmrc` names: opening a folder in
+    /// the editor must not run a program that came with it.
+    static func wranglerCommand() -> [String]? {
+        which("wrangler").map { [$0] }
     }
 
     /// Searches the project for any of `strings` (fixed text, not patterns).
@@ -293,30 +300,43 @@ enum BackendProbe {
     // MARK: Helpers
 
     /// The project name in `dir/.vercel/project.json`, if it's a plain name.
-    private static func vercelProject(_ dir: String) -> String? {
+    static func vercelProject(_ dir: String) -> String? {
         guard let data = FileManager.default.contents(atPath: "\(dir)/.vercel/project.json"),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let name = json["projectName"] as? String,
-              name.range(of: #"^[A-Za-z0-9._-]{1,100}$"#, options: .regularExpression) != nil else { return nil }
+              name.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"#, options: .regularExpression) != nil else { return nil }
         return name
     }
 
-    /// A plain identifier: an environment or database name.
-    private static func isName(_ name: String) -> Bool {
-        name.range(of: #"^[A-Za-z0-9_-]{1,64}$"#, options: .regularExpression) != nil
+    /// A plain identifier: an environment or database name. Never starts with "-", so a name
+    /// from the project's config can't be read as one of the CLI's options.
+    static func isName(_ name: String) -> Bool {
+        name.range(of: #"^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$"#, options: .regularExpression) != nil
     }
 
     private static func isRef(_ ref: String) -> Bool {
         ref.range(of: #"^[a-z]{20}$"#, options: .regularExpression) != nil
     }
 
-    private static func isDashboard(_ url: URL) -> Bool {
+    /// A provider's own page: a dashboard, or a deployment on the provider's own domain.
+    static func isDashboard(_ url: URL) -> Bool {
         guard url.scheme == "https", let host = url.host?.lowercased() else { return false }
         let allowed = ["supabase.com", "vercel.com", "dash.cloudflare.com", "console.firebase.google.com",
                        "dashboard.stripe.com", "github.com", "console.neon.tech", "railway.app", "railway.com",
-                       "console.upstash.com", "app.planetscale.com", "resend.com", "sentry.io"]
-        // Any https site: the project's own custom domains come from its config.
-        return allowed.contains { host == $0 || host.hasSuffix("." + $0) } || host.contains(".")
+                       "console.upstash.com", "app.planetscale.com", "resend.com", "sentry.io",
+                       "vercel.app", "workers.dev", "pages.dev"]
+        return allowed.contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+
+    /// Asks before opening an address taken from the project's files.
+    @MainActor
+    private static func confirmOpening(_ url: URL) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Open \(url.host ?? "this site") in your browser?"
+        alert.informativeText = "This address comes from the project's config files, not from Tellurion:\n\n\(url.absoluteString)"
+        alert.addButton(withTitle: "Open")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// `path` (relative to `root`, or empty for the root) if it's inside the project.
@@ -335,8 +355,11 @@ enum BackendProbe {
         return (extra + current).filter { seen.insert($0).inserted }.joined(separator: ":")
     }()
 
+    /// Only absolute folders: a relative PATH entry would look inside whatever folder the
+    /// app happens to be in.
     private static func which(_ tool: String) -> String? {
-        searchPath.split(separator: ":").map { "\($0)/\(tool)" }.first { FileManager.default.isExecutableFile(atPath: $0) }
+        searchPath.split(separator: ":").filter { $0.hasPrefix("/") }.map { "\($0)/\(tool)" }
+            .first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
     /// Runs a provider CLI with a time limit. Returns its parsed JSON output, or its text as
@@ -358,7 +381,7 @@ enum BackendProbe {
         env["SUPABASE_TELEMETRY_DISABLED"] = "1"
         // Run as a plain process, not as an agent inside the terminal.
         for key in env.keys where key.hasPrefix("CLAUDE") || key.hasPrefix("CODEX") { env.removeValue(forKey: key) }
-        process.environment = env
+        process.environment = EventToken.scrubbed(env)
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err
