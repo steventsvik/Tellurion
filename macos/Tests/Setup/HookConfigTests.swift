@@ -174,4 +174,30 @@ struct HookConfigTests {
         #expect(!HookConfig.zshrcHasIntegration(HookConfig.zshrcRemovingIntegration(after)))
         #expect(HookConfig.zshrcRemovingIntegration(before) == before)
     }
+
+    @Test func aReSpacedOrReIndentedBlockStillGoes() {
+        let before = "alias ll='ls -l'\n"
+        let respaced = before + "\n  #   Tellurion:  shows which coding agent each pane runs (does nothing in other terminals)\n"
+            + "\t[[  -n \"$GHOSTTY_EXTREME_AGENT_EVENTS\" ]]  &&   source   ~/.ghostty-extreme/agent-hooks/ghostty-extreme.zsh  \n"
+        #expect(HookConfig.zshrcRemovingIntegration(respaced) == before)
+    }
+
+    @Test func theBlockAnEarlierVersionWroteGoesWithItsComment() {
+        let before = "alias ll='ls -l'\n"
+        let line = "[[ -n \"$GHOSTTY_EXTREME_AGENT_EVENTS\" ]] && source ~/.ghostty-extreme/agent-hooks/ghostty-extreme.zsh"
+        let legacy = before + "\n# GhosttyEXTREME: shows which coding agent each pane runs (does nothing in other terminals)\n" + line + "\n"
+        #expect(HookConfig.zshrcRemovingIntegration(legacy) == before)
+        // A ghostty-custom.zsh line was never written by the app: it's detected, but left alone.
+        let custom = before + "source ~/.ghostty-custom/agent-hooks/ghostty-custom.zsh\n"
+        #expect(HookConfig.zshrcHasIntegration(custom))
+        #expect(HookConfig.zshrcRemovingIntegration(custom) == custom)
+        #expect(!HookConfig.isZshrcSourceLine("source \"$HOME/.ghostty-extreme/agent-hooks/ghostty-extreme.zsh\""))
+    }
+
+    @Test func aBlankLineWithoutOurCommentIsTheUsersAndStays() {
+        // The user deleted our comment: the blank line above the source line is their own spacing.
+        let before = "alias ll='ls -l'\n\n"
+        let text = before + "[[ -n \"$GHOSTTY_EXTREME_AGENT_EVENTS\" ]] && source ~/.ghostty-extreme/agent-hooks/ghostty-extreme.zsh\n" + "export EDITOR=vim\n"
+        #expect(HookConfig.zshrcRemovingIntegration(text) == before + "export EDITOR=vim\n")
+    }
 }

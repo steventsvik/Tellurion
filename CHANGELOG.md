@@ -6,6 +6,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 
 ## Unreleased
 
+- **Removing the shell integration leaves your own blank lines alone.** Settings → Agents → **Remove…** took the blank line above its line out of `~/.zshrc` even when its comment wasn't there, which joined two of your lines. And when the line it finds is one you wrote, its message now names the file that line actually loads.
 - **Pictures sent to an orchestrator on Codex work after its first command.** A second command with a pasted picture failed, because Codex read the conversation's id as one more picture.
 - **"@agent" with only a picture sends the picture.** It used to send nothing and drop the pasted picture; the agent now gets the picture's path, and a mention with neither words nor picture says so.
 - **A PDF or SVG copied in the Finder pastes as its path.** The orchestrator's field turned any file it could render into a picture; only photos, screenshots and other bitmap images become pictures now.
