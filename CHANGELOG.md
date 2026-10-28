@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **A board file can no longer run a command of its own in a restored tile.** A board is saved as plain JSON that any program running as you can write, and a tile without a resumable session was started again by typing the command stored in that file, whatever it said. A restored tile now only resumes its Claude Code or Codex session, or starts its agent afresh; a tile with no known agent comes back as a plain shell.
+
 ## 1.8.4
 
 A follow-up to 1.8.3: paste in the orchestrator, a way to tell the Setup Check you don't use Codex, tiles that stay above the board's agent bar when you zoom to them, and safer handling of your config files. The shipped app no longer carries its test switches.
