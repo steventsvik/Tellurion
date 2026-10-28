@@ -207,7 +207,7 @@ final class VerticalTabsGit: ObservableObject {
     private static func diffStats(repo: String, gitPath: String) -> (Int, Int) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: gitPath)
-        process.arguments = ["-C", repo, "--no-optional-locks", "diff", "--shortstat", "HEAD"]
+        process.arguments = ["-C", repo, "--no-optional-locks"] + AgentTools.gitGuards + ["diff"] + AgentTools.diffGuards + ["--shortstat", "HEAD"]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
@@ -227,7 +227,7 @@ final class VerticalTabsGit: ObservableObject {
     private static func aheadBehind(repo: String, gitPath: String) -> (ahead: Int, behind: Int)? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: gitPath)
-        process.arguments = ["-C", repo, "--no-optional-locks", "rev-list", "--left-right", "--count", "@{upstream}...HEAD"]
+        process.arguments = ["-C", repo, "--no-optional-locks"] + AgentTools.gitGuards + ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice

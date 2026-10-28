@@ -104,8 +104,9 @@ extension BoardController {
 
     func namedGroupDisplays() -> [BoardNamedGroupDisplay] {
         model.groups.compactMap { group in
-            guard let frame = groupFrame(group) else { return nil }
+            // A group whose tiles are all away in classic windows waits for them unseen.
             let surfaces = groupSurfaces(group)
+            guard !surfaces.isEmpty, let frame = groupFrame(group) else { return nil }
             let infos = surfaces.map { VerticalTabsAgents.shared.info(for: $0) }
             let rows = group.collapsed ? zip(surfaces, infos).map { surface, info in
                 (name: tileLabel(surface), status: model.paused.contains(surface.id) ? "Paused" : info?.activity.label ?? "Terminal",
