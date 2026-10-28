@@ -23,27 +23,90 @@ enum AgentTools {
     /// credential helper, an askpass program, a signing program. The app's own commands never
     /// want any of them, so a repository doesn't get to run something just by being open in
     /// a tab or the editor. A caller's own `-c` comes after these and wins. Diffs add
-    /// `diffGuards` themselves, since those are options of the diff command.
+    /// `diffGuards` themselves, since those are options of the diff command. No `ext::`
+    /// remotes (a URL rewrite can turn any remote into one), and no signature checks in logs,
+    /// which would run the configured gpg program.
+    ///
+    /// Filter programs have names of the repository's choosing, so no fixed setting reaches
+    /// them: `gitEnvironment(in:)` switches off the ones a repository's config defines.
     static let gitGuards: [String] = [
         "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false",
         "-c", "tag.gpgsign=false", "-c", "core.askPass=", "-c", "credential.helper=",
+        "-c", "protocol.ext.allow=never", "-c", "log.showSignature=false",
     ]
 
     /// For `git diff`: no external diff programs and no text converters, which a repository
     /// can also name in its config.
     static let diffGuards = ["--no-ext-diff", "--no-textconv"]
 
-    /// Runs git synchronously, with `gitGuards`. Call off the main thread for anything that
-    /// can be slow.
-    @discardableResult
-    static func git(_ args: [String], in directory: String) -> Result {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", directory] + gitGuards + args
-        var environment = ProcessInfo.processInfo.environment
+    /// The environment for a git the app runs in `directory`: the app's own without the event
+    /// token, never prompting, plus settings that switch off every filter program the
+    /// repository's own config defines (`git add`, `diff`, `restore` and `stash` run a file's
+    /// filter through the shell). Filters from your global config, such as Git LFS's, stay.
+    /// `leading` is any `--git-dir`/`--work-tree` the command itself starts with.
+    ///
+    /// The settings go in git's environment rather than `-c`, which can't name a filter
+    /// whose name contains "=".
+    static func gitEnvironment(in directory: String, leading: [String] = []) -> [String: String] {
+        var environment = EventToken.scrubbed(ProcessInfo.processInfo.environment)
         environment["GIT_TERMINAL_PROMPT"] = "0"
         environment["GIT_OPTIONAL_LOCKS"] = "0"
-        process.environment = EventToken.scrubbed(environment)
+        let listing = run(["-C", directory] + leading + gitGuards
+                          + ["config", "--show-scope", "-z", "--get-regexp", #"^filter\..*\.(clean|smudge|process)$"#],
+                          environment: environment)
+        return withSettings(filterOverrides(listing.output), environment)
+    }
+
+    /// Git LFS's own drivers, as `git lfs install --local` writes them.
+    private static let lfsDrivers: Set<String> = ["git-lfs clean -- %f", "git-lfs smudge -- %f", "git-lfs filter-process"]
+
+    /// Empty drivers for each filter that `git config --show-scope -z` lists from the
+    /// repository's own config (local or worktree scope), apart from Git LFS's.
+    static func filterOverrides(_ listing: String) -> [(key: String, value: String)] {
+        let fields = listing.split(separator: "\0", omittingEmptySubsequences: false)
+        var names: [String] = []
+        for index in stride(from: 0, to: fields.count - 1, by: 2) where ["local", "worktree"].contains(String(fields[index])) {
+            let entry = fields[index + 1]
+            let key = entry.prefix { $0 != "\n" }
+            let value = String(entry.dropFirst(key.count + 1))
+            guard key.hasPrefix("filter."), let dot = key.lastIndex(of: "."), dot > key.index(key.startIndex, offsetBy: 6),
+                  !lfsDrivers.contains(value) else { continue }
+            let name = String(key[key.index(key.startIndex, offsetBy: 7)..<dot])
+            if !names.contains(name) { names.append(name) }
+        }
+        return names.flatMap { name in
+            ["clean", "smudge", "process"].map { (key: "filter.\(name).\($0)", value: "") }
+                + [(key: "filter.\(name).required", value: "false")]
+        }
+    }
+
+    /// `environment` with `settings` added the way `git -c` would, after any it already has.
+    static func withSettings(_ settings: [(key: String, value: String)], _ environment: [String: String]) -> [String: String] {
+        guard !settings.isEmpty else { return environment }
+        var environment = environment
+        var count = Int(environment["GIT_CONFIG_COUNT"] ?? "") ?? 0
+        for setting in settings {
+            environment["GIT_CONFIG_KEY_\(count)"] = setting.key
+            environment["GIT_CONFIG_VALUE_\(count)"] = setting.value
+            count += 1
+        }
+        environment["GIT_CONFIG_COUNT"] = String(count)
+        return environment
+    }
+
+    /// Runs git synchronously, with `gitGuards` and `gitEnvironment(in:)`. Call off the main
+    /// thread for anything that can be slow.
+    @discardableResult
+    static func git(_ args: [String], in directory: String) -> Result {
+        let leading = Array(args.prefix { $0.hasPrefix("--git-dir=") || $0.hasPrefix("--work-tree=") })
+        return run(["-C", directory] + gitGuards + args, environment: gitEnvironment(in: directory, leading: leading))
+    }
+
+    private static func run(_ arguments: [String], environment: [String: String]) -> Result {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = arguments
+        process.environment = environment
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err

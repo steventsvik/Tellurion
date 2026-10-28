@@ -437,6 +437,7 @@ private final class EditorFileBridge: NSObject, WKScriptMessageHandlerWithReply 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
             process.arguments = ["-C", root] + AgentTools.gitGuards + ["ls-files", "--cached", "--others", "--exclude-standard"]
+            process.environment = AgentTools.gitEnvironment(in: root)
             let pipe = Pipe()
             process.standardOutput = pipe
             process.standardError = FileHandle.nullDevice

@@ -165,6 +165,7 @@ final class AgentChangeWatcher {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = ["-C", repoRoot] + AgentTools.gitGuards + ["check-ignore", "--stdin", "-z"]
+        process.environment = AgentTools.gitEnvironment(in: repoRoot)
         let input = Pipe(), output = Pipe()
         process.standardInput = input
         process.standardOutput = output

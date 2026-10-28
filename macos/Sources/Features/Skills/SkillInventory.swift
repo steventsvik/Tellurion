@@ -396,8 +396,10 @@ enum SkillInventory {
         return await Task.detached {
             let head = AgentTools.git(["rev-parse", "HEAD"], in: folder).output.trimmingCharacters(in: .whitespacesAndNewlines)
             // Never prompt for a password or passphrase, and run git's own upload-pack, not
-            // one the repository's config names.
+            // one the repository's config names. Only network transports, even if the
+            // repository's config rewrites the remote's URL to a local path or a git:// one.
             let latest = AgentTools.git(["-c", "core.sshCommand=ssh -o BatchMode=yes -o ConnectTimeout=8",
+                                         "-c", "protocol.file.allow=never", "-c", "protocol.git.allow=never",
                                          "ls-remote", "--upload-pack=git-upload-pack", "origin", "HEAD"], in: folder)
             guard latest.ok, let sha = latest.output.split(separator: "\t").first.map(String.init), !head.isEmpty else {
                 return .failed("Couldn't reach \(remote)")
