@@ -7,6 +7,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 ## Unreleased
 
 - **A repository can no longer run a program of its own through the git commands Tellurion runs for you.** The sidebar's change counts, the editor's file list, the Backend view, Review, races and the Skills window all run git in your repositories, and a repository's own `.git/config` can name programs for git to run on the way (a file monitor, an external diff, hooks, a credential helper, a signing program). Those settings are now overridden for every git command the app runs on its own, so a repository you clone or unzip can't start anything just by being open. Your own git commands in a terminal are unaffected. The Skills window only checks for updates against remotes on the network.
+- **A board file can no longer run a command of its own in a restored tile.** A board is saved as plain JSON that any program running as you can write, and a tile without a resumable session was started again by typing the command stored in that file, whatever it said. A restored tile now only resumes its Claude Code or Codex session, or starts its agent afresh; a tile with no known agent comes back as a plain shell.
 
 ## 1.8.4
 
