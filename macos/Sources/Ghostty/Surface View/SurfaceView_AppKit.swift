@@ -1709,29 +1709,27 @@ extension Ghostty {
                 trigger: nil
             )
 
-            // The completion may run on a background thread; view state belongs on main.
-            UNUserNotificationCenter.current().add(request) { [self] error in
+            // Note the callback may be executed on a background thread as documented
+            // so we need @MainActor since we're reading/writing view state.
+            UNUserNotificationCenter.current().add(request) { @MainActor error in
                 if let error = error {
                     AppDelegate.logger.error("Error scheduling user notification: \(error)")
                     return
                 }
 
-                DispatchQueue.main.async { [self] in
-                    // Keep track of this notification so focus changes can remove it.
-                    self.notificationIdentifiers.insert(uuid)
+                // We need to keep track of this notification so we can remove it
+                // under certain circumstances
+                self.notificationIdentifiers.insert(uuid)
 
-                    // Already-focused surfaces remove the notification after a few seconds.
-                    if self.focused {
-                        Task { @MainActor [weak self] in
-                            do {
-                                try await Task.sleep(for: .seconds(3))
-                            } catch {
-                                return
-                            }
-                            self?.notificationIdentifiers.remove(uuid)
-                            UNUserNotificationCenter.current()
-                                .removeDeliveredNotifications(withIdentifiers: [uuid])
-                        }
+                // If we're focused then we schedule to remove the notification
+                // after a few seconds. If we gain focus we automatically remove it
+                // in focusDidChange.
+                if self.focused {
+                    Task { @MainActor [weak self] in
+                        try await Task.sleep(for: .seconds(3))
+                        self?.notificationIdentifiers.remove(uuid)
+                        UNUserNotificationCenter.current()
+                            .removeDeliveredNotifications(withIdentifiers: [uuid])
                     }
                 }
             }

@@ -26,30 +26,6 @@ class MockView: NSView, Codable, Identifiable {
     }
 }
 
-// Test arguments are collected outside the main actor. Keep AppKit-bound generic
-// types inside the test bodies, where MockView's Codable conformance is safe to use.
-private enum SplitTestDirection: Sendable {
-    case left, right, up, down
-
-    @MainActor var spatial: SplitTree<MockView>.Spatial.Direction {
-        switch self {
-        case .left: return .left
-        case .right: return .right
-        case .up: return .up
-        case .down: return .down
-        }
-    }
-
-    @MainActor var insertion: SplitTree<MockView>.NewDirection {
-        switch self {
-        case .left: return .left
-        case .right: return .right
-        case .up: return .up
-        case .down: return .down
-        }
-    }
-}
-
 @MainActor
 struct SplitTreeTests {
     /// Creates a two-view horizontal split tree (view1 | view2).
@@ -218,7 +194,7 @@ struct SplitTreeTests {
 
     @Test(arguments: [
         // (resizeDirection, insertDirection, bounds, pixels, expectedRatio)
-        (SplitTestDirection.right, SplitTestDirection.right,
+        (SplitTree<MockView>.Spatial.Direction.right, SplitTree<MockView>.NewDirection.right,
          CGRect(x: 0, y: 0, width: 1000, height: 500), UInt16(100), 0.6),
         (.left, .right,
          CGRect(x: 0, y: 0, width: 1000, height: 500), UInt16(50), 0.45),
@@ -227,9 +203,9 @@ struct SplitTreeTests {
         (.up, .down,
          CGRect(x: 0, y: 0, width: 500, height: 1000), UInt16(50), 0.45),
     ])
-    fileprivate func resizingAdjustsRatio(
-        resizeDirection: SplitTestDirection,
-        insertDirection: SplitTestDirection,
+    func resizingAdjustsRatio(
+        resizeDirection: SplitTree<MockView>.Spatial.Direction,
+        insertDirection: SplitTree<MockView>.NewDirection,
         bounds: CGRect,
         pixels: UInt16,
         expectedRatio: Double
@@ -237,9 +213,9 @@ struct SplitTreeTests {
         let view1 = MockView()
         let view2 = MockView()
         var tree = SplitTree<MockView>(view: view1)
-        tree = try tree.inserting(view: view2, at: view1, direction: insertDirection.insertion)
+        tree = try tree.inserting(view: view2, at: view1, direction: insertDirection)
 
-        let resized = try tree.resizing(node: .leaf(view: view1), by: pixels, in: resizeDirection.spatial, with: bounds)
+        let resized = try tree.resizing(node: .leaf(view: view1), by: pixels, in: resizeDirection, with: bounds)
 
         guard case .split(let s) = resized.root else {
             Issue.record("unexpected node type")
@@ -448,27 +424,27 @@ struct SplitTreeTests {
     // MARK: - Spatial
 
     @Test(arguments: [
-        (SplitTestDirection.left, SplitTestDirection.right),
+        (SplitTree<MockView>.Spatial.Direction.left, SplitTree<MockView>.NewDirection.right),
         (.right, .right),
         (.up, .down),
         (.down, .down),
     ])
-    fileprivate func doesBorderEdge(
-        side: SplitTestDirection,
-        insertDirection: SplitTestDirection
+    func doesBorderEdge(
+        side: SplitTree<MockView>.Spatial.Direction,
+        insertDirection: SplitTree<MockView>.NewDirection
     ) throws {
         let view1 = MockView()
         let view2 = MockView()
         var tree = SplitTree<MockView>(view: view1)
-        tree = try tree.inserting(view: view2, at: view1, direction: insertDirection.insertion)
+        tree = try tree.inserting(view: view2, at: view1, direction: insertDirection)
 
         let spatial = tree.root!.spatial(within: CGSize(width: 1000, height: 500))
 
         // view1 borders left/up; view2 borders right/down
         let (borderView, nonBorderView): (MockView, MockView) =
             (side == .right || side == .down) ? (view2, view1) : (view1, view2)
-        #expect(spatial.doesBorder(side: side.spatial, from: .leaf(view: borderView)))
-        #expect(!spatial.doesBorder(side: side.spatial, from: .leaf(view: nonBorderView)))
+        #expect(spatial.doesBorder(side: side, from: .leaf(view: borderView)))
+        #expect(!spatial.doesBorder(side: side, from: .leaf(view: nonBorderView)))
     }
 
     // MARK: - Calculate View Bounds
@@ -576,26 +552,26 @@ struct SplitTreeTests {
     }
 
     @Test(arguments: [
-        (SplitTestDirection.right, SplitTestDirection.right),
+        (SplitTree<MockView>.Spatial.Direction.right, SplitTree<MockView>.NewDirection.right),
         (.left, .right),
         (.down, .down),
         (.up, .down),
     ])
-    fileprivate func slotsFromNode(
-        direction: SplitTestDirection,
-        insertDirection: SplitTestDirection
+    func slotsFromNode(
+        direction: SplitTree<MockView>.Spatial.Direction,
+        insertDirection: SplitTree<MockView>.NewDirection
     ) throws {
         let view1 = MockView()
         let view2 = MockView()
         var tree = SplitTree<MockView>(view: view1)
-        tree = try tree.inserting(view: view2, at: view1, direction: insertDirection.insertion)
+        tree = try tree.inserting(view: view2, at: view1, direction: insertDirection)
 
         let spatial = tree.root!.spatial(within: CGSize(width: 1000, height: 500))
 
         // look from view1 toward view2 for right/down, from view2 toward view1 for left/up
         let (fromView, expectedView): (MockView, MockView) =
             (direction == .right || direction == .down) ? (view1, view2) : (view2, view1)
-        let slots = spatial.slots(in: direction.spatial, from: .leaf(view: fromView))
+        let slots = spatial.slots(in: direction, from: .leaf(view: fromView))
         #expect(slots.count == 1)
         #expect(slots[0].node == .leaf(view: expectedView))
     }
