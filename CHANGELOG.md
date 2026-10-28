@@ -8,6 +8,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 
 - **Rerun on a command block types the command for you to run.** The command a block shows is read back from marks in the terminal's output, and any program can print those, so a block could show something you never ran. Rerun now puts the command at the prompt, on one line, and you press Return; it no longer runs it straight away.
 - **localhost sessions only accept their own ids.** A session's id is typed into the shell that runs it; anything that isn't an id Tellurion or `localhost` made is now ignored, and the id is quoted when typed.
+- **A board file can no longer run a command of its own in a restored tile.** A board is saved as plain JSON that any program running as you can write, and a tile without a resumable session was started again by typing the command stored in that file, whatever it said. A restored tile now only resumes its Claude Code or Codex session, or starts its agent afresh; a tile with no known agent comes back as a plain shell.
 
 ## 1.8.4
 
