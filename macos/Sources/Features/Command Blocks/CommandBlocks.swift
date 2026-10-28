@@ -139,14 +139,25 @@ final class CommandBlocks: ObservableObject {
 
     // MARK: Actions
 
-    /// Types the command into the pane again and runs it.
+    /// Types the command at the pane's prompt again, for you to run with Return.
+    ///
+    /// It isn't run straight away: the command is read back from the shell-integration marks
+    /// in the terminal's output, and any program can print those, so what comes back may not
+    /// be what you ran. Seeing it at the prompt first is the check.
     @MainActor
     func rerun(_ block: CommandBlock, in surface: Ghostty.SurfaceView) {
         guard let model = surface.surfaceModel else { return }
-        model.sendText(block.command)
-        model.sendKeyEvent(.init(key: .enter, action: .press, text: "\r"))
-        model.sendKeyEvent(.init(key: .enter, action: .release))
+        model.sendText(Self.rerunText(block.command))
         Ghostty.moveFocus(to: surface)
+    }
+
+    /// The text Rerun types: the command on one line, without anything that would run it or
+    /// reach the terminal as a control character.
+    nonisolated static func rerunText(_ command: String) -> String {
+        let line = command.replacingOccurrences(of: "\r\n", with: " ").replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+        return String(String.UnicodeScalarView(line.unicodeScalars.filter { $0.value >= 0x20 && $0.value != 0x7F }))
+            .trimmingCharacters(in: .whitespaces)
     }
 
     /// Opens an agent in a split beside the pane with the command and its output, asking it to

@@ -294,7 +294,7 @@ final class TailscaleMonitor: ObservableObject {
         process.arguments = args
         var environment = ProcessInfo.processInfo.environment
         environment["TAILSCALE_BE_CLI"] = "1"
-        process.environment = environment
+        process.environment = EventToken.scrubbed(environment)
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err
