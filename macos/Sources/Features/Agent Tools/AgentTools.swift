@@ -43,7 +43,7 @@ enum AgentTools {
         var environment = ProcessInfo.processInfo.environment
         environment["GIT_TERMINAL_PROMPT"] = "0"
         environment["GIT_OPTIONAL_LOCKS"] = "0"
-        process.environment = environment
+        process.environment = EventToken.scrubbed(environment)
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err
