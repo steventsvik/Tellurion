@@ -339,20 +339,24 @@ enum BackendProbe {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
-    /// `path` (relative to `root`, or empty for the root) if it's inside the project.
-    private static func inside(_ root: String, _ value: Any?) -> String? {
+    /// `path` (relative to `root`, or empty for the root) if it's inside the project, with
+    /// symlinks resolved: a link in the project that points elsewhere doesn't count as inside.
+    static func inside(_ root: String, _ value: Any?) -> String? {
         let relative = value as? String ?? ""
-        let path = ((relative.isEmpty ? root : "\(root)/\(relative)") as NSString).standardizingPath
-        return path == root || path.hasPrefix(root + "/") ? path : nil
+        let project = URL(fileURLWithPath: root).resolvingSymlinksInPath().standardizedFileURL.path
+        let path = URL(fileURLWithPath: relative.isEmpty ? root : "\(root)/\(relative)")
+            .resolvingSymlinksInPath().standardizedFileURL.path
+        guard project != "/" else { return nil }
+        return path == project || path.hasPrefix(project + "/") ? path : nil
     }
 
-    private static let searchPath: String = {
+    /// Where provider CLIs are looked for: fixed folders of installed tools only. Not the
+    /// inherited PATH, and not version-manager shims such as Volta's, which run a project's
+    /// own node_modules binary when it has one.
+    static let searchPath: String = {
         let home = NSHomeDirectory()
-        let extra = ["/opt/homebrew/bin", "/usr/local/bin", "\(home)/.local/bin", "\(home)/.npm-global/bin",
-                     "\(home)/.bun/bin", "\(home)/.volta/bin", "\(home)/.cargo/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
-        let current = ProcessInfo.processInfo.environment["PATH"]?.split(separator: ":").map(String.init) ?? []
-        var seen = Set<String>()
-        return (extra + current).filter { seen.insert($0).inserted }.joined(separator: ":")
+        return ["/opt/homebrew/bin", "/usr/local/bin", "\(home)/.local/bin", "\(home)/.npm-global/bin",
+                "\(home)/.bun/bin", "\(home)/.cargo/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"].joined(separator: ":")
     }()
 
     /// Only absolute folders: a relative PATH entry would look inside whatever folder the

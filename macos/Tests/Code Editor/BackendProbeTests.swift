@@ -61,6 +61,30 @@ struct BackendProbeTests {
         }
     }
 
+    @Test func aLinkOutOfTheProjectIsNotInside() throws {
+        let folder = try project()
+        let outside = FileManager.default.temporaryDirectory.appendingPathComponent("outside-" + UUID().uuidString)
+        defer {
+            try? FileManager.default.removeItem(at: folder)
+            try? FileManager.default.removeItem(at: outside)
+        }
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("app"), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("escape"), withDestinationURL: outside)
+        #expect(BackendProbe.inside(folder.path, "app") != nil)
+        #expect(BackendProbe.inside(folder.path, "") != nil)
+        #expect(BackendProbe.inside(folder.path, "escape") == nil)
+        #expect(BackendProbe.inside(folder.path, "../") == nil)
+        #expect(BackendProbe.inside("/", "etc") == nil)
+    }
+
+    @Test func providerCLIsComeOnlyFromFixedFolders() {
+        let folders = BackendProbe.searchPath.split(separator: ":").map(String.init)
+        #expect(folders.allSatisfy { $0.hasPrefix("/") })
+        #expect(!folders.contains { $0.contains(".volta") })
+        #expect(folders.contains("/opt/homebrew/bin"))
+    }
+
     @Test func helpersDontGetTheEventToken() {
         #expect(EventToken.scrubbed([EventToken.environmentKey: "secret", "PATH": "/usr/bin"]) == ["PATH": "/usr/bin"])
         // The app puts the token in its own environment; git started by the app must not see it.
