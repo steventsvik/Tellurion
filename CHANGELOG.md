@@ -8,6 +8,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 
 - **Tiles that went to Classic and back keep their agent.** A tile moved into a window by the switch to Classic and back onto the board forgot its agent, session and accounts, so after the next relaunch it opened a plain shell. It now resumes like any other tile.
 - **No empty group frames after the switch back.** A group whose terminals were all still in windows showed as an empty frame on the board, and a board that wasn't open kept the drawings, groups and wiring of terminals that had since been closed. Both are tidied now.
+- **A board file can no longer run a command of its own in a restored tile.** A board is saved as plain JSON that any program running as you can write, and a tile without a resumable session was started again by typing the command stored in that file, whatever it said. A restored tile now only resumes its Claude Code or Codex session, or starts its agent afresh; a tile with no known agent comes back as a plain shell.
 
 ## 1.8.4
 
