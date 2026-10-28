@@ -4,6 +4,11 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Tiles that went to Classic and back keep their agent.** A tile moved into a window by the switch to Classic and back onto the board forgot its agent, session and accounts, so after the next relaunch it opened a plain shell. It now resumes like any other tile.
+- **No empty group frames after the switch back.** A group whose terminals were all still in windows showed as an empty frame on the board, and a board that wasn't open kept the drawings, groups and wiring of terminals that had since been closed. Both are tidied now.
+
 ## 1.8.4
 
 A follow-up to 1.8.3: paste in the orchestrator, a way to tell the Setup Check you don't use Codex, tiles that stay above the board's agent bar when you zoom to them, and safer handling of your config files. The shipped app no longer carries its test switches.
