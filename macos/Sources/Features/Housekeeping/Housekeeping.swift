@@ -537,9 +537,8 @@ final class Housekeeping: ObservableObject {
         // Forget items not seen for a week.
         let cutoff = Date().timeIntervalSince1970 - 7 * 86400
         history = history.filter { ($0.value.lastActive ?? $0.value.firstSeen) > cutoff || $0.key.hasPrefix("colima:") }
-        guard let data = try? JSONEncoder().encode(history) else { return }
-        try? FileManager.default.createDirectory(at: Self.historyURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? data.write(to: Self.historyURL, options: .atomic)
+        StoredFile.write(json: history, to: Self.historyURL, what: "the background-process history",
+                         log: StoredFile.logger("Housekeeping"), encoder: JSONEncoder())
     }
 }
 
@@ -707,7 +706,7 @@ extension Housekeeping {
         process.arguments = args
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-        process.environment = env
+        process.environment = EventToken.scrubbed(env)
         let out = Pipe()
         process.standardOutput = out
         process.standardError = FileHandle.nullDevice

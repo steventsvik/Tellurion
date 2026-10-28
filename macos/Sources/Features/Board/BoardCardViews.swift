@@ -103,6 +103,21 @@ final class BoardCardView: BoardNodeView {
         }
     }
 
+    /// Called only from the board's visibility pass, after layout, scroll and occlusion changes.
+    func updateBoardVisibility(windowVisible: Bool, visibleRect: CGRect, zoom: CGFloat) {
+        (content as? AgentMapContent)?.setBoardVisible(Self.mapIsVisible(
+            windowVisible: windowVisible, frame: frame, visibleRect: visibleRect, zoom: zoom))
+    }
+
+    static func mapIsVisible(windowVisible: Bool, frame: CGRect, visibleRect: CGRect, zoom: CGFloat) -> Bool {
+        windowVisible && zoom >= 0.45 && frame.intersects(visibleRect)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { (content as? AgentMapContent)?.setBoardVisible(false) }
+    }
+
     /// What an Agent Map shows, for tests.
     var mapState: String? { (content as? AgentMapContent)?.testState }
 

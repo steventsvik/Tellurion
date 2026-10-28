@@ -188,23 +188,31 @@ enum HookConfig {
         "# GhosttyEXTREME: shows which coding agent each pane runs (does nothing in other terminals)",
     ].map(squeezed))
 
-    /// The `source` line, with its spacing squeezed.
+    /// The `source` line, with its spacing squeezed. Every version wrote this one line; a
+    /// `ghostty-custom.zsh` line was never written by the app, so it's the user's own.
     private static let zshrcSource = squeezed(String(zshrcBlock.split(whereSeparator: \.isNewline).last ?? ""))
 
-    /// `text` without our lines: the `source` line, the comment above it and the blank line
-    /// the block starts with. Spacing doesn't matter (a re-indented or re-spaced block
-    /// still goes), but any other wording stays: only lines we wrote are removed.
+    /// Whether a line of `~/.zshrc` is our `source` line, whatever its spacing.
+    static func isZshrcSourceLine(_ line: String) -> Bool { squeezed(line) == zshrcSource }
+
+    /// `text` without our lines: the `source` line, the comment above it and, when the
+    /// comment is there, the blank line the block starts with.
+    /// Spacing doesn't matter (a re-indented or re-spaced block still goes), but any other
+    /// wording stays: only lines we wrote are removed.
     static func zshrcRemovingIntegration(_ text: String) -> String {
         var lines = text.components(separatedBy: "\n")
         var i = 0
         while i < lines.count {
-            guard squeezed(lines[i]) == zshrcSource else {
+            guard isZshrcSourceLine(lines[i]) else {
                 i += 1
                 continue
             }
             var start = i
-            if start > 0, zshrcComments.contains(squeezed(lines[start - 1])) { start -= 1 }
-            if start > 0, squeezed(lines[start - 1]).isEmpty { start -= 1 }
+            if start > 0, zshrcComments.contains(squeezed(lines[start - 1])) {
+                start -= 1
+                // The blank line is ours only as part of the block: on its own it's the user's spacing.
+                if start > 0, squeezed(lines[start - 1]).isEmpty { start -= 1 }
+            }
             lines.removeSubrange(start...i)
             i = start
         }

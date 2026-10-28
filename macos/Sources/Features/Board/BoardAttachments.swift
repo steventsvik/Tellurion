@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import UniformTypeIdentifiers
 
 /// A picture pasted into an orchestrator's command field: a thumbnail under the field, and
 /// sent with the command. Kept as PNG no larger than `maxEdge` on a side, which is as much
@@ -23,11 +24,20 @@ struct ImageAttachment: Identifiable, Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
 
     /// The pictures on a pasteboard: image files (copied in the Finder), or picture data (a
-    /// screenshot, a copied image). Nothing for text alone, or for files that aren't pictures.
+    /// screenshot, a copied image). Nothing for text alone, or for files that aren't pictures:
+    /// a PDF's path pastes as text rather than its first page as a picture.
     static func read(from pasteboard: NSPasteboard) -> [ImageAttachment] {
         let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        let images = urls.isEmpty ? (NSImage(pasteboard: pasteboard).map { [$0] } ?? []) : urls.compactMap { NSImage(contentsOf: $0) }
+        let images = urls.isEmpty ? (NSImage(pasteboard: pasteboard).map { [$0] } ?? [])
+            : urls.filter(isPicture).compactMap { NSImage(contentsOf: $0) }
         return images.compactMap(ImageAttachment.init(image:))
+    }
+
+    /// Whether a file is a picture by its type (PNG, JPEG, HEIC...), not a document
+    /// NSImage happens to render, such as a PDF.
+    static func isPicture(_ url: URL) -> Bool {
+        guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
+        return type.conforms(to: .image) && !type.conforms(to: .svg)
     }
 
     /// Whether a pasteboard may hold pictures (a cheap check, for menu validation).
