@@ -98,10 +98,9 @@ extension BoardController {
             return nil
         }
         let folder = AgentTools.root.appendingPathComponent("sketches", isDirectory: true)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let safe = sketch.title.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }.joined(separator: "-")
         let file = folder.appendingPathComponent("\(safe.isEmpty ? "sketch" : safe)-\(AgentTools.timestamp()).png")
-        return (try? data.write(to: file, options: .atomic)) != nil ? file : nil
+        return StoredFile.write(data, to: file, what: "a sketch's picture", log: StoredFile.logger("Board")) ? file : nil
     }
 
     func copySketch(_ id: UUID) {
@@ -122,7 +121,12 @@ extension BoardController {
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url, let image = self?.picture(id),
                   let data = SketchRenderer.png(image) else { return }
-            try? data.write(to: url, options: .atomic)
+            // You chose where it goes, so a failure is shown, not just logged.
+            do {
+                try data.write(to: url, options: .atomic)
+            } catch {
+                NSAlert(error: error).beginSheetModal(for: window)
+            }
         }
     }
 

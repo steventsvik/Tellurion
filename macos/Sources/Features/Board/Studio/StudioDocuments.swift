@@ -237,10 +237,8 @@ final class StudioDocuments: ObservableObject {
 
     private func save(as id: String) {
         guard let project, !markdown.isEmpty else { return }
-        let folder = StudioDocs.library(for: project)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let url = folder.appendingPathComponent(id + ".md")
-        try? markdown.write(to: url, atomically: true, encoding: .utf8)
+        let url = StudioDocs.library(for: project).appendingPathComponent(id + ".md")
+        guard StoredFile.write(Data(markdown.utf8), to: url, what: "a document", log: StoredFile.logger("Studio")) else { return }
         file = url
         refresh()
     }

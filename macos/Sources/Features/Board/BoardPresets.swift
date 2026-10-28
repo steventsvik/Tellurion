@@ -53,11 +53,7 @@ enum BoardPresets {
     }
 
     private static func write(_ presets: [BoardPreset]) {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(presets) else { return }
-        try? FileManager.default.createDirectory(at: AgentTools.root, withIntermediateDirectories: true)
-        try? data.write(to: file, options: .atomic)
+        StoredFile.write(json: presets, to: file, what: "the board presets", log: StoredFile.logger("Board"))
     }
 }
 
