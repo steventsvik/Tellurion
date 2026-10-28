@@ -4,6 +4,11 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Rerun on a command block types the command for you to run.** The command a block shows is read back from marks in the terminal's output, and any program can print those, so a block could show something you never ran. Rerun now puts the command at the prompt, on one line, and you press Return; it no longer runs it straight away.
+- **localhost sessions only accept their own ids.** A session's id is typed into the shell that runs it; anything that isn't an id Tellurion or `localhost` made is now ignored, and the id is quoted when typed.
+
 ## 1.8.4
 
 A follow-up to 1.8.3: paste in the orchestrator, a way to tell the Setup Check you don't use Codex, tiles that stay above the board's agent bar when you zoom to them, and safer handling of your config files. The shipped app no longer carries its test switches.
