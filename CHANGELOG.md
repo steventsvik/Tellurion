@@ -4,6 +4,12 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Pictures sent to an orchestrator on Codex work after its first command.** A second command with a pasted picture failed, because Codex read the conversation's id as one more picture.
+- **"@agent" with only a picture sends the picture.** It used to send nothing and drop the pasted picture; the agent now gets the picture's path, and a mention with neither words nor picture says so.
+- **A PDF copied in the Finder pastes as its path.** The orchestrator's field turned any file it could render, such as a PDF, into a picture of its first page; only image files become pictures now.
+
 ## 1.8.4
 
 A follow-up to 1.8.3: paste in the orchestrator, a way to tell the Setup Check you don't use Codex, tiles that stay above the board's agent bar when you zoom to them, and safer handling of your config files. The shipped app no longer carries its test switches.

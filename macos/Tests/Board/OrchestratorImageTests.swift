@@ -112,8 +112,9 @@ struct OrchestratorImageTests {
         #expect(joined.contains("-i /tmp/one.png -i /tmp/two.png -- -"))
         let resumed = HeadlessAgent.arguments(.codex, instructions: "i", schema: "{}", session: "thread", images: [one])
         #expect(resumed.prefix(2) == ["exec", "resume"])
-        #expect(resumed.suffix(2) == ["thread", "-"])
-        #expect(resumed.joined(separator: " ").contains("-i /tmp/one.png"))
+        // The same "--" here, or the session id and the "-" would be read as two more files.
+        #expect(resumed.suffix(3) == ["--", "thread", "-"])
+        #expect(resumed.joined(separator: " ").contains("-i /tmp/one.png -- thread -"))
         #expect(!HeadlessAgent.arguments(.codex, instructions: "i", schema: "{}", session: nil).contains("-i"))
     }
 
@@ -138,6 +139,40 @@ struct OrchestratorImageTests {
         let broken = HeadlessAgent.parseClaude(AgentTools.Result(status: 1, output: "not json\n{\"type\":\"other\"}", error: "boom"))
         #expect(broken.json == nil)
         #expect(broken.error?.contains("boom") == true)
+    }
+
+    @Test func documentsThatRenderAsPicturesAreNotPictures() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // A one-page PDF, which NSImage opens happily.
+        let pdf = folder.appendingPathComponent("notes.pdf")
+        var box = CGRect(x: 0, y: 0, width: 20, height: 20)
+        let context = try #require(CGContext(pdf as CFURL, mediaBox: &box, nil))
+        context.beginPDFPage(nil)
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(box)
+        context.endPDFPage()
+        context.closePDF()
+        #expect(NSImage(contentsOf: pdf) != nil)
+        #expect(!ImageAttachment.isPicture(pdf))
+        #expect(ImageAttachment.isPicture(URL(fileURLWithPath: "/tmp/a.png")))
+        #expect(ImageAttachment.isPicture(URL(fileURLWithPath: "/tmp/a.JPEG")))
+        #expect(!ImageAttachment.isPicture(URL(fileURLWithPath: "/tmp/a.txt")))
+        let pasteboard = pasteboard()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.writeObjects([pdf as NSURL])
+        #expect(ImageAttachment.read(from: pasteboard).isEmpty)
+    }
+
+    @Test func aMentionNeedsWordsOrAPicture() {
+        let one = URL(fileURLWithPath: "/tmp/one.png"), two = URL(fileURLWithPath: "/tmp/two.png")
+        #expect(OrchestratorBrain.mentionMessage("", files: []) == nil)
+        #expect(OrchestratorBrain.mentionMessage("Run the tests", files: []) == "Run the tests")
+        #expect(OrchestratorBrain.mentionMessage("Run the tests", files: [one]) == "Run the tests\n\nImage: /tmp/one.png")
+        let alone = OrchestratorBrain.mentionMessage("", files: [one, two])
+        #expect(alone == "Have a look at these images.\n\nImage: /tmp/one.png\nImage: /tmp/two.png")
+        #expect(OrchestratorBrain.mentionMessage("", files: [one])?.hasPrefix("Have a look at this image.") == true)
     }
 
     @Test func savedPicturesAreFilesAndOldOnesGo() throws {
