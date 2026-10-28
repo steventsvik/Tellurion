@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **A repository can no longer run a program of its own through the git commands Tellurion runs for you.** The sidebar's change counts, the editor's file list, the Backend view, Review, races and the Skills window all run git in your repositories, and a repository's own `.git/config` can name programs for git to run on the way (a file monitor, an external diff, hooks, a credential helper, a signing program). Those settings are now overridden for every git command the app runs on its own, so a repository you clone or unzip can't start anything just by being open. Your own git commands in a terminal are unaffected. The Skills window only checks for updates against remotes on the network.
+
 ## 1.8.4
 
 A follow-up to 1.8.3: paste in the orchestrator, a way to tell the Setup Check you don't use Codex, tiles that stay above the board's agent bar when you zoom to them, and safer handling of your config files. The shipped app no longer carries its test switches.
