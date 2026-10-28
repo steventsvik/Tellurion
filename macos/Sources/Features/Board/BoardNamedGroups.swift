@@ -185,10 +185,6 @@ extension BoardController {
         changeGroup(id, action: "Rename Group") { $0.name = BoardStore.uniqueName(name, taken: taken) }
     }
 
-    func setGroupColor(_ id: UUID, _ color: Int?) {
-        changeGroup(id, action: "Group Color") { $0.color = color }
-    }
-
     func setGroupRole(_ id: UUID, _ role: BoardRole) {
         let taken = Set(model.groups.filter { $0.id != id }.map(\.name))
         changeGroup(id, action: "Group Role") { group in
