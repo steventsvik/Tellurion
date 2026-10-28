@@ -55,16 +55,21 @@ struct BoardAgent: Identifiable, Hashable {
     }
 
     /// The line that resumes a saved session, or starts the agent again when it can't resume.
+    ///
+    /// Only lines built here are typed into the restored tile. The board file is plain JSON
+    /// that any program running as you can write, so the command it stores is never typed
+    /// back as it is: a tile without a known agent comes back as a plain shell.
     static func resumeCommand(for tile: BoardTile) -> String? {
-        let kind = tile.agent.map(VerticalTabAgentKind.init(id:))
+        guard let agent = tile.agent.map(VerticalTabAgentKind.init(id:)).flatMap(forKind) else { return nil }
         if let session = tile.session, UUID(uuidString: session) != nil {
-            switch kind {
+            switch agent.kind {
             case .claude: return " claude --resume \(session)\n"
             case .codex: return " codex resume \(session)\n"
             default: break
             }
         }
-        return tile.command
+        // The leading space keeps the line out of the shell history, like the resume lines.
+        return " " + agent.binary + "\n"
     }
 }
 #endif
