@@ -7,6 +7,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 ## Unreleased
 
 - **An Agent Map you can't see does no work.** A map on a board zoomed out far enough to hide its contents started following the agents again whenever you came back to the app. Maps now follow the board's own idea of what's on screen: the window, the part of the board in view and the zoom.
+- **A board file can no longer run a command of its own in a restored tile.** A board is saved as plain JSON that any program running as you can write, and a tile without a resumable session was started again by typing the command stored in that file, whatever it said. A restored tile now only resumes its Claude Code or Codex session, or starts its agent afresh; a tile with no known agent comes back as a plain shell.
 
 ## 1.8.4
 
