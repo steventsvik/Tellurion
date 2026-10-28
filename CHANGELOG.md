@@ -8,7 +8,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 
 - **Pictures sent to an orchestrator on Codex work after its first command.** A second command with a pasted picture failed, because Codex read the conversation's id as one more picture.
 - **"@agent" with only a picture sends the picture.** It used to send nothing and drop the pasted picture; the agent now gets the picture's path, and a mention with neither words nor picture says so.
-- **A PDF copied in the Finder pastes as its path.** The orchestrator's field turned any file it could render, such as a PDF, into a picture of its first page; only image files become pictures now.
+- **A PDF or SVG copied in the Finder pastes as its path.** The orchestrator's field turned any file it could render into a picture; only photos, screenshots and other bitmap images become pictures now.
 
 ## 1.8.4
 

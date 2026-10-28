@@ -33,10 +33,11 @@ struct ImageAttachment: Identifiable, Equatable {
         return images.compactMap(ImageAttachment.init(image:))
     }
 
-    /// Whether a file is a picture by its type (PNG, JPEG, HEIC, SVG...), not a document
+    /// Whether a file is a picture by its type (PNG, JPEG, HEIC...), not a document
     /// NSImage happens to render, such as a PDF.
     static func isPicture(_ url: URL) -> Bool {
-        UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true
+        guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
+        return type.conforms(to: .image) && !type.conforms(to: .svg)
     }
 
     /// Whether a pasteboard may hold pictures (a cheap check, for menu validation).

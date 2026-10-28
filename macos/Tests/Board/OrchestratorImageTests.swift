@@ -159,9 +159,12 @@ struct OrchestratorImageTests {
         #expect(ImageAttachment.isPicture(URL(fileURLWithPath: "/tmp/a.png")))
         #expect(ImageAttachment.isPicture(URL(fileURLWithPath: "/tmp/a.JPEG")))
         #expect(!ImageAttachment.isPicture(URL(fileURLWithPath: "/tmp/a.txt")))
+        #expect(!ImageAttachment.isPicture(URL(fileURLWithPath: "/tmp/a.svg")))
+        let svg = folder.appendingPathComponent("drawing.svg")
+        try "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\"><rect width=\"20\" height=\"20\"/></svg>".write(to: svg, atomically: true, encoding: .utf8)
         let pasteboard = pasteboard()
         defer { pasteboard.releaseGlobally() }
-        pasteboard.writeObjects([pdf as NSURL])
+        pasteboard.writeObjects([pdf as NSURL, svg as NSURL])
         #expect(ImageAttachment.read(from: pasteboard).isEmpty)
     }
 
