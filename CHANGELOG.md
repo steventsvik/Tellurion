@@ -7,6 +7,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 ## Unreleased
 
 - **Saving a sketch as a picture says when it fails.** Choosing where to save a sketch and then not being able to write there did nothing; it now shows why. Settings, designs, presets, account profiles and documents that can't be saved are reported in Console.app instead of being ignored.
+- **A board file can no longer run a command of its own in a restored tile.** A board is saved as plain JSON that any program running as you can write, and a tile without a resumable session was started again by typing the command stored in that file, whatever it said. A restored tile now only resumes its Claude Code or Codex session, or starts its agent afresh; a tile with no known agent comes back as a plain shell.
 
 ## 1.8.4
 
