@@ -4,7 +4,9 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
-## Unreleased
+## 1.8.5
+
+Security fixes (#98, #101, #102, #103, #109): a board file, a repository's git config or a project's own wrangler can no longer run a program just by being opened, and Rerun no longer runs a command another program printed. Plus fixes for orchestrator pictures, tiles back from Classic, the Agent Map, removing the shell integration and saving a sketch.
 
 - **A repository's own filter programs no longer run when Tellurion runs git for you.** A repository's `.git/config` can also name filter programs, which git runs on files whenever it reads or writes them: Review's snapshots and restores, the sidebar's change counts and stashing in the Git panel all did. Filters a repository defines for itself are now switched off for the git commands the app runs on its own (Git LFS and filters from your global config still work). The Skills window's update check no longer follows a repository's URL rewrite to a program or a local path, and two of Agent Context's diffs that could still run an external diff program no longer do.
 - **Saving a sketch as a picture says when it fails.** Choosing where to save a sketch and then not being able to write there did nothing; it now shows why. Settings, designs, presets, account profiles and documents that can't be saved are reported in Console.app instead of being ignored.
