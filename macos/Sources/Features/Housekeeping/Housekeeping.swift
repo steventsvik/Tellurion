@@ -706,7 +706,7 @@ extension Housekeeping {
         process.arguments = args
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-        process.environment = env
+        process.environment = EventToken.scrubbed(env)
         let out = Pipe()
         process.standardOutput = out
         process.standardError = FileHandle.nullDevice

@@ -303,7 +303,7 @@ final class LocalhostSessions: ObservableObject {
     func handle(body: String, from surface: Ghostty.SurfaceView) {
         guard let data = body.data(using: .utf8),
               let event = try? JSONDecoder().decode(Event.self, from: data),
-              event.id.hasPrefix("lh-"), !event.id.contains("/") else { return }
+              Self.isSessionID(event.id) else { return }
         switch event.event {
         case "open":
             open(id: event.id, from: surface)
@@ -349,6 +349,17 @@ final class LocalhostSessions: ObservableObject {
         let command: String
         let log: String?
         let agent: String?
+    }
+
+    /// A session id as `localhost` and this file make them: `lh-<seconds>-<number>`. The id
+    /// names files here and is typed into a shell, so nothing else gets through.
+    static func isSessionID(_ id: String) -> Bool {
+        id.range(of: #"^lh-[0-9]{1,12}-[0-9]{1,6}$"#, options: .regularExpression) != nil
+    }
+
+    /// The line that starts the runner for a session, typed into its tab.
+    static func runnerLine(_ id: String) -> String {
+        " \(AgentTools.shellQuote(runner)) \(AgentTools.shellQuote(id))"
     }
 
     private func open(id: String, from surface: Ghostty.SurfaceView) {
@@ -410,7 +421,7 @@ final class LocalhostSessions: ObservableObject {
         tabs[id] = Weak(surface)
         writeStatus(session)
         if let model = surface.surfaceModel {
-            ResumeAfterUpdate.run(" \(AgentTools.shellQuote(Self.runner)) \(id)", in: model)
+            ResumeAfterUpdate.run(Self.runnerLine(id), in: model)
         }
         ensureTimer()
         VerticalTabs.setNeedsRefresh()
@@ -430,7 +441,7 @@ final class LocalhostSessions: ObservableObject {
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = session.cwd
         // A leading space keeps it out of shell history.
-        config.initialInput = " \(AgentTools.shellQuote(Self.runner)) \(session.id)\n"
+        config.initialInput = Self.runnerLine(session.id) + "\n"
         let agent = owner.focusedSurface
         guard let surface = TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config,
                                                         title: "localhost · \(session.project.name)") else { return }
@@ -472,7 +483,7 @@ final class LocalhostSessions: ObservableObject {
         case .detached:
             // The runner is gone and a shell is left; start it again in the same tab.
             if let model = surface.surfaceModel {
-                ResumeAfterUpdate.run(" \(AgentTools.shellQuote(Self.runner)) \(session.id)", in: model)
+                ResumeAfterUpdate.run(Self.runnerLine(session.id), in: model)
             }
         case .starting, .live:
             FileManager.default.createFile(

@@ -82,11 +82,7 @@ enum VerticalTabsTestSupport {
         // `GHOSTTY_EXTREME_TEST_REVIEW=comment,send,undo,commit`: acts on the first review item,
         // one step every 3s starting at 24s, logging to `GHOSTTY_EXTREME_TEST_LOG`.
         if let steps = env["GHOSTTY_EXTREME_TEST_REVIEW"] {
-            let log: (String) -> Void = { line in
-                guard let path = env["GHOSTTY_EXTREME_TEST_LOG"] else { return }
-                let old = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-                try? (old + line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
-            }
+            let log: (String) -> Void = { TestHooks.note($0) }
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 24_000_000_000)
                 let inbox = ReviewInbox.shared
@@ -136,10 +132,8 @@ enum VerticalTabsTestSupport {
                                                            in: NSTemporaryDirectory(), from: controller, focus: false)
                     case "shortcuts":
                         ShortcutSheet.shared.show(sticky: true)
-                        if let path = env["GHOSTTY_EXTREME_TEST_LOG"] {
-                            let lines = ShortcutSheet.collect().map { "\($0.id): " + $0.shortcuts.map { "\($0.keys) \($0.title)" }.joined(separator: ", ") }
-                            let old = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-                            try? (old + lines.joined(separator: "\n") + "\n").write(toFile: path, atomically: true, encoding: .utf8)
+                        for entry in ShortcutSheet.collect() {
+                            TestHooks.note("\(entry.id): " + entry.shortcuts.map { "\($0.keys) \($0.title)" }.joined(separator: ", "))
                         }
                     default: break
                     }
@@ -152,21 +146,14 @@ enum VerticalTabsTestSupport {
             DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                 let result: String
                 do { result = try HookInstaller.setUp(claude: true, codex: true, shell: true).joined(separator: ", ") } catch { result = "error: \(error)" }
-                if let path = env["GHOSTTY_EXTREME_TEST_LOG"] {
-                    let old = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-                    try? (old + "setup: " + result + "\n").write(toFile: path, atomically: true, encoding: .utf8)
-                }
+                TestHooks.note("setup: " + result)
                 SetupChecks.shared.refresh()
             }
         }
         // `GHOSTTY_EXTREME_TEST_STOP_PORT=<port>`: after 12s, Stop whatever listens there (as the
         // Ports section's Stop does), logging what was listening before and after.
         if let value = env["GHOSTTY_EXTREME_TEST_STOP_PORT"], let port = Int(value) {
-            let log: (String) -> Void = { line in
-                guard let path = env["GHOSTTY_EXTREME_TEST_LOG"] else { return }
-                let old = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-                try? (old + line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
-            }
+            let log: (String) -> Void = { TestHooks.note($0) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
                 let monitor = PortsMonitor.shared
                 log("ports: " + monitor.entries.map { ":\($0.port) \($0.kind) \($0.title) [\($0.command)]" }.joined(separator: ", "))
@@ -215,11 +202,7 @@ enum VerticalTabsTestSupport {
         // `GHOSTTY_EXTREME_TEST_RACE_KEEP=1`, keep claude-1's changes at 30s and clean up at 36s,
         // logging to `GHOSTTY_EXTREME_TEST_LOG`.
         if let task = env["GHOSTTY_EXTREME_TEST_RACE"], let folder = env["GHOSTTY_EXTREME_TEST_RACE_FOLDER"] {
-            let log: (String) -> Void = { line in
-                guard let path = env["GHOSTTY_EXTREME_TEST_LOG"] else { return }
-                let old = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-                try? (old + line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
-            }
+            let log: (String) -> Void = { TestHooks.note($0) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                 AgentRaces.shared.start(task: task, folder: folder, counts: [.claude: 1, .codex: 1],
                                         includeChanges: true, from: controller) { result in

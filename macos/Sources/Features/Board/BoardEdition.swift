@@ -115,6 +115,11 @@ enum Board {
             // Every classic terminal is on a board now: a tile still away was closed in a window,
             // so its ink, group and wires go with it.
             for open in BoardController.all { open.forgetReleased() }
+            // A board that isn't open can't do that itself: its file is pruned in place.
+            for workspace in BoardStore.all()
+            where workspace.released?.isEmpty == false && !BoardController.all.contains(where: { $0.workspace.id == workspace.id }) {
+                BoardStore.save(workspace.forgettingReleased())
+            }
             homes.max { $0.views.count < $1.views.count }?.board.show()
         }
         ask(alert, then: decide)
