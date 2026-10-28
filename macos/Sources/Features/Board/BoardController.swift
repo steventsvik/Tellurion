@@ -1126,6 +1126,9 @@ final class BoardController: BaseTerminalController {
         guard let canvas else { return }
         let windowVisible = window?.occlusionState.contains(.visible) ?? false
         let view = canvas.documentVisibleRect.insetBy(dx: -80, dy: -80)
+        for card in canvas.documentView?.subviews.compactMap({ $0 as? BoardCardView }) ?? [] {
+            card.updateBoardVisibility(windowVisible: windowVisible, visibleRect: view, zoom: model.zoom)
+        }
         let collapsed = collapsedTiles
         for surfaceView in surfaceTree {
             guard let surface = surfaceView.surface, let frame = model.frames[surfaceView.id] else { continue }

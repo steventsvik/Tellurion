@@ -155,6 +155,7 @@ final class BoardTiles {
             view.update(card: card, zoom: model.zoom)
         }
         CATransaction.commit()
+        controller.updateVisibility()
         if !moves.isEmpty {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.32
