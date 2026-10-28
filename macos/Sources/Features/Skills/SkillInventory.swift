@@ -383,12 +383,24 @@ enum SkillInventory {
         return .success(folders)
     }
 
+    /// Whether a skill's remote is somewhere on the network. A local path or a `git://` URL
+    /// could make `ls-remote` run a program the repository's config names.
+    static func isNetworkRemote(_ remote: String) -> Bool {
+        let lower = remote.lowercased()
+        return lower.hasPrefix("https://") || lower.hasPrefix("http://") || lower.hasPrefix("ssh://")
+            || lower.range(of: #"^[a-z0-9._-]+@[a-z0-9][a-z0-9.-]*:"#, options: .regularExpression) != nil
+    }
+
     private static func gitStatus(_ folder: String, remote: String) async -> SkillUpdateStatus {
-        await Task.detached {
+        guard isNetworkRemote(remote) else { return .failed("Not a network remote: \(remote)") }
+        return await Task.detached {
             let head = AgentTools.git(["rev-parse", "HEAD"], in: folder).output.trimmingCharacters(in: .whitespacesAndNewlines)
-            // Never prompt for a password or passphrase.
+            // Never prompt for a password or passphrase, and run git's own upload-pack, not
+            // one the repository's config names. Only network transports, even if the
+            // repository's config rewrites the remote's URL to a local path or a git:// one.
             let latest = AgentTools.git(["-c", "core.sshCommand=ssh -o BatchMode=yes -o ConnectTimeout=8",
-                                         "ls-remote", "origin", "HEAD"], in: folder)
+                                         "-c", "protocol.file.allow=never", "-c", "protocol.git.allow=never",
+                                         "ls-remote", "--upload-pack=git-upload-pack", "origin", "HEAD"], in: folder)
             guard latest.ok, let sha = latest.output.split(separator: "\t").first.map(String.init), !head.isEmpty else {
                 return .failed("Couldn't reach \(remote)")
             }

@@ -396,7 +396,6 @@ private struct ActivityDashboardView: View {
         let files = Set(sessions.flatMap(\.files)).count
         let lines = sessions.map { $0.linesAdded + $0.linesRemoved }.reduce(0, +)
         let money = model.totalDollars
-        let unpriced = model.unpricedCodexModels
         var items: [(String, String, String, String)] = [
             ("dollarsign.circle.fill", "API value", formatMoney(money.input + money.output),
              "Claude \(formatMoney(model.dollars(agent: "claude")))"

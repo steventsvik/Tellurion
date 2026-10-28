@@ -76,7 +76,6 @@ final class AgentMapContent: CardContent {
 
     deinit {
         stop()
-        if let occlusion { NotificationCenter.default.removeObserver(occlusion) }
     }
 
     // MARK: Card
@@ -98,44 +97,12 @@ final class AgentMapContent: CardContent {
         refreshTracks()
     }
 
-    private var occlusion: NSObjectProtocol?
-    /// Whether the window has reported its occlusion since the map joined it. A window just
-    /// shown says it's visible a moment later; until it says anything, being on screen counts.
-    private var occlusionReported = false
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if let occlusion { NotificationCenter.default.removeObserver(occlusion) }
-        occlusionReported = false
-        occlusion = window.map { window in
-            NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main) { [weak self] _ in
-                self?.occlusionReported = true
-                self?.updateRunning()
-            }
-        }
-        updateRunning()
+    /// The board is the single source of visibility, including scrolling and overview zoom.
+    func setBoardVisible(_ visible: Bool) {
+        if visible { start() } else { stop() }
     }
 
-    override func viewDidUnhide() {
-        super.viewDidUnhide()
-        updateRunning()
-    }
-
-    /// Off the board's screen (the board hides what's out of view) or otherwise hidden.
-    override func viewDidHide() {
-        super.viewDidHide()
-        stop()
-    }
-
-    /// Follows the agents only while the map can be seen: not in a board out of sight, a
-    /// minimized window, or one covered up.
-    private func updateRunning() {
-        guard let window, window.isVisible, !window.isMiniaturized else {
-            stop()
-            return
-        }
-        if window.occlusionState.contains(.visible) || !occlusionReported { start() } else { stop() }
-    }
+    var isRunning: Bool { timer != nil }
 
     private func start() {
         guard timer == nil else { return }
@@ -148,15 +115,23 @@ final class AgentMapContent: CardContent {
             self.refreshTracks()
             if !self.heat.isEmpty, Date().timeIntervalSince(self.lastDraw) > 30 { self.fadeHeat() }
         }
+        if tree == nil { rescan(now: true) }
         refreshTracks()
     }
 
     private func stop() {
         timer?.invalidate()
         timer = nil
+        rescanWork?.cancel()
+        rescanWork = nil
+        scanAgain = false
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
-        for track in tracks.values { track.feed.stop() }
+        for track in tracks.values {
+            track.feed.stop()
+            track.dot.removeAllAnimations()
+            track.trail.removeAllAnimations()
+        }
     }
 
     /// Hook events from every agent in the app come in bursts: one refresh per turn of the run loop.
@@ -185,7 +160,7 @@ final class AgentMapContent: CardContent {
     }
 
     private func scan() {
-        guard let root else { return }
+        guard timer != nil, let root else { return }
         guard !scanning else {
             scanAgain = true
             return
@@ -285,11 +260,6 @@ final class AgentMapContent: CardContent {
 
     override func draw(_ dirtyRect: NSRect) {
         lastDraw = Date()
-        // Being drawn usually means being seen: a map that missed its window's wake-up starts
-        // here, under the same rules (a window that reported itself covered stays stopped).
-        if timer == nil {
-            DispatchQueue.main.async { [weak self] in self?.updateRunning() }
-        }
         let chrome = Extreme.chrome
         chrome.ink.nsColor.setFill()
         bounds.fill()

@@ -92,11 +92,10 @@ final class DesignStore: ObservableObject {
     /// Back to Tellurion as shipped.
     func reset() { apply(.standard) }
 
+    private static let log = StoredFile.logger("Design")
+
     private func save() {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try? FileManager.default.createDirectory(at: Self.folder, withIntermediateDirectories: true)
-        if let data = try? encoder.encode(design) { try? data.write(to: Self.file, options: .atomic) }
+        StoredFile.write(json: design, to: Self.file, what: "the design", log: Self.log)
     }
 
     /// Resolves the terminal colors, the chrome and the logo from `design`; writes the
@@ -136,18 +135,14 @@ final class DesignStore: ObservableObject {
         saved.builtIn = false
         if saved.name.trimmingCharacters(in: .whitespaces).isEmpty { saved.name = "My design" }
         if saved.id.isEmpty || DesignTemplates.all.contains(where: { $0.id == saved.id }) { saved.id = "mine-" + UUID().uuidString.lowercased() }
-        try? FileManager.default.createDirectory(at: Self.mineFolder, withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        if let data = try? encoder.encode(saved) {
-            try? data.write(to: Self.mineFolder.appendingPathComponent(saved.id + ".json"), options: .atomic)
-        }
+        StoredFile.write(json: saved, to: Self.mineFolder.appendingPathComponent(saved.id + ".json"),
+                         what: "a design in My designs", log: Self.log)
         mine = Self.loadMine()
         apply(saved)
     }
 
     func deleteFromMine(_ id: String) {
-        try? FileManager.default.removeItem(at: Self.mineFolder.appendingPathComponent(id + ".json"))
+        StoredFile.remove(Self.mineFolder.appendingPathComponent(id + ".json"), what: "a design in My designs", log: Self.log)
         mine = Self.loadMine()
     }
 

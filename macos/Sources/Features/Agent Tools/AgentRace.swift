@@ -211,9 +211,9 @@ final class AgentRaces: ObservableObject {
             diff.error = "This copy was deleted."
             return (diff, "")
         }
-        let flags = binary ? ["--binary"] : ["--no-color"]
+        let flags = (binary ? ["--binary"] : ["--no-color"]) + AgentTools.diffGuards
         var patch = AgentTools.git(["diff"] + flags + [c.baseline], in: c.worktree).output
-        for line in AgentTools.git(["diff", "--numstat", c.baseline], in: c.worktree).output.split(separator: "\n") {
+        for line in AgentTools.git(["diff"] + AgentTools.diffGuards + ["--numstat", c.baseline], in: c.worktree).output.split(separator: "\n") {
             let parts = line.split(separator: "\t", maxSplits: 2)
             guard parts.count == 3 else { continue }
             diff.files.append((String(parts[2]), Int(parts[0]) ?? 0, Int(parts[1]) ?? 0))
@@ -221,7 +221,7 @@ final class AgentRaces: ObservableObject {
         let untracked = AgentTools.git(["ls-files", "--others", "--exclude-standard", "-z"], in: c.worktree).output
             .split(separator: "\0").map(String.init)
         for path in untracked.prefix(200) {
-            let added = AgentTools.git(["diff", "--no-index"] + flags + ["/dev/null", path], in: c.worktree).output
+            let added = AgentTools.git(["diff", "--no-index"] + flags + ["--", "/dev/null", path], in: c.worktree).output
             patch += added
             let lines = added.split(separator: "\n").filter { $0.hasPrefix("+") && !$0.hasPrefix("+++") }.count
             diff.files.append((path, lines, 0))
@@ -301,6 +301,7 @@ final class AgentRaces: ObservableObject {
 /// Keeps one window per id for Mission Control and races.
 enum AgentToolWindows {
     private static var windows: [String: NSWindow] = [:]
+    private static var closeObservers: [String: NSObjectProtocol] = [:]
 
     /// `followsDesign`: the view is rebuilt whenever the design changes (and loses its
     /// state). The Design window passes `false`: it recolors itself and keeps its state.
@@ -330,10 +331,11 @@ enum AgentToolWindows {
         }
         window.center()
         windows[id] = window
-        var observer: NSObjectProtocol?
-        observer = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { _ in
+        closeObservers[id] = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { _ in
             windows.removeValue(forKey: id)
-            if let observer { NotificationCenter.default.removeObserver(observer) }
+            if let observer = closeObservers.removeValue(forKey: id) {
+                NotificationCenter.default.removeObserver(observer)
+            }
             // Drop the SwiftUI view (and its timers) with the window, then the window itself.
             DispatchQueue.main.async { window.contentView = nil }
         }

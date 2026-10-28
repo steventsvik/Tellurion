@@ -164,7 +164,8 @@ final class AgentChangeWatcher {
     private static func checkIgnore(_ relatives: [String], in repoRoot: String) -> Set<String>? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", repoRoot, "check-ignore", "--stdin", "-z"]
+        process.arguments = ["-C", repoRoot] + AgentTools.gitGuards + ["check-ignore", "--stdin", "-z"]
+        process.environment = AgentTools.gitEnvironment(in: repoRoot)
         let input = Pipe(), output = Pipe()
         process.standardInput = input
         process.standardOutput = output

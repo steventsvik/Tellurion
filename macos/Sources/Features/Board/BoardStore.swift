@@ -12,12 +12,20 @@ struct BoardTile: Codable, Identifiable, Equatable {
     var agent: String?
     /// The agent's session id, for `claude --resume` and `codex resume`.
     var session: String?
-    /// The command the tile was opened with, for agents that can't resume a session.
+    /// The command the tile was opened with, kept for the record. A restored tile never
+    /// types it: see `BoardAgent.resumeCommand`.
     var command: String?
     /// The name given to the tile (by a tool, or by renaming it).
     var title: String?
     /// The account profiles its agents use (provider → profile id; see BoardAccounts).
     var accounts: [String: UUID]?
+
+    /// `accounts` by provider, leaving out any this build doesn't know.
+    var chosenAccounts: [BoardAccount.Provider: UUID] {
+        Dictionary(uniqueKeysWithValues: (accounts ?? [:]).compactMap { key, value in
+            BoardAccount.Provider(rawValue: key).map { ($0, value) }
+        })
+    }
 }
 
 /// A board: its tiles, where you were looking, and its window. Saved as versioned JSON in
@@ -60,6 +68,32 @@ struct BoardWorkspace: Codable, Identifiable, Equatable {
         self.id = UUID()
         self.name = name
         self.folder = folder
+    }
+
+    /// The board with its released tiles forgotten, as BoardController.forgetReleased does for
+    /// an open one: ink anchored to them, their group memberships and team wires go, and so do
+    /// groups left empty. For a board that isn't open when every classic terminal has come back.
+    func forgettingReleased() -> BoardWorkspace {
+        guard let gone = released, !gone.isEmpty else { return self }
+        var workspace = self
+        workspace.released = nil
+        let present = Set(tiles.map(\.id))
+        let nodes = present.union((sketches ?? []).map(\.id)).union((cards ?? []).map(\.id)).union((labels ?? []).map(\.id))
+        workspace.ink = ink.map { strokes in strokes.filter { $0.anchor.map(nodes.contains) ?? true } }
+        var groups = self.groups ?? []
+        for index in groups.indices { groups[index].tiles.removeAll { !present.contains($0) } }
+        groups.removeAll { $0.tiles.isEmpty }
+        workspace.groups = groups.isEmpty ? nil : groups
+        let groupIDs = Set(groups.map(\.id))
+        workspace.teams = teams.map { teams in
+            teams.map { team in
+                var team = team
+                team.members.removeAll { !present.contains($0.tile) }
+                team.groups.removeAll { key in BoardTeams.groupID(key).map { !groupIDs.contains($0) } ?? false }
+                return team
+            }
+        }
+        return workspace
     }
 }
 

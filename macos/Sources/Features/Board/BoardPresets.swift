@@ -53,11 +53,7 @@ enum BoardPresets {
     }
 
     private static func write(_ presets: [BoardPreset]) {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(presets) else { return }
-        try? FileManager.default.createDirectory(at: AgentTools.root, withIntermediateDirectories: true)
-        try? data.write(to: file, options: .atomic)
+        StoredFile.write(json: presets, to: file, what: "the board presets", log: StoredFile.logger("Board"))
     }
 }
 
@@ -121,7 +117,7 @@ extension BoardController {
 
     /// Spawn 4: four of your default agent, as a team.
     func spawnFour() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
             let installed = BoardAgent.installed()
             let agent = (installed.first { $0.kind == .claude } ?? installed.first)?.binary ?? "shell"
             DispatchQueue.main.async { [weak self] in

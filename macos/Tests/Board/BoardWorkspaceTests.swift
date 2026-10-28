@@ -22,6 +22,46 @@ struct BoardWorkspaceTests {
         BoardTile(id: UUID(), frame: CGRect(x: x, y: 60, width: 480, height: 300), cwd: "/tmp/\(title)", title: title)
     }
 
+    @Test func forgettingReleasedTilesDropsWhatWaitedForThem() {
+        let here = tile("here"), away = tile("away", x: 600)
+        let card = UUID()
+        let group = BoardGroupNode(id: UUID(), name: "Web", role: .frontend, tiles: [here.id, away.id])
+        let onlyAway = BoardGroupNode(id: UUID(), name: "Gone", role: .backend, tiles: [away.id])
+        let ink = [BoardInkStroke(id: UUID(), points: [.zero], color: 0, width: 2, anchor: here.id),
+                   BoardInkStroke(id: UUID(), points: [.zero], color: 0, width: 2, anchor: away.id),
+                   BoardInkStroke(id: UUID(), points: [.zero], color: 0, width: 2, anchor: card),
+                   BoardInkStroke(id: UUID(), points: [.zero], color: 0, width: 2, anchor: nil)]
+        var team = BoardTeam(id: UUID())
+        team.members = [.init(tile: here.id), .init(tile: away.id)]
+        team.groups = ["group:\(group.id.uuidString)", "group:\(onlyAway.id.uuidString)", "/tmp/project"]
+        var workspace = BoardWorkspace(name: "Board", folder: nil)
+        workspace.tiles = [here]
+        workspace.released = [away]
+        workspace.cards = [BoardCard(id: card, kind: .note, title: "Note")]
+        workspace.groups = [group, onlyAway]
+        workspace.ink = ink
+        workspace.teams = [team]
+        let pruned = workspace.forgettingReleased()
+        #expect(pruned.released == nil)
+        #expect(pruned.ink?.map { $0.anchor } == [here.id, card, nil])
+        #expect(pruned.groups?.map { $0.tiles } == [[here.id]])
+        #expect(pruned.teams?.first?.members.map { $0.tile } == [here.id])
+        #expect(pruned.teams?.first?.groups == ["group:\(group.id.uuidString)", "/tmp/project"])
+        #expect(pruned.tiles == [here])
+        // Nothing away: nothing changes.
+        var settled = workspace
+        settled.released = []
+        #expect(settled.forgettingReleased() == settled)
+    }
+
+    @Test func aTilesAccountsComeBackByProvider() {
+        var tile = tile("t")
+        let claude = UUID(), codex = UUID()
+        tile.accounts = ["claude": claude, "codex": codex, "future-provider": UUID()]
+        #expect(tile.chosenAccounts == [.claude: claude, .codex: codex])
+        #expect(self.tile("plain").chosenAccounts.isEmpty)
+    }
+
     /// A board written by a build that didn't know released tiles.
     @Test func loadsABoardSavedBeforeReleasedTiles() throws {
         let json = """

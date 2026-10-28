@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import Combine
 import SwiftUI
 
 private enum BlockColors {
@@ -283,6 +284,7 @@ private struct CommandBlockCard: View {
     private func actions(_ surface: Ghostty.SurfaceView) -> some View {
         HStack(spacing: 6) {
             small("Rerun", "arrow.clockwise") { CommandBlocks.shared.rerun(block, in: surface) }
+                .help("Types the command at the prompt; press Return to run it")
             small("Copy", "doc.on.doc") { VerticalTabsActions.copy(block.command) }
             if !block.output.isEmpty {
                 small("Copy output", "doc.plaintext") { VerticalTabsActions.copy(block.output) }

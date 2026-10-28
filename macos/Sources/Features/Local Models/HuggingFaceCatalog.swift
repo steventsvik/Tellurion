@@ -52,7 +52,7 @@ final class HuggingFaceCatalog: ObservableObject {
     private var lastQuery: String?
     private var cache: [String: [Model]] = [:]
 
-    private static let api = URL(string: "https://huggingface.co/api/models")!
+    nonisolated private static let api = URL(string: "https://huggingface.co/api/models")!
 
     /// The list for `filter`, or for `text` when there is one. Cached until refresh.
     func load(text: String = "", refresh: Bool = false) {

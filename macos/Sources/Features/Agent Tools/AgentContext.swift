@@ -94,13 +94,13 @@ struct AgentContext {
         if let baseline, let current = ReviewInbox.snapshot(baseline.repoRoot, gitDir: baseline.gitDir) {
             let who = baseline.agent?.displayName ?? "the agent"
             changeScope = "since \(who)'s first prompt here, \(Self.relative(baseline.time))"
-            changeSummary = ReviewInbox.git(["diff", "--stat", baseline.tree, current], in: baseline.repoRoot, gitDir: baseline.gitDir)
+            changeSummary = ReviewInbox.git(["diff"] + AgentTools.diffGuards + ["--stat", baseline.tree, current], in: baseline.repoRoot, gitDir: baseline.gitDir)
                 .output.trimmingCharacters(in: .whitespacesAndNewlines)
-            diff = ReviewInbox.git(["diff", baseline.tree, current], in: baseline.repoRoot, gitDir: baseline.gitDir).output
+            diff = ReviewInbox.git(["diff"] + AgentTools.diffGuards + [baseline.tree, current], in: baseline.repoRoot, gitDir: baseline.gitDir).output
         } else if AgentTools.repoRoot(of: folder) != nil {
             changeScope = "uncommitted, against the last commit"
-            changeSummary = AgentTools.git(["diff", "--stat", "HEAD"], in: folder).output.trimmingCharacters(in: .whitespacesAndNewlines)
-            diff = AgentTools.git(["diff", "HEAD"], in: folder).output
+            changeSummary = AgentTools.git(["diff"] + AgentTools.diffGuards + ["--stat", "HEAD"], in: folder).output.trimmingCharacters(in: .whitespacesAndNewlines)
+            diff = AgentTools.git(["diff"] + AgentTools.diffGuards + ["HEAD"], in: folder).output
             // New files aren't in `git diff HEAD` until they're added.
             let untracked = AgentTools.git(["ls-files", "--others", "--exclude-standard"], in: folder).output
                 .split(separator: "\n").prefix(20)

@@ -197,36 +197,4 @@ enum DockerSessions {
     """
 }
 
-/// The "Isolated Session (Docker)" submenu in the sidebar's New menu.
-struct DockerSessionMenu: View {
-    let owner: BaseTerminalController
-    @AppStorage(DockerSessions.shareFolderKey) private var shareFolder = true
-
-    var body: some View {
-        Menu {
-            ForEach(DockerSessionKind.allCases) { kind in
-                if kind == .claude { Divider() }
-                Button {
-                    DockerSessions.open(kind, from: owner)
-                } label: {
-                    Label { Text("\(kind.title) — \(kind.detail)") } icon: { icon(for: kind) }
-                }
-            }
-            Divider()
-            Toggle("Share this tab's folder", isOn: $shareFolder)
-        } label: {
-            Label("Isolated Session (Docker)", systemImage: "shippingbox")
-        }
-    }
-
-    private func icon(for kind: DockerSessionKind) -> Image {
-        if let agent = kind.agent, let asset = agent.logoAsset, let image = NSImage(named: asset),
-           let copy = image.copy() as? NSImage {
-            copy.size = NSSize(width: 16, height: 16)
-            copy.isTemplate = agent.logoIsTemplate
-            return Image(nsImage: copy)
-        }
-        return Image(systemName: kind.symbol)
-    }
-}
 #endif
