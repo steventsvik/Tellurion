@@ -439,11 +439,10 @@ final class ReviewInbox: ObservableObject {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = ["-C", directory] + AgentTools.gitGuards + args
-        var environment = ProcessInfo.processInfo.environment
-        environment["GIT_TERMINAL_PROMPT"] = "0"
-        environment["GIT_OPTIONAL_LOCKS"] = "0"
+        let leading = Array(args.prefix { $0.hasPrefix("--git-dir=") || $0.hasPrefix("--work-tree=") })
+        var environment = AgentTools.gitEnvironment(in: directory, leading: leading)
         for (key, value) in env { environment[key] = value }
-        process.environment = EventToken.scrubbed(environment)
+        process.environment = environment
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err

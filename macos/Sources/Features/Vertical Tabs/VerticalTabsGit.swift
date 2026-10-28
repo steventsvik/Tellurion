@@ -208,6 +208,7 @@ final class VerticalTabsGit: ObservableObject {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: gitPath)
         process.arguments = ["-C", repo, "--no-optional-locks"] + AgentTools.gitGuards + ["diff"] + AgentTools.diffGuards + ["--shortstat", "HEAD"]
+        process.environment = AgentTools.gitEnvironment(in: repo)
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
@@ -228,6 +229,7 @@ final class VerticalTabsGit: ObservableObject {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: gitPath)
         process.arguments = ["-C", repo, "--no-optional-locks"] + AgentTools.gitGuards + ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"]
+        process.environment = AgentTools.gitEnvironment(in: repo)
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice

@@ -235,7 +235,7 @@ final class TurnCheckpoints: ObservableObject {
     /// What has to change for the files to match `checkpoint` again.
     private static func changes(from checkpoint: Checkpoint, to current: String) -> [Change] {
         guard checkpoint.tree != current else { return [] }
-        let output = ReviewInbox.git(["diff", "--name-status", "--no-renames", "-z", checkpoint.tree, current],
+        let output = ReviewInbox.git(["diff"] + AgentTools.diffGuards + ["--name-status", "--no-renames", "-z", checkpoint.tree, current],
                                      in: checkpoint.repoRoot, gitDir: checkpoint.gitDir).output
         let fields = output.split(separator: "\0", omittingEmptySubsequences: true).map(String.init)
         var changes: [Change] = []
