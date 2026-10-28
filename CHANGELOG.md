@@ -9,6 +9,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 - **Pictures sent to an orchestrator on Codex work after its first command.** A second command with a pasted picture failed, because Codex read the conversation's id as one more picture.
 - **"@agent" with only a picture sends the picture.** It used to send nothing and drop the pasted picture; the agent now gets the picture's path, and a mention with neither words nor picture says so.
 - **A PDF or SVG copied in the Finder pastes as its path.** The orchestrator's field turned any file it could render into a picture; only photos, screenshots and other bitmap images become pictures now.
+- **A board file can no longer run a command of its own in a restored tile.** A board is saved as plain JSON that any program running as you can write, and a tile without a resumable session was started again by typing the command stored in that file, whatever it said. A restored tile now only resumes its Claude Code or Codex session, or starts its agent afresh; a tile with no known agent comes back as a plain shell.
 
 ## 1.8.4
 
