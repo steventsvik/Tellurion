@@ -17,16 +17,33 @@ enum AgentTools {
         var ok: Bool { status == 0 }
     }
 
-    /// Runs git synchronously. Call off the main thread for anything that can be slow.
+    /// Settings a repository's own config can't set when the app runs git by itself.
+    ///
+    /// A clone's `.git/config` can name programs for git to run: a file monitor, hooks, a
+    /// credential helper, an askpass program, a signing program. The app's own commands never
+    /// want any of them, so a repository doesn't get to run something just by being open in
+    /// a tab or the editor. A caller's own `-c` comes after these and wins. Diffs add
+    /// `diffGuards` themselves, since those are options of the diff command.
+    static let gitGuards: [String] = [
+        "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false",
+        "-c", "tag.gpgsign=false", "-c", "core.askPass=", "-c", "credential.helper=",
+    ]
+
+    /// For `git diff`: no external diff programs and no text converters, which a repository
+    /// can also name in its config.
+    static let diffGuards = ["--no-ext-diff", "--no-textconv"]
+
+    /// Runs git synchronously, with `gitGuards`. Call off the main thread for anything that
+    /// can be slow.
     @discardableResult
     static func git(_ args: [String], in directory: String) -> Result {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", directory] + args
+        process.arguments = ["-C", directory] + gitGuards + args
         var environment = ProcessInfo.processInfo.environment
         environment["GIT_TERMINAL_PROMPT"] = "0"
         environment["GIT_OPTIONAL_LOCKS"] = "0"
-        process.environment = environment
+        process.environment = EventToken.scrubbed(environment)
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err

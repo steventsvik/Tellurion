@@ -438,12 +438,12 @@ final class ReviewInbox: ObservableObject {
     private static func gitEnv(_ args: [String], in directory: String, env: [String: String]) -> AgentTools.Result {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", directory] + args
+        process.arguments = ["-C", directory] + AgentTools.gitGuards + args
         var environment = ProcessInfo.processInfo.environment
         environment["GIT_TERMINAL_PROMPT"] = "0"
         environment["GIT_OPTIONAL_LOCKS"] = "0"
         for (key, value) in env { environment[key] = value }
-        process.environment = environment
+        process.environment = EventToken.scrubbed(environment)
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err
@@ -458,7 +458,7 @@ final class ReviewInbox: ObservableObject {
 
     static func diff(from base: String, to current: String, in root: String, gitDir: String? = nil) -> [ReviewFile] {
         guard base != current else { return [] }
-        let text = git(["diff", "--no-color", "--no-ext-diff", "-M", "-U3", base, current], in: root, gitDir: gitDir).output
+        let text = git(["diff", "--no-color"] + AgentTools.diffGuards + ["-M", "-U3", base, current], in: root, gitDir: gitDir).output
         return parse(text)
     }
 
