@@ -12,7 +12,8 @@ struct BoardTile: Codable, Identifiable, Equatable {
     var agent: String?
     /// The agent's session id, for `claude --resume` and `codex resume`.
     var session: String?
-    /// The command the tile was opened with, for agents that can't resume a session.
+    /// The command the tile was opened with, kept for the record. A restored tile never
+    /// types it: see `BoardAgent.resumeCommand`.
     var command: String?
     /// The name given to the tile (by a tool, or by renaming it).
     var title: String?
