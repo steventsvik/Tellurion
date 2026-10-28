@@ -188,7 +188,7 @@ enum HeadlessAgent {
         let run = Run()
         let instructions = ask.instructions, prompt = ask.prompt, folder = ask.folder, model = ask.model
         let finish = { (result: Result<String, Error>) in DispatchQueue.main.async { done(result) } }
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [run] in
             // Finding the tool can ask a login shell, so it happens here, off the main thread.
             guard let tool = ToolPath.find(engine.rawValue) else {
                 finish(.failure(StreamError.missing(engine.title)))

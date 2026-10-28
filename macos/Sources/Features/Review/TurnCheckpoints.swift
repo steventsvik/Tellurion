@@ -87,7 +87,7 @@ final class TurnCheckpoints: ObservableObject {
         guard !taking.contains(key) else { return }
         taking.insert(key)
         let time = Date()
-        queue.async {
+        queue.async { [self] in
             let place = Self.place(of: folder)
             let tree = place.flatMap { ReviewInbox.snapshot($0.root, gitDir: $0.gitDir) }
             let operation = place.flatMap { Self.jjOperation($0.root) }
@@ -145,7 +145,7 @@ final class TurnCheckpoints: ObservableObject {
             alert.runModal()
             return
         }
-        queue.async {
+        queue.async { [self, surface] in
             let current = ReviewInbox.snapshot(checkpoint.repoRoot, gitDir: checkpoint.gitDir)
             let changes = current.map { Self.changes(from: checkpoint, to: $0) } ?? []
             // What was run with jj since: restoring files alone leaves those in jj's history.

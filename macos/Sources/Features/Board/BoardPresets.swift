@@ -121,7 +121,7 @@ extension BoardController {
 
     /// Spawn 4: four of your default agent, as a team.
     func spawnFour() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
             let installed = BoardAgent.installed()
             let agent = (installed.first { $0.kind == .claude } ?? installed.first)?.binary ?? "shell"
             DispatchQueue.main.async { [weak self] in

@@ -735,14 +735,18 @@ final class BoardFieldEditor: NSTextView {
     /// Tests: how many pastes reached a field editor.
     static var pastes = 0
 
+    /// The field being edited. AppKit sets the field as the editor's delegate, which Swift's
+    /// type of `delegate` doesn't show, so the cast goes through AnyObject.
+    private var field: BoardAssistantTextField? { delegate.map { $0 as AnyObject } as? BoardAssistantTextField }
+
     override func paste(_ sender: Any?) {
         Self.pastes += 1
-        if let field = delegate as? BoardAssistantTextField, field.attach(from: .general) { return }
+        if let field, field.attach(from: .general) { return }
         super.paste(sender)
     }
 
     override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
-        if item.action == #selector(paste(_:)), let field = delegate as? BoardAssistantTextField, field.acceptsImages,
+        if item.action == #selector(paste(_:)), let field, field.acceptsImages,
            ImageAttachment.mayHoldImages(.general) {
             return true
         }
