@@ -6,6 +6,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 
 ## Unreleased
 
+- **Saving a sketch as a picture says when it fails.** Choosing where to save a sketch and then not being able to write there did nothing; it now shows why. Settings, designs, presets, account profiles and documents that can't be saved are reported in Console.app instead of being ignored.
 - **An Agent Map you can't see does no work.** A map on a board zoomed out far enough to hide its contents started following the agents again whenever you came back to the app. Maps now follow the board's own idea of what's on screen: the window, the part of the board in view and the zoom.
 - **Tiles that went to Classic and back keep their agent.** A tile moved into a window by the switch to Classic and back onto the board forgot its agent, session and accounts, so after the next relaunch it opened a plain shell. It now resumes like any other tile.
 - **No empty group frames after the switch back.** A group whose terminals were all still in windows showed as an empty frame on the board, and a board that wasn't open kept the drawings, groups and wiring of terminals that had since been closed. Both are tidied now.

@@ -67,13 +67,11 @@ final class BoardAccounts: ObservableObject {
         })
     }
 
+    private static let log = StoredFile.logger("Accounts")
+
     private func save() {
         let saved = Saved(accounts: accounts, active: Dictionary(uniqueKeysWithValues: active.map { ($0.key.rawValue, $0.value) }))
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(saved) else { return }
-        try? FileManager.default.createDirectory(at: AgentTools.root, withIntermediateDirectories: true)
-        try? data.write(to: file, options: .atomic)
+        StoredFile.write(json: saved, to: file, what: "the account profiles", log: Self.log)
     }
 
     func account(_ id: UUID?) -> BoardAccount? { id.flatMap { id in accounts.first { $0.id == id } } }
@@ -82,8 +80,12 @@ final class BoardAccounts: ObservableObject {
     @discardableResult
     func add(_ provider: BoardAccount.Provider, name: String) -> BoardAccount {
         let account = BoardAccount(provider: provider, name: name.isEmpty ? "\(provider.title) \(accounts.count + 2)" : name)
-        try? FileManager.default.createDirectory(at: account.folder, withIntermediateDirectories: true,
-                                                 attributes: [.posixPermissions: 0o700])
+        do {
+            try FileManager.default.createDirectory(at: account.folder, withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o700])
+        } catch {
+            Self.log.error("Couldn't make a profile's folder: \(error.localizedDescription, privacy: .public)")
+        }
         accounts.append(account)
         save()
         return account
@@ -98,7 +100,7 @@ final class BoardAccounts: ObservableObject {
     /// Forgets a profile and deletes its folder (its sign-in with it).
     func remove(_ id: UUID) {
         guard let account = account(id) else { return }
-        try? FileManager.default.removeItem(at: account.folder)
+        StoredFile.remove(account.folder, what: "a profile's folder", log: Self.log)
         accounts.removeAll { $0.id == id }
         if active[account.provider] == id { active[account.provider] = nil }
         save()

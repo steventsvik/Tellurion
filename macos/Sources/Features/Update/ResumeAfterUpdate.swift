@@ -68,9 +68,10 @@ enum ResumeAfterUpdate {
     /// Called right before the app quits to relaunch into the update.
     static func prepare() {
         let entries = entries()
-        if !entries.isEmpty, let data = try? JSONEncoder().encode(Plan(saved: Date(), entries: entries)) {
-            try? FileManager.default.createDirectory(at: AgentTools.root, withIntermediateDirectories: true)
-            try? data.write(to: file, options: .atomic)
+        if !entries.isEmpty {
+            // Without it the agents aren't resumed after the relaunch, so a failure is logged.
+            StoredFile.write(json: Plan(saved: Date(), entries: entries), to: file, what: "the agents to resume after the update",
+                             log: StoredFile.logger("Update"), encoder: JSONEncoder())
         }
         // Keep the windows for this quit whatever the system setting says; the next launch
         // sets this back from `window-save-state`.
