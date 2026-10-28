@@ -204,7 +204,7 @@ final class GitHubPulls: ObservableObject {
         environment["NO_COLOR"] = "1"
         // gh needs git; the app's PATH is short.
         environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (environment["PATH"] ?? "")
-        process.environment = environment
+        process.environment = EventToken.scrubbed(environment)
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err

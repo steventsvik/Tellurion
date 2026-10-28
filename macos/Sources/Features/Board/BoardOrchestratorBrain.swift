@@ -93,9 +93,10 @@ final class OrchestratorBrain: ObservableObject {
         guard let controller, !text.isEmpty else { return }
         let (mentioned, rest) = controller.mentions(in: text)
         if !mentioned.isEmpty {
-            guard !rest.isEmpty else { return }
-            let files = ImageAttachment.save(images)
-            let message = files.isEmpty ? rest : rest + "\n\n" + files.map { "Image: \($0.path)" }.joined(separator: "\n")
+            guard let message = Self.mentionMessage(rest, files: ImageAttachment.save(images)) else {
+                add(.error, "Say what to tell them, or paste a picture with the mention.")
+                return
+            }
             for surface in mentioned { controller.deliverToAgent(message, to: surface, label: "From you") }
             add(.user, text, images: images.count)
             add(.action, "Sent to " + ListFormatter.localizedString(byJoining: mentioned.map { controller.tileLabel($0) }))
@@ -117,6 +118,18 @@ final class OrchestratorBrain: ObservableObject {
         running = true
         flagged = []
         think(command: text, updates: [])
+    }
+
+    /// What an @mentioned agent gets: your words, the pictures' paths, or both; nil when there's
+    /// neither, so nothing is sent without saying so.
+    static func mentionMessage(_ rest: String, files: [URL]) -> String? {
+        let paths = files.map { "Image: \($0.path)" }.joined(separator: "\n")
+        switch (rest.isEmpty, files.isEmpty) {
+        case (true, true): return nil
+        case (false, true): return rest
+        case (true, false): return (files.count == 1 ? "Have a look at this image." : "Have a look at these images.") + "\n\n" + paths
+        case (false, false): return rest + "\n\n" + paths
+        }
     }
 
     func stop(quietly: Bool = false) {
@@ -250,14 +263,16 @@ final class OrchestratorBrain: ObservableObject {
             return
         }
         let prompt = HeadlessAgent.prompt(engine, instructions: OrchestratorPrompt.instructions, session: session, body: body)
-        // Saved for both: Codex reads the files; for Claude Code they switch its prompt to a stream.
-        let files = ImageAttachment.save(pictures)
-        let arguments = HeadlessAgent.arguments(engine, instructions: OrchestratorPrompt.instructions,
-                                                schema: OrchestratorPrompt.schema, session: session, images: files)
-        let input = HeadlessAgent.input(engine, prompt: prompt, images: pictures.map(\.png))
+        let session = self.session
         let run = HeadlessAgent.Run()
         self.run = run
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            // Off the main thread: the files are written and the PNGs encoded here. Codex reads
+            // the files; for Claude Code the pictures go in its prompt and switch it to a stream.
+            let files = ImageAttachment.save(pictures)
+            let arguments = HeadlessAgent.arguments(engine, instructions: OrchestratorPrompt.instructions,
+                                                    schema: OrchestratorPrompt.schema, session: session, images: files)
+            let input = HeadlessAgent.input(engine, prompt: prompt, images: pictures.map(\.png))
             let result = HeadlessAgent.run(run, tool: tool, arguments: arguments, input: input)
             DispatchQueue.main.async {
                 guard let self, self.run === run else { return }

@@ -26,6 +26,14 @@ enum EventToken {
         setenv(environmentKey, value, 1)
     }
 
+    /// `environment` without the token, for programs the app starts by itself (git, gh,
+    /// providers' CLIs): only terminals and the hooks in them need it.
+    static func scrubbed(_ environment: [String: String]) -> [String: String] {
+        var environment = environment
+        environment.removeValue(forKey: environmentKey)
+        return environment
+    }
+
     /// Whether an event's JSON body carries this launch's token (`"t"`).
     static func verify(_ body: String) -> Bool {
         guard let data = body.data(using: .utf8),

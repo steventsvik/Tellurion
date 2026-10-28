@@ -436,7 +436,7 @@ private final class EditorFileBridge: NSObject, WKScriptMessageHandlerWithReply 
         if VerticalTabsGit.repoRoot(containing: root) != nil {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            process.arguments = ["-C", root, "ls-files", "--cached", "--others", "--exclude-standard"]
+            process.arguments = ["-C", root] + AgentTools.gitGuards + ["ls-files", "--cached", "--others", "--exclude-standard"]
             let pipe = Pipe()
             process.standardOutput = pipe
             process.standardError = FileHandle.nullDevice

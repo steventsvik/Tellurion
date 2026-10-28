@@ -235,7 +235,8 @@ enum HookInstaller {
         guard HookConfig.zshrcHasIntegration(text) else { return }
         let cleaned = HookConfig.zshrcRemovingIntegration(text)
         guard cleaned != text else {
-            throw Failure(message: "\(display(zshrc)) loads ghostty-extreme.zsh on a line Tellurion didn't write, so it was left alone. Remove that line by hand.")
+            let script = text.contains("ghostty-custom.zsh") ? "ghostty-custom.zsh" : "ghostty-extreme.zsh"
+            throw Failure(message: "\(display(zshrc)) loads \(script) on a line Tellurion didn't write, so it was left alone. Remove that line by hand.")
         }
         try backUp(url)
         try cleaned.write(to: url, atomically: true, encoding: .utf8)
