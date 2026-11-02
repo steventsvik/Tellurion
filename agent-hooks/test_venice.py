@@ -156,6 +156,7 @@ class TellurionVeniceTests(unittest.TestCase):
         argv = self.argv()
         joined = "\n".join(argv)
         self.assertIn('model_provider="venice"', argv)
+        self.assertIn('analytics.enabled=false', argv)
         self.assertIn(f'base_url="http://127.0.0.1:{self.server.server_address[1]}/api/v1"', joined)
         self.assertIn('env_key="TELLURION_VENICE_TOKEN"', joined)
         self.assertIn('wire_api="responses"', joined)
