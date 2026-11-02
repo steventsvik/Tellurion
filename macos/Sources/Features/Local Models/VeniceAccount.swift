@@ -240,6 +240,17 @@ final class VeniceAccount: ObservableObject {
 enum VeniceCodex {
     static let backendVariable = "TELLURION_CODEX_BACKEND"
     static let modelVariable = "TELLURION_VENICE_MODEL"
+    /// What `tellurion venice codex` names the provider, which Codex records in each session.
+    static let provider = "venice"
+
+    /// Resumes a session (its id already quoted) on Venice.
+    static func resumeLine(_ id: String) -> String {
+        " " + command("resume \(id)") + "\n"
+    }
+
+    /// What a tile whose Venice model was removed comes back to. Nothing starts: its usual
+    /// sign-in is another provider, and the work shouldn't go there without being asked.
+    static let removedAccountLine = #" printf '%s\n' "This tile's Venice model was removed, so Codex wasn't started. Choose an account in the tile's menu.""# + "\n"
 
     static func environment(model: String) -> [String: String] {
         [backendVariable: "venice", modelVariable: model]

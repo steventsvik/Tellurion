@@ -56,12 +56,16 @@ final class BoardAccounts: ObservableObject {
     @Published private(set) var accounts: [BoardAccount] = []
     /// Per provider: the profile new tiles use (nil: your usual sign-in).
     @Published private(set) var active: [BoardAccount.Provider: UUID] = [:]
+    /// Venice accounts that were removed, kept so tiles still naming one don't start their agent
+    /// on another provider.
+    private var removedVenice: Set<UUID> = []
 
     private var file: URL { AgentTools.root.appendingPathComponent("accounts.json") }
 
     private struct Saved: Codable {
         var accounts: [BoardAccount]
         var active: [String: UUID]
+        var removedVenice: [UUID]?
     }
 
     private init() { load() }
@@ -69,6 +73,7 @@ final class BoardAccounts: ObservableObject {
     private func load() {
         guard let data = try? Data(contentsOf: file), let saved = try? JSONDecoder().decode(Saved.self, from: data) else { return }
         accounts = saved.accounts
+        removedVenice = Set(saved.removedVenice ?? [])
         active = Dictionary(uniqueKeysWithValues: saved.active.compactMap { key, value in
             BoardAccount.Provider(rawValue: key).map { ($0, value) }
         })
@@ -77,9 +82,12 @@ final class BoardAccounts: ObservableObject {
     private static let log = StoredFile.logger("Accounts")
 
     private func save() {
-        let saved = Saved(accounts: accounts, active: Dictionary(uniqueKeysWithValues: active.map { ($0.key.rawValue, $0.value) }))
+        let saved = Saved(accounts: accounts, active: Dictionary(uniqueKeysWithValues: active.map { ($0.key.rawValue, $0.value) }),
+                          removedVenice: Array(removedVenice))
         StoredFile.write(json: saved, to: file, what: "the account profiles", log: Self.log)
     }
+
+    func wasRemovedVenice(_ id: UUID?) -> Bool { id.map(removedVenice.contains) ?? false }
 
     func account(_ id: UUID?) -> BoardAccount? { id.flatMap { id in accounts.first { $0.id == id } } }
 
@@ -117,7 +125,11 @@ final class BoardAccounts: ObservableObject {
     /// Forgets a profile and deletes its folder (its sign-in with it).
     func remove(_ id: UUID) {
         guard let account = account(id) else { return }
-        if !account.isVenice { StoredFile.remove(account.folder, what: "a profile's folder", log: Self.log) }
+        if account.isVenice {
+            removedVenice.insert(id)
+        } else {
+            StoredFile.remove(account.folder, what: "a profile's folder", log: Self.log)
+        }
         accounts.removeAll { $0.id == id }
         if active[account.provider] == id { active[account.provider] = nil }
         save()
@@ -199,13 +211,17 @@ extension BoardController {
         let alert = NSAlert()
         alert.messageText = "Remove \(account.name)?"
         alert.informativeText = (account.isVenice ? "Your Venice account stays connected." : "Its sign-in is deleted from this Mac.")
-            + (using.isEmpty ? "" : " \(using.count) tile\(using.count == 1 ? " uses" : "s use") it and will need to sign in again.")
+            + (using.isEmpty ? "" : " \(using.count) tile\(using.count == 1 ? " uses" : "s use") it and "
+               + (account.isVenice ? "won't start Codex again until you choose an account for \(using.count == 1 ? "it" : "them")."
+                                   : "will need to sign in again."))
+            + (account.isVenice && BoardAccounts.shared.active[.codex] == account.id ? " New tiles will use your usual sign-in." : "")
         alert.addButton(withTitle: "Remove")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         BoardAccounts.shared.remove(account.id)
-        for surface in using { model.tileAccounts[surface.id]?[account.provider] = nil }
+        // A tile on Venice keeps naming it, so it won't come back on another provider.
+        if !account.isVenice { for surface in using { model.tileAccounts[surface.id]?[account.provider] = nil } }
         scheduleSave()
     }
 

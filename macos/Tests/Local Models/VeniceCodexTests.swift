@@ -59,4 +59,24 @@ struct VeniceCodexTests {
         let entry = try JSONDecoder().decode(ResumeAfterUpdate.Entry.self, from: Data(saved.utf8))
         #expect(entry.venice == nil)
     }
+
+    @Test func aSessionOnVeniceResumesThroughTellurion() throws {
+        let cached = #"{"id":"s1","agent":"codex","prompts":0,"toolCalls":0,"commands":0,"tests":0,"files":[],"linesAdded":0,"linesRemoved":0,"tokensIn":0,"tokensOut":0}"#
+        var session = try JSONDecoder().decode(ActivitySession.self, from: Data(cached.utf8))
+        #expect(!session.onVenice)
+        session.codexProvider = "openai"
+        #expect(!session.onVenice)
+        session.codexProvider = VeniceCodex.provider
+        #expect(session.onVenice)
+        let line = VeniceCodex.resumeLine("s1")
+        #expect(line.hasPrefix(" "))
+        #expect(line.hasSuffix(" venice codex resume s1\n"))
+    }
+
+    @Test func aRemovedVeniceModelStartsNothing() {
+        let line = VeniceCodex.removedAccountLine
+        #expect(line.hasPrefix(" printf "))
+        #expect(!line.contains("; codex"))
+        #expect(VeniceCodex.adapted(line) == line)
+    }
 }
