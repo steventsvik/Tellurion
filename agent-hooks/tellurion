@@ -5,7 +5,9 @@
 #   tellurion phone [status]  can your phone reach this Mac? (Tailscale), in one line
 #   tellurion phone setup     walk through the Tailscale steps, asking before each one
 #   tellurion local <model>   chat with a model on this Mac (Ollama, LM Studio, llama.cpp,
-#                             MLX or Apple's own); nothing leaves it
+#                             MLX or Apple's own), where nothing leaves it; with
+#                             --provider venice, on your Venice account
+#   tellurion venice codex …  Codex, with its usual setup, on your Venice account
 #
 # Installed to ~/.ghostty-extreme/bin/ by the app (Setup Check, or the welcome window).
 # Paste `tellurion doctor` output into GitHub issues: it contains no personal data
@@ -288,18 +290,99 @@ phone_setup() {
   phone_status
 }
 
-# A chat with a model on this Mac, through Ollama (nothing leaves the Mac).
+# A chat with a model: on this Mac, where nothing leaves it, or on Venice.
 local_model() {
   if [ -z "${1:-}" ]; then
-    printf 'Usage: tellurion local [--provider ollama|lmstudio|openai|apple] [--base URL] <model>\n' >&2
+    printf 'Usage: tellurion local [--provider ollama|lmstudio|openai|apple|venice] [--base URL] <model>\n' >&2
     return 2
   fi
   exec python3 "$hooks/local-chat.py" "$@"
 }
 
+venice_stop() {
+  printf '%s\n' "$1" >&2
+  exit 1
+}
+
+# Codex on a Venice account. Everything of Codex's own stays: its folder, config, hooks, AGENTS.md,
+# skills, MCP servers and sessions. Only where its model requests go changes, through command-line
+# settings for this run; its config file isn't touched. It talks to the proxy inside Tellurion
+# with a token, set for this one command, so it never has the account's key.
+venice_codex() {
+  local root="${GHOSTTY_EXTREME_TEST_HOME:-$HOME}/.ghostty-extreme"
+  local info="$root/venice-proxy.json" folder="$root/venice" here port token codex model="" chosen=0 argument
+  [ -r "$info" ] || venice_stop "Tellurion isn't connected to Venice. Connect your account in Tools → Local models."
+  # What the proxy wrote, and nothing else: a number, and letters and dashes.
+  port=$(sed -n 's/.*"port":\([0-9]\{1,5\}\).*/\1/p' "$info")
+  token=$(sed -n 's/.*"token":"\([A-Za-z0-9-]\{1,200\}\)".*/\1/p' "$info")
+  [ -n "$port" ] && [ -n "$token" ] || venice_stop "Tellurion's connection to Venice can't be read. Reconnect in Tools → Local models."
+  (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null || venice_stop "Tellurion isn't running, so Codex can't reach Venice. Open Tellurion, then try again."
+  codex=$(type -P codex) || venice_stop "Codex isn't installed, or isn't on your PATH."
+
+  for argument in "$@"; do
+    case "$argument" in
+      --) break ;;
+      -m|--model|-m?*|--model=*) chosen=1 ;;
+    esac
+  done
+
+  here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  local script="$root/agent-hooks/venice-catalog.py"
+  [ -f "$script" ] || script="$here/venice-catalog.py"
+  local settings=()
+  if TELLURION_VENICE_TOKEN="$token" python3 "$script" --port "$port" --codex "$codex" --out "$folder" && [ -f "$folder/codex-catalog.json" ]; then
+    settings+=(-c "model_catalog_json=\"$folder/codex-catalog.json\"")
+  else
+    printf 'Codex will start without its details for Venice models, so it edits files with shell commands instead of apply_patch.\n' >&2
+  fi
+
+  if [ "$chosen" = 0 ]; then
+    model=${TELLURION_VENICE_MODEL:-}
+    [ -n "$model" ] || model=$(cat "$folder/default-model" 2>/dev/null)
+    [ -n "$model" ] || venice_stop "No Venice model chosen. Use tellurion venice codex -m <model>, or pick one in Tools → Local models."
+    case "$model" in
+      -*|*[!A-Za-z0-9_.:-]*) venice_stop "That Venice model name can't be right: $model" ;;
+    esac
+    settings+=(-m "$model")
+  fi
+
+  # Tells the sidebar which backend this pane is on, signed like every agent event.
+  if [ "${GHOSTTY_EXTREME_AGENT_EVENTS:-}" = 1 ] && [ "$chosen" = 0 ]; then
+    { printf '\033]777;notify;ghostty-extreme://agent;{"agent":"codex","event":"backend","detail":"venice:%s","t":"%s"}\a' \
+      "$model" "${GHOSTTY_EXTREME_EVENT_TOKEN:-}" > /dev/tty; } 2>/dev/null
+  elif [ "${GHOSTTY_EXTREME_AGENT_EVENTS:-}" = 1 ]; then
+    { printf '\033]777;notify;ghostty-extreme://agent;{"agent":"codex","event":"backend","detail":"venice:","t":"%s"}\a' \
+      "${GHOSTTY_EXTREME_EVENT_TOKEN:-}" > /dev/tty; } 2>/dev/null
+  fi
+
+  # Local panes stay attached to their own terminal, as the zsh wrapper does for plain Codex.
+  if [ -t 1 ] && [ -t 0 ]; then
+    GHOSTTY_EXTREME_CODEX_TTY="${GHOSTTY_EXTREME_CODEX_TTY:-$(tty)}"
+    export GHOSTTY_EXTREME_CODEX_TTY
+    settings=(--no-daemon "${settings[@]}")
+  fi
+
+  # Settings for this run only. A project's own config can't override them (Codex ignores
+  # model_provider there). Commands the agent runs get the token blanked, by one dotted setting
+  # that leaves any of the user's own environment rules alone.
+  TELLURION_VENICE_TOKEN="$token" exec "$codex" "${settings[@]}" \
+    -c 'model_provider="venice"' \
+    -c 'shell_environment_policy.set.TELLURION_VENICE_TOKEN=""' \
+    -c "model_providers.venice={name=\"Venice\",base_url=\"http://127.0.0.1:$port/api/v1\",env_key=\"TELLURION_VENICE_TOKEN\",wire_api=\"responses\"}" \
+    "$@"
+}
+
+venice() {
+  case "${1:-}" in
+    codex) shift; venice_codex "$@" ;;
+    *) printf 'Usage: tellurion venice codex [codex options]\n' >&2; exit 2 ;;
+  esac
+}
+
 case "${1:-doctor}" in
   doctor) doctor ;;
   local) shift; local_model "$@" ;;
+  venice) shift; venice "$@" ;;
   phone)
     case "${2:-status}" in
       status) phone_status ;;
@@ -307,11 +390,11 @@ case "${1:-doctor}" in
       *) printf 'Usage: tellurion phone [status|setup]\n' >&2; exit 2 ;;
     esac ;;
   -h|--help|help)
-    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
     ;;
   *)
     printf 'Unknown command: %s\n' "$1" >&2
-    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
     ;;
 esac
