@@ -34,7 +34,7 @@ sparkle_tool() {
 TAG="extreme-$VERSION"
 ROOT=${0:A:h}
 OUT=/private/tmp/ghostty-extreme-release/$VERSION
-ZIG=/opt/homebrew/opt/zig@0.15/bin/zig
+ZIG=/opt/homebrew/opt/zig/bin/zig
 
 step() { print -P "\n%F{yellow}▸ $1%f"; }
 pass() { print -P "  %F{green}✓%f $1"; }

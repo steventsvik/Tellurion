@@ -7,15 +7,9 @@ import GhosttyKit
 
 extension Ghostty {
     /// The NSView implementation for a terminal surface.
-    class SurfaceView: OSView, ObservableObject, Codable, Identifiable {
-        typealias ID = UUID
-
-        /// Unique ID per surface
-        let id: UUID
-
+    class SurfaceView: OSSurfaceView, Codable, Identifiable {
         // The current title of the surface as defined by the pty. This can be
-        // changed with escape codes. This is public because the callbacks go
-        // to the app level and it is set from there.
+        // changed with escape codes.
         @Published private(set) var title: String = "" {
             didSet {
                 if !title.isEmpty {
@@ -25,28 +19,8 @@ extension Ghostty {
             }
         }
 
-        // The current pwd of the surface as defined by the pty. This can be
-        // changed with escape codes.
-        @Published var pwd: String?
-
-        // The cell size of this surface. This is set by the core when the
-        // surface is first created and any time the cell size changes (i.e.
-        // when the font size changes). This is used to allow windows to be
-        // resized in discrete steps of a single cell.
-        @Published var cellSize: NSSize = .zero
-
-        // The health state of the surface. This currently only reflects the
-        // renderer health. In the future we may want to make this an enum.
-        @Published var healthy: Bool = true
-
-        // Any error while initializing the surface.
-        @Published var error: Error?
-
-        // The hovered URL string
-        @Published var hoverUrl: String?
-
         // The progress report (if any)
-        @Published var progressReport: Action.ProgressReport? {
+        override var progressReport: Action.ProgressReport? {
             didSet {
                 // Cancel any existing timer
                 progressReportTimer?.invalidate()
@@ -65,11 +39,8 @@ extension Ghostty {
         // The currently active key sequence. The sequence is not active if this is empty.
         @Published var keySequence: [KeyboardShortcut] = []
 
-        // The currently active key tables. Empty if no tables are active.
-        @Published var keyTables: [String] = []
-
         // The current search state. When non-nil, the search overlay should be shown.
-        @Published var searchState: SearchState? {
+        override var searchState: SearchState? {
             didSet {
                 if let searchState {
                     // I'm not a Combine expert so if there is a better way to do this I'm
@@ -77,6 +48,7 @@ extension Ghostty {
                     // needle is less than 3 chars, we debounce it for a few hundred ms to
                     // avoid kicking off expensive searches.
                     searchNeedleCancellable = searchState.$needle
+                        .map(\.text)
                         .removeDuplicates()
                         .map { needle -> AnyPublisher<String, Never> in
                             if needle.isEmpty || needle.count >= 3 {
@@ -105,13 +77,8 @@ extension Ghostty {
         // Cancellable for search state needle changes
         private var searchNeedleCancellable: AnyCancellable?
 
-        // The time this surface last became focused. This is a ContinuousClock.Instant
-        // on supported platforms.
-        @Published var focusInstant: ContinuousClock.Instant?
-
-        // Returns sizing information for the surface. This is the raw C
-        // structure because I'm lazy.
-        @Published var surfaceSize: ghostty_surface_size_s?
+        // Cancellable for the debounced accessibility selection-change post.
+        private var accessibilitySelectionCancellable: AnyCancellable?
 
         // Whether the pointer should be visible or not
         @Published private(set) var pointerStyle: CursorStyle = .horizontalText
@@ -126,6 +93,12 @@ extension Ghostty {
         // Whether the cursor is currently visible (not hidden by typing, etc.)
         @Published private(set) var cursorVisible: Bool = true
 
+        /// Whether the belonging window is visible
+        ///
+        /// We track this to restore surface occlusion state
+        /// after this surface is dragged to another window
+        var isWindowVisible = false
+
         /// The configuration derived from the Ghostty config so we don't need to rely on references.
         @Published private(set) var derivedConfig: DerivedConfig
 
@@ -136,11 +109,12 @@ extension Ghostty {
         /// True when the bell is active. This is set inactive on focus or event.
         @Published private(set) var bell: Bool = false
 
-        /// True when the surface is in readonly mode.
-        @Published private(set) var readonly: Bool = false
-
-        /// True when the surface should show a highlight effect (e.g., when presented via goto_split).
-        @Published private(set) var highlighted: Bool = false
+        /// A clipboard confirmation waiting to be handled by its controller.
+        @Published var pendingClipboardConfirmation: ClipboardConfirmationRequest? {
+            didSet {
+                pendingClipboardConfirmationDidChange(from: oldValue)
+            }
+        }
 
         // An initial size to request for a window. This will only affect
         // then the view is moved to a new window.
@@ -207,7 +181,7 @@ extension Ghostty {
         private(set) var surfaceModel: Ghostty.Surface?
 
         /// Returns the underlying C value for the surface. See "note" on surfaceModel.
-        var surface: ghostty_surface_t? {
+        override var surface: ghostty_surface_t? {
             surfaceModel?.unsafeCValue
         }
         /// Current scrollbar state, cached here for persistence across rebuilds
@@ -224,6 +198,8 @@ extension Ghostty {
 
         // This is set to non-null during keyDown to accumulate insertText contents
         private var keyTextAccumulator: [String]?
+        /// Temporary lead surrogate that's waiting for the trail
+        private var leadSurrogate: LeadSurrogate?
 
         // True when we've consumed a left mouse-down only to move focus and
         // should suppress the matching mouse-up from being reported.
@@ -255,7 +231,6 @@ extension Ghostty {
 
         init(_ app: ghostty_app_t, baseConfig: SurfaceConfiguration? = nil, uuid: UUID? = nil) {
             self.markedText = NSMutableAttributedString()
-            self.id = uuid ?? .init()
 
             // Our initial config always is our application wide config.
             if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
@@ -273,7 +248,7 @@ extension Ghostty {
             // Initialize with some default frame size. The important thing is that this
             // is non-zero so that our layer bounds are non-zero so that our renderer
             // can do SOMETHING.
-            super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+            super.init(id: uuid, frame: NSRect(x: 0, y: 0, width: 800, height: 600))
 
             // Our cache of screen data
             cachedScreenContents = .init(duration: .milliseconds(500)) { [weak self] in
@@ -324,6 +299,30 @@ extension Ghostty {
                 }
             }
 
+            // A drag can emit multiple selection changes. Debounce so screen
+            // readers hear one announcement once the selection settles.
+            accessibilitySelectionCancellable = NotificationCenter.default
+                // The publisher retains its object, so filtering with a weak capture
+                // avoids a cycle between self and the stored cancellable.
+                // But we also need to be careful to do the map below (see
+                // comment below)
+                .publisher(for: .ghosttySelectionDidChange)
+                .filter { [weak self] notification in
+                    guard let self else { return false }
+                    return notification.object as AnyObject? === self
+                }
+                .map { _ in
+                    // Debounce retains its latest upstream value. In this
+                    // case its a Notification, which retains its object,
+                    // which is a surface. So this creates a retain cycle.
+                    // This discards the notification before debounce.
+                }
+                .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
+                .sink { [weak self] in
+                    guard let self else { return }
+                    NSAccessibility.post(element: self, notification: .selectedTextChanged)
+                }
+
             // Before we initialize the surface we want to register our notifications
             // so there is no window where we can't receive them.
             let center = NotificationCenter.default
@@ -361,11 +360,6 @@ extension Ghostty {
                 self,
                 selector: #selector(ghosttyBellDidRing(_:)),
                 name: .ghosttyBellDidRing,
-                object: self)
-            center.addObserver(
-                self,
-                selector: #selector(ghosttyDidChangeReadonly(_:)),
-                name: .ghosttyDidChangeReadonly,
                 object: self)
             center.addObserver(
                 self,
@@ -414,6 +408,11 @@ extension Ghostty {
         }
 
         deinit {
+            // Resolve clipboard callback state while surfaceModel is still
+            // alive. The request's weak SurfaceView reference is already nil
+            // during deinit, so didSet passes this instance explicitly.
+            pendingClipboardConfirmation = nil
+
             // Remove all of our notificationcenter subscriptions
             let center = NotificationCenter.default
             center.removeObserver(self)
@@ -440,7 +439,12 @@ extension Ghostty {
             progressReportTimer?.invalidate()
         }
 
-        func focusDidChange(_ focused: Bool) {
+        override func endSearch() {
+            Ghostty.moveFocus(to: self)
+            super.endSearch()
+        }
+
+        override func focusDidChange(_ focused: Bool) {
             guard let surface = self.surface else { return }
             guard self.focused != focused else { return }
             self.focused = focused
@@ -485,7 +489,7 @@ extension Ghostty {
             return CGSize(width: size.width * scale, height: size.height * scale)
         }
 
-        func sizeDidChange(_ size: CGSize) {
+        override func sizeDidChange(_ size: CGSize) {
             // Ghostty wants to know the actual framebuffer size... It is very important
             // here that we use "size" and NOT the view frame. If we're in the middle of
             // an animation (i.e. a fullscreen animation), the frame will not yet be updated.
@@ -574,6 +578,8 @@ extension Ghostty {
             NSCursor.setHiddenUntilMouseMoves(!visible)
         }
 
+        // MARK: - Title
+
         /// Set the title by prompting the user.
         func promptTitle() {
             // Create an alert dialog
@@ -602,18 +608,7 @@ extension Ghostty {
 
                 // Get the input text
                 let newTitle = textField.stringValue
-                if newTitle.isEmpty {
-                    // Empty means that user wants the title to be set automatically
-                    // We also need to reload the config for the "title" property to be
-                    // used again by this tab.
-                    let prevTitle = titleFromTerminal ?? "Terminal"
-                    titleFromTerminal = nil
-                    setTitle(prevTitle)
-                } else {
-                    // Set the title and prevent it from being changed automatically
-                    titleFromTerminal = title
-                    title = newTitle
-                }
+                self.titleOverride = newTitle.isEmpty ? nil : newTitle
             }
 
             // We prefer to run our alert in a sheet modal if we have a window.
@@ -624,6 +619,34 @@ extension Ghostty {
                 // visible. The above codepath should be taken most times but I'm just
                 // noting this as something I noticed consistently.
                 completionHandler(alert.runModal())
+            }
+        }
+
+        /// An override title for the surface set by the user or via AppleScript.
+        /// When set, this takes precedence over the title reported by pty.
+        /// This computed property is placed here for code locality.
+        var titleOverride: String? {
+            get {
+                titleFromTerminal != nil ? title : nil
+            }
+
+            set {
+                if let newValue, !newValue.isEmpty {
+                    // Set the title and prevent it from being changed automatically
+                    if titleFromTerminal == nil {
+                        // Only capture titleFromTerminal from pty, skip if it was set before by the user
+                        titleFromTerminal = title
+                    }
+                    title = newValue
+                    return
+                }
+
+                // Otherwise, set the title to be updated automatically
+                // We also need to reload the config for the "title" property to be
+                // used again by this surface, but only restore if an override was actually active.
+                guard let prevTitle = titleFromTerminal else { return }
+                titleFromTerminal = nil
+                setTitle(prevTitle)
             }
         }
 
@@ -662,14 +685,28 @@ extension Ghostty {
         }
 
         private func localEventLeftMouseDown(_ event: NSEvent) -> NSEvent? {
+            let isCommandPaletteVisible = (event.window?.windowController as? BaseTerminalController)?
+                .commandPaletteIsShowing == true
+            guard !isCommandPaletteVisible else {
+                // We don't want to process events that
+                // are supposed to be handled by CommandPaletteView
+                return event
+            }
+
             // We only want to process events that are on this window.
             guard let window,
                   event.window != nil,
                   window == event.window else { return event }
 
             // The clicked location in this window should be this view.
-            let location = convert(event.locationInWindow, from: nil)
-            guard hitTest(location) == self else { return event }
+            guard
+                let location = window.contentView?.convert(event.locationInWindow, from: nil)
+            else {
+                return event
+            }
+            // We should use window to perform hitTest here,
+            // because there could be some other overlays on top, like search bar
+            guard window.contentView?.hitTest(location) == self else { return event }
 
             // We always assume that we're resetting our mouse suppression
             // unless we see the specific scenario below to set it.
@@ -759,7 +796,18 @@ extension Ghostty {
 
             // Update our derived config
             DispatchQueue.main.async { [weak self] in
-                self?.derivedConfig = DerivedConfig(config)
+                guard let self else { return }
+                self.derivedConfig = DerivedConfig(config)
+
+                // If the cached OSC 11 background color disagrees with the new
+                // config-derived background, drop it so window chrome follows
+                // the new config (e.g., on light/dark theme auto-switch). The
+                // cached value is restored next time the terminal emits a
+                // color_change.
+                if let cached = self.backgroundColor,
+                   cached != self.derivedConfig.backgroundColor {
+                    self.backgroundColor = nil
+                }
             }
         }
 
@@ -783,11 +831,6 @@ extension Ghostty {
         @objc private func ghosttyBellDidRing(_ notification: SwiftUI.Notification) {
             // Bell state goes to true
             bell = true
-        }
-
-        @objc private func ghosttyDidChangeReadonly(_ notification: SwiftUI.Notification) {
-            guard let value = notification.userInfo?[SwiftUI.Notification.Name.ReadonlyKey] as? Bool else { return }
-            readonly = value
         }
 
         @objc private func windowDidChangeScreen(notification: SwiftUI.Notification) {
@@ -1175,11 +1218,58 @@ extension Ghostty {
             // we control the preedit state only through the preedit API.
             syncPreedit(clearIfNeeded: markedTextBefore)
 
-            if let list = keyTextAccumulator, list.count > 0 {
-                // If we have text, then we've composed a character, send that down.
-                // These never have "composing" set to true because these are the
-                // result of a composition.
+            // We're composing if we have preedit (the obvious case). But we're also
+            // composing if we don't have preedit and we had marked text before,
+            // because this input probably just reset the preedit state. It shouldn't
+            // be encoded. Example: Japanese begin composing, then press backspace
+            // or ctrl+h. This should only cancel the composing state but not
+            // actually delete the prior input characters (prior to the composing).
+            let composing = markedText.length > 0 || markedTextBefore
+
+            // The input method may commit all or part of the preedit text via
+            // insertText while handling a key that should not itself be
+            // encoded. Send that committed text separately, then only replay
+            // keys that should still affect the terminal after committing.
+            if markedTextBefore,
+               let list = keyTextAccumulator,
+               list.count > 0 {
                 for text in list {
+                    if Ghostty.SurfaceView.shouldSuppressComposingControlInput(
+                        text,
+                        composing: composing
+                    ) {
+                        continue
+                    }
+
+                    _ = committedTextAction(action, text: text)
+                }
+
+                if shouldReplayCommittedPreeditKey(translationEvent) {
+                    _ = keyAction(
+                        action,
+                        event: event,
+                        translationEvent: translationEvent,
+                        composing: false
+                    )
+                }
+                return
+            }
+
+            if let list = keyTextAccumulator, list.count > 0 {
+                // Accumulated text from interpretKeyEvents (committed by the IME).
+                for text in list {
+                    // Drop bare control characters the IME accumulated while
+                    // composing so they don't leak through to the terminal.
+                    if Ghostty.SurfaceView.shouldSuppressComposingControlInput(
+                        text,
+                        composing: composing
+                    ) {
+                        continue
+                    }
+
+                    // We've composed a character; send it down. keyAction's
+                    // default composing=false applies because this is the
+                    // committed result of a composition, not in-progress preedit.
                     _ = keyAction(
                         action,
                         event: event,
@@ -1188,20 +1278,22 @@ extension Ghostty {
                     )
                 }
             } else {
+                // Raw control characters (e.g. ctrl+h) arriving during
+                // composition belong to the IME, not the terminal.
+                if Ghostty.SurfaceView.shouldSuppressComposingControlInput(
+                    event.characters,
+                    composing: composing
+                ) {
+                    return
+                }
+
                 // We have no accumulated text so this is a normal key event.
                 _ = keyAction(
                     action,
                     event: event,
                     translationEvent: translationEvent,
                     text: translationEvent.ghosttyCharacters,
-
-                    // We're composing if we have preedit (the obvious case). But we're also
-                    // composing if we don't have preedit and we had marked text before,
-                    // because this input probably just reset the preedit state. It shouldn't
-                    // be encoded. Example: Japanese begin composing, the press backspace.
-                    // This should only cancel the composing state but not actually delete
-                    // the prior input characters (prior to the composing).
-                    composing: markedText.length > 0 || markedTextBefore
+                    composing: composing
                 )
             }
         }
@@ -1426,16 +1518,47 @@ extension Ghostty {
             var key_ev = event.ghosttyKeyEvent(action, translationMods: translationEvent?.modifierFlags)
             key_ev.composing = composing
 
-            // For text, we only encode UTF8 if we don't have a single control
-            // character. Control characters are encoded by Ghostty itself.
-            // Without this, `ctrl+enter` does the wrong thing.
-            if let text, text.count > 0,
-               let codepoint = text.utf8.first, codepoint >= 0x20 {
+            if let text = text?.keyEventText {
                 return text.withCString { ptr in
                     key_ev.text = ptr
                     return ghostty_surface_key(surface, key_ev)
                 }
             } else {
+                return ghostty_surface_key(surface, key_ev)
+            }
+        }
+
+        private func shouldReplayCommittedPreeditKey(_ event: NSEvent) -> Bool {
+            guard let key = Ghostty.Input.Key(keyCode: event.keyCode) else { return false }
+            switch key {
+            case .arrowDown, .arrowRight, .arrowUp:
+                return true
+            case .arrowLeft:
+                // Don't replay plain left-arrow because AppKit already leaves
+                // the caret in place after Korean IMEs commit preedit text.
+                return !event.modifierFlags.isDisjoint(with: [.shift, .control, .option, .command])
+            default:
+                return false
+            }
+        }
+
+        private func committedTextAction(
+            _ action: ghostty_input_action_e,
+            text: String
+        ) -> Bool {
+            guard let surface = self.surface else { return false }
+
+            var key_ev = ghostty_input_key_s()
+            key_ev.action = action
+            key_ev.keycode = 0
+            key_ev.text = nil
+            key_ev.composing = false
+            key_ev.mods = GHOSTTY_MODS_NONE
+            key_ev.consumed_mods = GHOSTTY_MODS_NONE
+            key_ev.unshifted_codepoint = 0
+
+            return text.withCString { ptr in
+                key_ev.text = ptr
                 return ghostty_surface_key(surface, key_ev)
             }
         }
@@ -1525,6 +1648,9 @@ extension Ghostty {
             item.setImageIfDesired(systemSymbolName: "rectangle.bottomhalf.inset.filled")
             item = menu.addItem(withTitle: "Split Up", action: #selector(splitUp(_:)), keyEquivalent: "")
             item.setImageIfDesired(systemSymbolName: "rectangle.tophalf.inset.filled")
+            menu.addItem(.separator())
+            item = menu.addItem(withTitle: "Close Split", action: #selector(closeSurface(_:)), keyEquivalent: "")
+            item.setImageIfDesired(systemSymbolName: "xmark.rectangle")
 
             menu.addItem(.separator())
             item = menu.addItem(withTitle: "Reset Terminal", action: #selector(resetTerminal(_:)), keyEquivalent: "")
@@ -1548,7 +1674,7 @@ extension Ghostty {
             guard let surface = self.surface else { return }
             let action = "copy_to_clipboard"
             if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
             }
         }
 
@@ -1556,7 +1682,7 @@ extension Ghostty {
             guard let surface = self.surface else { return }
             let action = "paste_from_clipboard"
             if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
             }
         }
 
@@ -1564,7 +1690,7 @@ extension Ghostty {
             guard let surface = self.surface else { return }
             let action = "paste_from_clipboard"
             if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
             }
         }
 
@@ -1572,7 +1698,7 @@ extension Ghostty {
             guard let surface = self.surface else { return }
             let action = "paste_from_selection"
             if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
             }
         }
 
@@ -1580,7 +1706,7 @@ extension Ghostty {
             guard let surface = self.surface else { return }
             let action = "select_all"
             if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
             }
         }
 
@@ -1588,7 +1714,7 @@ extension Ghostty {
             guard let surface = self.surface else { return }
             let action = "start_search"
             if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
             }
         }
 
@@ -1596,7 +1722,7 @@ extension Ghostty {
             guard let surface = self.surface else { return }
             let action = "search_selection"
             if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
             }
         }
 
@@ -1604,31 +1730,23 @@ extension Ghostty {
             guard let surface = self.surface else { return }
             let action = "scroll_to_selection"
             if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
             }
         }
 
         @IBAction func findNext(_ sender: Any?) {
-            guard let surface = self.surface else { return }
-            let action = "search:next"
-            if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
-            }
+            _ = self.navigateSearchToNext()
         }
 
         @IBAction func findPrevious(_ sender: Any?) {
-            guard let surface = self.surface else { return }
-            let action = "search:previous"
-            if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
-            }
+            _ = navigateSearchToPrevious()
         }
 
         @IBAction func findHide(_ sender: Any?) {
             guard let surface = self.surface else { return }
             let action = "end_search"
             if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
             }
         }
 
@@ -1636,15 +1754,7 @@ extension Ghostty {
             guard let surface = self.surface else { return }
             let action = "toggle_readonly"
             if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
-            }
-        }
-
-        /// Triggers a brief highlight animation on this surface.
-        func highlight() {
-            highlighted = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-                self?.highlighted = false
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
             }
         }
 
@@ -1668,11 +1778,19 @@ extension Ghostty {
             ghostty_surface_split(surface, GHOSTTY_SPLIT_DIRECTION_UP)
         }
 
+        @IBAction func closeSurface(_ sender: Any?) {
+            guard let surface = self.surface else { return }
+            let action = "close_surface"
+            if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
+            }
+        }
+
         @objc func resetTerminal(_ sender: Any) {
             guard let surface = self.surface else { return }
             let action = "reset"
             if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
             }
         }
 
@@ -1680,7 +1798,7 @@ extension Ghostty {
             guard let surface = self.surface else { return }
             let action = "inspector:toggle"
             if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
             }
         }
 
@@ -1711,26 +1829,36 @@ extension Ghostty {
 
             // Note the callback may be executed on a background thread as documented
             // so we need @MainActor since we're reading/writing view state.
-            UNUserNotificationCenter.current().add(request) { @MainActor error in
-                if let error = error {
-                    AppDelegate.logger.error("Error scheduling user notification: \(error)")
-                    return
-                }
+            // We use [weak self] here because we don't want to extend the surface's
+            // lifetime when a notification is triggered right before the surface closes.
+            Task { @MainActor [weak self] in
+                do {
+                    try await UNUserNotificationCenter.current().add(request)
 
-                // We need to keep track of this notification so we can remove it
-                // under certain circumstances
-                self.notificationIdentifiers.insert(uuid)
+                    guard let focused = self?.focused else {
+                        // We remove the notification if the surface is deallocated.
+                        UNUserNotificationCenter.current()
+                            .removeDeliveredNotifications(withIdentifiers: [uuid])
+                        return
+                    }
 
-                // If we're focused then we schedule to remove the notification
-                // after a few seconds. If we gain focus we automatically remove it
-                // in focusDidChange.
-                if self.focused {
-                    Task { @MainActor [weak self] in
-                        try await Task.sleep(for: .seconds(3))
+                    // We need to keep track of this notification so we can remove it
+                    // under certain circumstances
+                    self?.notificationIdentifiers.insert(uuid)
+
+                    // If we're focused then we schedule to remove the notification
+                    // after a few seconds. If we gain focus we automatically remove it
+                    // in focusDidChange.
+                    if focused {
+                        // If the suspension is failed, we remove the notification anyway.
+                        try? await Task.sleep(for: .seconds(3))
                         self?.notificationIdentifiers.remove(uuid)
+                        // We remove the notification if the surface is deallocated while we wait.
                         UNUserNotificationCenter.current()
                             .removeDeliveredNotifications(withIdentifiers: [uuid])
                     }
+                } catch {
+                    AppDelegate.logger.error("Error scheduling user notification: \(error, privacy: .public)")
                 }
             }
         }
@@ -1818,6 +1946,18 @@ extension Ghostty {
             try container.encode(title, forKey: .title)
             try container.encode(titleFromTerminal != nil, forKey: .isUserSetTitle)
         }
+    }
+}
+
+// MARK: Clipboard Confirmation
+
+extension Ghostty.SurfaceView {
+    /// Cancel the request that a new published value replaces or clears.
+    private func pendingClipboardConfirmationDidChange(
+        from previous: Ghostty.ClipboardConfirmationRequest?
+    ) {
+        guard previous !== pendingClipboardConfirmation else { return }
+        previous?.cancel(from: self)
     }
 }
 
@@ -1955,7 +2095,7 @@ extension Ghostty.SurfaceView: NSTextInputClient {
             x += cellSize.width * Double(range.location + range.length)
         }
         // Ghostty coordinates are in top-left (0, 0) so we have to convert to
-        // bottom-left since that is what UIKit expects
+        // bottom-left since that is what AppKit expects
         // when there's is no characters selected,
         // width should be 0 so that dictation indicator
         // can start in the right place
@@ -1976,15 +2116,27 @@ extension Ghostty.SurfaceView: NSTextInputClient {
     func insertText(_ string: Any, replacementRange: NSRange) {
         // We must have an associated event
         guard NSApp.currentEvent != nil else { return }
-        guard let surfaceModel else { return }
 
         // We want the string view of the any value
         var chars = ""
         switch string {
         case let v as NSAttributedString:
             chars = v.string
-        case let v as String:
-            chars = v
+        case let v as NSString:
+            if let leadSurrogate = LeadSurrogate(v) {
+                self.leadSurrogate = leadSurrogate
+                chars = ""
+            } else if let trail = TrailSurrogate(v) {
+                // We ignore trail surrogate without a lead like Terminal.app.
+                chars = leadSurrogate?.encode(trail: trail) ?? ""
+                leadSurrogate = nil
+            } else {
+                chars = v as String
+                // Clear whenever other text got inserted.
+                // Ideally we should encode any adjacent lead and trail surrogate into one,
+                // but getting the cursor position and reading could be rather expensive to do.
+                leadSurrogate = nil
+            }
         default:
             return
         }
@@ -2000,7 +2152,11 @@ extension Ghostty.SurfaceView: NSTextInputClient {
             return
         }
 
-        surfaceModel.sendText(chars)
+        // All committed text (IME, dictation, etc.) must be sent as key
+        // events so programs treat it as typed input, never as a paste.
+        if !chars.isEmpty {
+            _ = committedTextAction(GHOSTTY_ACTION_PRESS, text: chars)
+        }
     }
 
     /// This function needs to exist for two reasons:
@@ -2013,21 +2169,7 @@ extension Ghostty.SurfaceView: NSTextInputClient {
            let current = NSApp.currentEvent,
            lastPerformKeyEvent == current.timestamp {
             NSApp.sendEvent(current)
-            return
         }
-
-		guard let surfaceModel else { return }
-        // Process MacOS native scroll events
-        switch selector {
-        case #selector(moveToBeginningOfDocument(_:)):
-            _ = surfaceModel.perform(action: "scroll_to_top")
-        case #selector(moveToEndOfDocument(_:)):
-            _ = surfaceModel.perform(action: "scroll_to_bottom")
-        default:
-            break
-        }
-
-        print("SEL: \(selector)")
     }
 
     /// Sync the preedit state based on the markedText value to libghostty
@@ -2048,6 +2190,22 @@ extension Ghostty.SurfaceView: NSTextInputClient {
             // in a preedit state so we can clear it.
             ghostty_surface_preedit(surface, nil, 0)
         }
+    }
+
+    /// True when `text` is a single C0 control character (U+0000-U+001F)
+    /// arriving while the IME is composing. Such input belongs to the IME
+    /// and must not be forwarded to the terminal.
+    static func shouldSuppressComposingControlInput(
+        _ text: String?,
+        composing: Bool
+    ) -> Bool {
+        guard composing, let text else { return false }
+        let scalars = text.unicodeScalars
+        guard let scalar = scalars.first,
+              scalars.index(after: scalars.startIndex) == scalars.endIndex else {
+            return false
+        }
+        return scalar.value < 0x20
     }
 }
 
@@ -2145,6 +2303,14 @@ extension Ghostty.SurfaceView: NSMenuItemValidation {
             item.state = readonly ? .on : .off
             return true
 
+        case #selector(copy(_:)):
+            // We only enable copy menu item when there're actual selected text
+            if let text = self.accessibilitySelectedText(), text.count > 0 {
+                return true
+            } else {
+                return false
+            }
+
         default:
             return true
         }
@@ -2157,7 +2323,6 @@ extension Ghostty.SurfaceView {
     static let dropTypes: Set<NSPasteboard.PasteboardType> = [
         .string,
         .fileURL,
-        .URL
     ]
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
@@ -2177,31 +2342,13 @@ extension Ghostty.SurfaceView {
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         let pb = sender.draggingPasteboard
 
-        let content: String?
-        if let url = pb.string(forType: .URL) {
-            // URLs first, they get escaped as-is.
-            content = Ghostty.Shell.escape(url)
-        } else if let urls = pb.readObjects(forClasses: [NSURL.self]) as? [URL],
-           urls.count > 0 {
-            // File URLs next. They get escaped individually and then joined by a
-            // space if there are multiple.
-            content = urls
-                .map { Ghostty.Shell.escape($0.path) }
-                .joined(separator: " ")
-        } else if let str = pb.string(forType: .string) {
-            // Strings are not escaped because they may be copy/pasting a
-            // command they want to execute.
-            content = str
-        } else {
-            content = nil
-        }
+        let content = pb.getOpinionatedStringContents()
 
         if let content {
             DispatchQueue.main.async {
-                self.insertText(
-                    content,
-                    replacementRange: NSRange(location: 0, length: 0)
-                )
+                // Dropped text is untrusted, so it goes through the same
+                // paste protection as a clipboard paste.
+                self.surfaceModel?.pasteText(content)
             }
             return true
         }
@@ -2316,6 +2463,7 @@ extension Ghostty.SurfaceView {
 /// We use this to cache our surface content. This probably should be extracted some day
 /// to a more generic helper.
 class CachedValue<T> {
+    private let lock = NSLock()
     private var value: T?
     private let fetch: () -> T
     private let duration: Duration
@@ -2327,10 +2475,15 @@ class CachedValue<T> {
     }
 
     deinit {
+        lock.lock()
         expiryTask?.cancel()
+        lock.unlock()
     }
 
     func get() -> T {
+        lock.lock()
+        defer { lock.unlock() }
+
         if let value {
             return value
         }
@@ -2345,13 +2498,58 @@ class CachedValue<T> {
         expiryTask = Task { [weak self] in
             do {
                 try await Task.sleep(until: expires)
-                self?.value = nil
-                self?.expiryTask = nil
+                self?.expire()
             } catch {
                 // Task was cancelled, do nothing
             }
         }
 
         return result
+    }
+
+    private func expire() {
+        lock.lock()
+        defer { lock.unlock() }
+
+        value = nil
+        expiryTask = nil
+    }
+}
+
+/// Check if a UTF16 text is a single lead surrogate character
+struct LeadSurrogate {
+    let char: UTF16Char
+
+    init?(_ text: NSString) {
+        guard text.length == 1 else {
+            return nil
+        }
+        let char = text.character(at: 0)
+        if UTF16.isLeadSurrogate(char) {
+            self.char = char
+        } else {
+            return nil
+        }
+    }
+
+    func encode(trail: TrailSurrogate) -> String {
+        String(decoding: [char, trail.char], as: UTF16.self)
+    }
+}
+
+/// Check if a UTF16 text is a single trail surrogate character
+struct TrailSurrogate {
+    let char: UTF16Char
+
+    init?(_ text: NSString) {
+        guard text.length == 1 else {
+            return nil
+        }
+        let char = text.character(at: 0)
+        if UTF16.isTrailSurrogate(char) {
+            self.char = char
+        } else {
+            return nil
+        }
     }
 }

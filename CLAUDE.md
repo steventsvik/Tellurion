@@ -26,7 +26,7 @@ People watch this repo. Keep `custom` (the default branch) release-quality.
 ```sh
 # The core library, only when files outside macos/ changed:
 ZIG_GLOBAL_CACHE_DIR=/private/tmp/gx-zig-global ZIG_LOCAL_CACHE_DIR=/private/tmp/gx-zig-local \
-  /opt/homebrew/opt/zig@0.15/bin/zig build -Doptimize=ReleaseFast -Dxcframework-target=native -Demit-macos-app=false
+  /opt/homebrew/opt/zig/bin/zig build -Doptimize=ReleaseFast -Dxcframework-target=native -Demit-macos-app=false
 
 # The app:
 cd macos && xcodebuild -project Ghostty.xcodeproj -scheme Ghostty -configuration ReleaseLocal \

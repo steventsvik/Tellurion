@@ -81,25 +81,13 @@ class DockTilePlugin: NSObject, NSDockTilePlugIn {
             return
         }
 
-        if let appBundleURL = self.ghosttyAppURL {
-            let appBundlePath = appBundleURL.path
-            NSWorkspace.shared.setIcon(appIcon, forFile: appBundlePath)
-            NSWorkspace.shared.noteFileSystemChanged(appBundlePath)
-        }
-
         dockTile.setIcon(appIcon)
     }
 
     /// Reset the application icon and dock tile icon to the default.
     private func resetIcon(dockTile: NSDockTile) {
-        let appBundlePath = self.ghosttyAppURL?.path
-        let appIcon: NSImage
+        let appIcon: NSImage?
         if #available(macOS 26.0, *) {
-            // Reset to the default (glassy) icon.
-            if let appBundlePath {
-                NSWorkspace.shared.setIcon(nil, forFile: appBundlePath)
-            }
-
             #if DEBUG
             appIcon = pluginBundle.image(forResource: "AppIconImage")!
             #else
@@ -108,41 +96,28 @@ class DockTilePlugin: NSObject, NSDockTilePlugIn {
             // stock blue icon) after the app is reinstalled.
             if let bundleIcon = ghosttyAppURL.flatMap(Self.bundleIconImage(for:)) {
                 appIcon = bundleIcon
-            } else if let appBundlePath,
-                let iconRep = NSWorkspace.shared.icon(forFile: appBundlePath)
-                .bestRepresentation(
-                    for: CGRect(origin: .zero, size: dockTile.size),
-                    context: nil,
-                    hints: nil
-            ) {
-                appIcon = NSImage(size: dockTile.size)
-                appIcon.addRepresentation(iconRep)
             } else {
-                // If something unexpected happens on macOS 26,
-                // fall back to a bundled icon.
+                // If the bundle has no icon file, fall back to a bundled icon.
                 appIcon = pluginBundle.image(forResource: "AppIconImage")!
             }
             #endif
         } else {
             // Use the bundled icon to keep the corner radius consistent with pre-Tahoe apps.
             appIcon = pluginBundle.image(forResource: "AppIconImage")!
-            if let appBundlePath {
-                NSWorkspace.shared.setIcon(appIcon, forFile: appBundlePath)
-            }
-        }
-
-        // Notify Finder/Dock so icon caches refresh immediately.
-        if let appBundlePath {
-            NSWorkspace.shared.noteFileSystemChanged(appBundlePath)
         }
         dockTile.setIcon(appIcon)
     }
 }
 
 private extension NSDockTile {
-    func setIcon(_ newIcon: NSImage) {
+    func setIcon(_ newIcon: NSImage?) {
         // Update the Dock tile on the main thread.
         DispatchQueue.main.async {
+            guard let newIcon else {
+                self.contentView = nil
+                self.display()
+                return
+            }
             let iconView = NSImageView(frame: CGRect(origin: .zero, size: self.size))
             iconView.wantsLayer = true
             iconView.image = newIcon

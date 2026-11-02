@@ -10,6 +10,10 @@
 zig-cache/
 .zig-cache/
 zig-out
+zig-pkg/
+build-cmake/
+CMakeCache.txt
+CMakeFiles/
 /build.zig.zon.bak
 /result*
 /.nixos-test-history
@@ -28,3 +32,4 @@ vgcore.*
 
 __pycache__/
 *.profraw
+/sprite_face_test*
