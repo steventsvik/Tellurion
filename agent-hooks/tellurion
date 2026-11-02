@@ -367,6 +367,7 @@ venice_codex() {
   # that leaves any of the user's own environment rules alone.
   TELLURION_VENICE_TOKEN="$token" exec "$codex" "${settings[@]}" \
     -c 'model_provider="venice"' \
+    -c 'analytics.enabled=false' \
     -c 'shell_environment_policy.set.TELLURION_VENICE_TOKEN=""' \
     -c "model_providers.venice={name=\"Venice\",base_url=\"http://127.0.0.1:$port/api/v1\",env_key=\"TELLURION_VENICE_TOKEN\",wire_api=\"responses\"}" \
     "$@"
