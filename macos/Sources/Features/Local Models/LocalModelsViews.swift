@@ -28,7 +28,7 @@ struct LocalModelsWindowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ExtremeWindowTitle(icon: .environment, title: "Local Models",
-                               subtitle: "Chat with a model on this Mac. Drag one from the sidebar under a chat.")
+                               subtitle: "Chat with a model on this Mac or on Venice. Drag one from the sidebar under a chat.")
                 .padding(.horizontal, 20)
                 .padding(.top, 34)
                 .padding(.bottom, 14)
@@ -40,17 +40,18 @@ struct LocalModelsWindowView: View {
                         Text(error).font(Extreme.font(12)).foregroundColor(Extreme.danger)
                     }
                     // Every provider's models: Ollama, LM Studio, a llama.cpp or MLX server, Apple's.
-                    let installed = models.models
+                    let installed = models.models.filter { $0.host != .venice }
                     if !installed.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
                             ExtremeSectionLabel("On this Mac")
                             ForEach(installed) { LocalModelWindowRow(item: $0) }
                         }
                     }
+                    VeniceSection()
                     if case .running = models.ollama {
                         ModelCatalogView(installed: Set(installed.filter { $0.host == .ollama }.map(\.name)))
                     }
-                    Text("Each chat runs through Ollama on this Mac: nothing leaves it, and it works offline. "
+                    Text("Chats with models on this Mac run through Ollama and the like: nothing leaves it, and they work offline. "
                          + "Small models answer faster but know less.")
                         .font(Extreme.font(11)).foregroundColor(Extreme.dim)
                         .fixedSize(horizontal: false, vertical: true)
@@ -180,7 +181,7 @@ private struct LocalModelSidebarRow: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            Image(systemName: "cpu")
+            Image(systemName: item.host == .venice ? "cloud" : "cpu")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundColor(item.loaded ? Extreme.live : Extreme.dim)
                 .frame(width: 14)
@@ -191,7 +192,7 @@ private struct LocalModelSidebarRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 // Always says which app serves it: the same model can be in Ollama and LM Studio.
-                Text(item.host == .ollama
+                Text(item.host == .venice ? "Venice · " + (item.isPrivate ? "Private" : "Anonymized") + (item.uncensored ? " · Uncensored" : "") : item.host == .ollama
                      ? "Ollama · " + (item.loaded ? "Loaded" + (item.memory.map { " · " + Housekeeping.bytes($0) } ?? "") : item.detail)
                      : item.host.rawValue + (item.loaded && item.host == .lmStudio ? " · Loaded" : ""))
                     .font(Extreme.font(9.5))

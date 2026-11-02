@@ -4,6 +4,14 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Abliterated models on Venice, in Codex.** Connect a Venice account in Tools → Local models with an API key, and pick from its live list of models: filter to **Uncensored** or **Private**, with each model's privacy tier, context, price and whether it can call tools. **Open in Codex** starts Codex on that model with its usual tools and everything you've set up: your config, `AGENTS.md`, skills, MCP servers, hooks and sessions all stay where they are, and nothing in Codex's config file changes. It's billed to your Venice account, not your ChatGPT plan. **Chat** opens a plain chat instead, and stars keep models in the sidebar. From a terminal: `tellurion venice codex [options]` and `tellurion local --provider venice <model>`.
+- **A pane on Venice stays on Venice.** On a board, a Venice model is an account in **Accounts**, so its tiles come back on it after a relaunch, and a tile's menu moves it on or off. Restarting a tile and updating Tellurion keep it there too. If Tellurion isn't running or Venice isn't connected, Codex says so and stops: it never quietly sends the work to another provider. The sidebar marks these panes **Venice**.
+- **You're told what leaves your Mac.** Before your first use, Tellurion says that your prompts and what an agent reads go to Venice's servers, and that "Private" means Venice and its partners say nothing's stored, which can't be verified. Choosing an **Anonymized** model warns you each time, because its own provider may store what's sent.
+- **Your Venice key never reaches a terminal.** It lives in your keychain. Agents and chats go through a small server inside the app that passes on only model requests and the model list, leaves out the folder paths and install id Codex attaches to each request's metadata, and turns off Venice's own system prompt. **Disconnect** removes the key.
+- **A model's answer can't steer your terminal.** Local chats now drop control characters from answers, reasoning and error messages, so what a model or server sends can't change your terminal's title, colors or clipboard. Errors from a model server show as words instead of raw data.
+
 ## 1.8.5
 
 Security fixes (#98, #101, #102, #103, #109): a board file, a repository's git config or a project's own wrangler can no longer run a program just by being opened, and Rerun no longer runs a command another program printed. Plus fixes for orchestrator pictures, tiles back from Classic, the Agent Map, removing the shell integration and saving a sketch.

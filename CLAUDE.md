@@ -53,7 +53,7 @@ The maintainer runs Tellurion all day with live agent sessions.
   capture a single window (`screencapture -l <window id>`), never the whole screen.
 - Test-only switches: `GHOSTTY_EXTREME_TEST_TABS=N`, `GHOSTTY_EXTREME_DEMO=<script>`
   (see `DemoDirector.swift`), `GHOSTTY_EXTREME_TEST_BOARD=<script>` (see `BoardTest.swift`),
-  `GHOSTTY_EXTREME_TEST_LOG=<file>`. They're read through `TestHooks.swift` and exist only
+  `GHOSTTY_EXTREME_TEST_LOG=<file>`, `GHOSTTY_EXTREME_TEST_VENICE=<url>` (a mock in place of Venice). They're read through `TestHooks.swift` and exist only
   in builds made with the `TELLURION_TEST_HOOKS` flag: Debug, and ReleaseLocal as built
   above. `release.sh` builds without it and checks that the shipped app has none of them.
 - Always set `GHOSTTY_EXTREME_TEST_HOME=<empty folder>` on a test copy: it moves

@@ -2,9 +2,10 @@
 import AppKit
 import UniformTypeIdentifiers
 
-/// A chat with a model on this Mac, through Ollama: `tellurion local <model>` typed into a
-/// shell runs Tellurion's own chat (agent-hooks/local-chat.py). Nothing leaves the Mac. The
-/// chat reports to the sidebar itself, naming its model, so the pane shows its status.
+/// A chat with a model: `tellurion local <model>` typed into a shell runs Tellurion's own chat
+/// (agent-hooks/local-chat.py). For a model on this Mac nothing leaves it; a model on Venice goes
+/// through VeniceProxy, so the shell never has the key. The chat reports to the sidebar itself,
+/// naming its model, so the pane shows its status.
 @MainActor
 enum LocalModelSessions {
     /// What's typed into the shell: the screen is cleared first, so the pane starts with the
@@ -44,11 +45,27 @@ enum LocalModelSessions {
         TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config)
     }
 
+    /// Codex, with its usual setup, on a Venice model: a tile that stays on it through restarts
+    /// on a board, or a tab in a window.
+    static func openCodex(_ model: LocalModel, name: String, from owner: BaseTerminalController) {
+        if let board = owner as? BoardController {
+            board.connect(BoardAccounts.shared.veniceAccount(model: model.name, name: name, isPrivate: model.isPrivate))
+            return
+        }
+        guard prepare(model) else { return }
+        var config = Ghostty.SurfaceConfiguration()
+        config.workingDirectory = owner.focusedSurface?.pwd
+        config.environmentVariables.merge(VeniceCodex.environment(model: model.name)) { _, new in new }
+        config.initialInput = " " + VeniceCodex.command() + "\n"
+        TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config)
+    }
+
     /// The `tellurion` command has to be installed (and current) to launch it.
     /// Apple's model is served by Tellurion itself, so that starts too.
     private static func prepare(_ model: LocalModel) -> Bool {
         do {
             if model.host == .apple { try AppleModelServer.shared.start() }
+            if model.host == .venice, try !VeniceAccount.shared.prepareUse(modelName: model.name, isPrivate: model.isPrivate) { return false }
             if HookInstaller.filesState() != .current { try HookInstaller.installFiles() }
             return true
         } catch {

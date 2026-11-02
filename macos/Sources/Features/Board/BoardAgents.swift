@@ -61,6 +61,12 @@ struct BoardAgent: Identifiable, Hashable {
     /// back as it is: a tile without a known agent comes back as a plain shell.
     static func resumeCommand(for tile: BoardTile) -> String? {
         guard let agent = tile.agent.map(VerticalTabAgentKind.init(id:)).flatMap(forKind) else { return nil }
+        // A tile on Venice stays on it: never back to another provider without being asked.
+        let venice = agent.kind == .codex && BoardAccounts.shared.account(tile.chosenAccounts[.codex])?.isVenice == true
+        if venice {
+            let resume = tile.session.flatMap { UUID(uuidString: $0) != nil ? "resume \($0)" : nil }
+            return " " + VeniceCodex.command(resume ?? "") + "\n"
+        }
         if let session = tile.session, UUID(uuidString: session) != nil {
             switch agent.kind {
             case .claude: return " claude --resume \(session)\n"

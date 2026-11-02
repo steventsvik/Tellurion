@@ -117,7 +117,7 @@ private struct ToolsPanel: View {
 
         add(.background, "gauge.with.dots.needle.67percent", "Background processes", "Servers and agents left running", HousekeepingWindow.show)
         add(.phone, PixelIcon.phone.symbol, "Phone", "Your terminal on your phone, paired devices", PhoneSetup.show)
-        add(.localModels, "cpu", "Local models", "Chat with a model on this Mac", LocalModelsWindow.show)
+        add(.localModels, "cpu", "Local models", "Models on this Mac or on Venice", LocalModelsWindow.show)
         section("This Mac")
 
         let condense = condensed
