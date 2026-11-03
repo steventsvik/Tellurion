@@ -429,30 +429,10 @@ final class ReviewInbox: ObservableObject {
         }
         defer { if let temp { try? FileManager.default.removeItem(atPath: temp) } }
         let prefix = gitArgs(root, gitDir)
-        guard gitEnv(prefix + ["add", "-A"], in: root, env: env).ok else { return nil }
-        let tree = gitEnv(prefix + ["write-tree"], in: root, env: env)
+        guard AgentTools.git(prefix + ["add", "-A"], in: root, environment: env).ok else { return nil }
+        let tree = AgentTools.git(prefix + ["write-tree"], in: root, environment: env)
         let sha = tree.output.trimmingCharacters(in: .whitespacesAndNewlines)
         return tree.ok && !sha.isEmpty ? sha : nil
-    }
-
-    private static func gitEnv(_ args: [String], in directory: String, env: [String: String]) -> AgentTools.Result {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", directory] + AgentTools.gitGuards + args
-        let leading = Array(args.prefix { $0.hasPrefix("--git-dir=") || $0.hasPrefix("--work-tree=") })
-        var environment = AgentTools.gitEnvironment(in: directory, leading: leading)
-        for (key, value) in env { environment[key] = value }
-        process.environment = environment
-        let out = Pipe(), err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        do { try process.run() } catch { return AgentTools.Result(status: -1, output: "", error: "\(error)") }
-        let outData = out.fileHandleForReading.readDataToEndOfFile()
-        let errData = err.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return AgentTools.Result(status: process.terminationStatus,
-                                 output: String(decoding: outData, as: UTF8.self),
-                                 error: String(decoding: errData, as: UTF8.self))
     }
 
     static func diff(from base: String, to current: String, in root: String, gitDir: String? = nil) -> [ReviewFile] {

@@ -46,4 +46,12 @@ enum BoardCamera {
                 y: min(max(origin.y, 0), max(board.height - visible.height, 0)))
     }
 }
+
+extension Sequence where Element == CGRect {
+    /// The smallest rect around all of them, or nil for none: what the board fits, groups
+    /// and moves as one piece.
+    var boundingRect: CGRect? {
+        reduce(nil) { union, rect in union.map { $0.union(rect) } ?? rect }
+    }
+}
 #endif

@@ -40,6 +40,12 @@ struct LocalModel: Identifiable, Equatable {
     /// A cloud model whose host says it stores nothing; if not, its own provider may.
     var isPrivate = true
     var id: String { host.rawValue + "/" + name }
+
+    /// A model on Venice, by the id its API uses (see VeniceAccount).
+    static func venice(_ id: String, uncensored: Bool, isPrivate: Bool) -> LocalModel {
+        LocalModel(host: .venice, name: id, size: nil, detail: "Cloud", loaded: false, memory: nil, gpuShare: nil,
+                   uncensored: uncensored, isPrivate: isPrivate)
+    }
 }
 
 /// What's installed and loaded in Ollama and LM Studio, and the few things worth doing

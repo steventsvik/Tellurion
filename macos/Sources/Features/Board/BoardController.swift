@@ -203,7 +203,7 @@ final class BoardController: BaseTerminalController {
                 if restoring, let line = BoardAgent.resumeCommand(for: tile) { config.initialInput = line }
                 // The same account profiles as before.
                 let chosen = tile.chosenAccounts
-                for (key, value) in BoardAccounts.shared.environment(chosen) { config.environmentVariables[key] = value }
+                config.environmentVariables.merge(BoardAccounts.shared.environment(chosen)) { $1 }
                 if !chosen.isEmpty { model.tileAccounts[tile.id] = chosen }
                 let view = Ghostty.SurfaceView(app, baseConfig: config, uuid: tile.id)
                 if let last = tree.root?.leftmostLeaf(), let next = try? tree.inserting(view: view, at: last, direction: .right) {
@@ -461,9 +461,7 @@ final class BoardController: BaseTerminalController {
                          session: info.flatMap(ResumeAfterUpdate.session(for:)),
                          command: commands[view.id],
                          title: model.titles[view.id],
-                         accounts: model.tileAccounts[view.id].map { chosen in
-                             Dictionary(uniqueKeysWithValues: chosen.map { ($0.key.rawValue, $0.value) })
-                         })
+                         accounts: BoardTile.savedAccounts(model.tileAccounts[view.id]))
     }
 
     /// Once every classic terminal has come back to a board, the tiles still away were closed in
@@ -608,9 +606,7 @@ final class BoardController: BaseTerminalController {
         let block = CGSize(width: CGFloat(columns) * size.width + CGFloat(columns - 1) * Self.gap,
                            height: CGFloat(rows) * size.height + CGFloat(rows - 1) * Self.gap)
         // Beside what's already on the board, or in the middle of the view on an empty one.
-        let existing = model.surfaces.compactMap { model.frames[$0.id] }
-        let all = existing.first.map { first in existing.dropFirst().reduce(first) { $0.union($1) } }
-        let area = freeSpot(size: block, near: all)
+        let area = freeSpot(size: block, near: model.surfaces.compactMap { model.frames[$0.id] }.boundingRect)
         var views: [Ghostty.SurfaceView] = []
         for (index, line) in lines.enumerated() {
             var config = Ghostty.SurfaceConfiguration()
@@ -647,7 +643,7 @@ final class BoardController: BaseTerminalController {
         for view in views { if let folder = folders[view.id] ?? nil { launchFolders[view.id] = folder } }
         // Tiles that left with the switch to Classic go back where they were; the rest form a grid.
         let returning = views.filter(placeIfReturning)
-        var fit = returning.compactMap { model.frames[$0.id] }.reduce(nil as CGRect?) { fit, frame in fit.map { $0.union(frame) } ?? frame }
+        var fit = returning.compactMap { model.frames[$0.id] }.boundingRect
         let fresh = views.filter { view in !returning.contains { $0 === view } }
         let keyed = fresh.enumerated().map { (index: $0.offset, view: $0.element, project: BoardProjects.project(of: folders[$0.element.id] ?? nil) ?? "") }
         let sorted = keyed.sorted { $0.project == $1.project ? $0.index < $1.index : $0.project < $1.project }.map(\.view)
@@ -659,8 +655,7 @@ final class BoardController: BaseTerminalController {
             let block = CGSize(width: CGFloat(columns) * size.width + CGFloat(columns - 1) * Self.gap,
                                height: CGFloat(rows) * size.height + CGFloat(rows - 1) * Self.gap)
             let existing = model.surfaces.compactMap { model.frames[$0.id] } + (fit.map { [$0] } ?? [])
-            let all = existing.first.map { first in existing.dropFirst().reduce(first) { $0.union($1) } }
-            let area = freeSpot(size: block, near: all)
+            let area = freeSpot(size: block, near: existing.boundingRect)
             for (index, view) in sorted.enumerated() {
                 let col = index % columns, row = index / columns
                 model.frames[view.id] = CGRect(x: area.minX + CGFloat(col) * (size.width + Self.gap),
@@ -708,8 +703,7 @@ final class BoardController: BaseTerminalController {
 
     /// Moves a group's tiles together, from where they were when the drag began.
     func moveGroup(_ start: [UUID: CGRect], by delta: CGSize) {
-        guard let first = start.values.first else { return }
-        let all = start.values.dropFirst().reduce(first) { $0.union($1) }
+        guard let all = start.values.boundingRect else { return }
         // The group stops at the board's edge as one piece.
         let moved = clamp(all.offsetBy(dx: delta.width, dy: delta.height))
         let dx = moved.minX - all.minX, dy = moved.minY - all.minY
@@ -828,8 +822,7 @@ final class BoardController: BaseTerminalController {
     func arrange(only: Set<UUID>?) {
         let views = model.surfaces.filter { only?.contains($0.id) ?? true }
         let placed = views.compactMap { view in model.frames[view.id].map { (view.id, $0) } }
-        guard let first = placed.first?.1 else { return }
-        let origin = placed.dropFirst().reduce(first) { $0.union($1.1) }.origin
+        guard let origin = placed.map(\.1).boundingRect?.origin else { return }
         // Groups in the order their projects got colors; within one, reading order.
         var byProject: [String: [(UUID, CGRect)]] = [:]
         for (id, frame) in placed { byProject[model.projects[id] ?? "", default: []].append((id, frame)) }
@@ -1040,9 +1033,7 @@ final class BoardController: BaseTerminalController {
 
     func fitAll(animated: Bool = true) {
         let ids = Set(model.nodeIDs)
-        let frames = Array(model.frames.filter { ids.contains($0.key) }.values)
-        guard let first = frames.first else { return }
-        let all = frames.dropFirst().reduce(first) { $0.union($1) }
+        guard let all = model.frames.filter({ ids.contains($0.key) }).values.boundingRect else { return }
         zoom(toFit: all.insetBy(dx: -60, dy: -60), animated: animated)
     }
 

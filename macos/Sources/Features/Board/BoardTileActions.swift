@@ -64,10 +64,7 @@ extension BoardController {
         let info = VerticalTabsAgents.shared.info(for: view)
         let record = BoardTile(id: view.id, frame: .zero, cwd: view.pwd,
                                agent: info?.kind.rawValue, session: info.flatMap(ResumeAfterUpdate.session(for:)),
-                               command: commands[view.id], title: nil,
-                               accounts: self.model.tileAccounts[view.id].map { chosen in
-                                   Dictionary(uniqueKeysWithValues: chosen.map { ($0.key.rawValue, $0.value) })
-                               })
+                               command: commands[view.id], title: nil, accounts: BoardTile.savedAccounts(self.model.tileAccounts[view.id]))
         let line = BoardAgent.resumeCommand(for: record)?.trimmingCharacters(in: .whitespacesAndNewlines)
         func key(_ key: Ghostty.Input.Key, _ mods: Ghostty.Input.Mods, _ codepoint: UInt32) {
             model.sendKeyEvent(.init(key: key, action: .press, mods: mods, unshiftedCodepoint: codepoint))

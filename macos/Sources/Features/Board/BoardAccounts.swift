@@ -46,7 +46,7 @@ struct BoardAccount: Codable, Identifiable, Equatable {
     /// nothing in it is read.
     var used: Bool {
         if isVenice { return true }
-        return         FileManager.default.fileExists(atPath: folder.appendingPathComponent(provider == .codex ? "auth.json" : ".claude.json").path)
+        return FileManager.default.fileExists(atPath: folder.appendingPathComponent(provider == .codex ? "auth.json" : ".claude.json").path)
     }
 }
 
@@ -161,7 +161,7 @@ extension BoardController {
     func applyAccounts(_ config: inout Ghostty.SurfaceConfiguration, chosen: [BoardAccount.Provider: UUID]? = nil) -> [BoardAccount.Provider: UUID] {
         guard ExtremeSettings.isOn(.accounts) else { return [:] }
         let chosen = chosen ?? BoardAccounts.shared.active
-        for (key, value) in BoardAccounts.shared.environment(chosen) { config.environmentVariables[key] = value }
+        config.environmentVariables.merge(BoardAccounts.shared.environment(chosen)) { $1 }
         return chosen
     }
 
@@ -181,10 +181,10 @@ extension BoardController {
         if account.isVenice {
             // With the Accounts switch off as well: this tile was asked for by name, and it has to
             // come back on Venice.
-            guard (try? prepareVenice(account)) == true, let folder = VeniceCodex.projectFolder(workspace.folder) else { return }
+            guard prepareVenice(account), let folder = VeniceCodex.projectFolder(workspace.folder) else { return }
             setFolder(folder)
             config.workingDirectory = folder
-            for (key, value) in BoardAccounts.shared.environment(chosen) { config.environmentVariables[key] = value }
+            config.environmentVariables.merge(BoardAccounts.shared.environment(chosen)) { $1 }
             guard let tile = addTile(config: config, command: "codex\n") else { return }
             model.tileAccounts[tile.id] = chosen
             return
@@ -195,16 +195,11 @@ extension BoardController {
         setTitle("Sign in: \(account.name)", for: tile)
     }
 
-    /// What using a Venice model takes: its notices, and the proxy running.
+    /// What using a Venice model takes: its notices, and the proxy running. False if it can't
+    /// go ahead, with the problem shown in the Local Models window.
     @MainActor
-    func prepareVenice(_ account: BoardAccount) throws -> Bool {
-        do {
-            return try VeniceAccount.shared.prepareUse(modelName: account.name, isPrivate: account.venicePrivate ?? false)
-        } catch {
-            LocalModelsModel.shared.error = error.localizedDescription
-            LocalModelsWindow.show()
-            throw error
-        }
+    func prepareVenice(_ account: BoardAccount) -> Bool {
+        VeniceAccount.shared.prepareUseOrShowProblem(modelName: account.name, isPrivate: account.venicePrivate ?? false)
     }
 
     /// Removing a profile deletes its sign-in, so it asks first, and says which tiles use it.
@@ -212,11 +207,7 @@ extension BoardController {
         let using = model.surfaces.filter { model.tileAccounts[$0.id]?[account.provider] == account.id }
         let alert = NSAlert()
         alert.messageText = "Remove \(account.name)?"
-        alert.informativeText = (account.isVenice ? "Your Venice account stays connected." : "Its sign-in is deleted from this Mac.")
-            + (using.isEmpty ? "" : " \(using.count) tile\(using.count == 1 ? " uses" : "s use") it and "
-               + (account.isVenice ? "won't start Codex again until you choose an account for \(using.count == 1 ? "it" : "them")."
-                                   : "will need to sign in again."))
-            + (account.isVenice && BoardAccounts.shared.active[.codex] == account.id ? " New tiles will use your usual sign-in." : "")
+        alert.informativeText = Self.removalNote(for: account, tilesUsingIt: using.count)
         alert.addButton(withTitle: "Remove")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
@@ -227,9 +218,22 @@ extension BoardController {
         scheduleSave()
     }
 
+    /// What removing a profile means for its sign-in and for the tiles on it.
+    static func removalNote(for account: BoardAccount, tilesUsingIt count: Int) -> String {
+        var note = account.isVenice ? "Your Venice account stays connected." : "Its sign-in is deleted from this Mac."
+        if count > 0 {
+            note += " \(count) tile\(count == 1 ? " uses" : "s use") it and "
+            note += account.isVenice
+                ? "won't start Codex again until you choose an account for \(count == 1 ? "it" : "them")."
+                : "will need to sign in again."
+        }
+        if account.isVenice, BoardAccounts.shared.active[.codex] == account.id { note += " New tiles will use your usual sign-in." }
+        return note
+    }
+
     /// Starts the tile's agent again on another profile (or your usual sign-in).
     func switchAccount(_ surface: Ghostty.SurfaceView, to account: BoardAccount?, provider: BoardAccount.Provider) {
-        if let account, account.isVenice, (try? prepareVenice(account)) != true { return }
+        if let account, account.isVenice, !prepareVenice(account) { return }
         var chosen = model.tileAccounts[surface.id] ?? [:]
         chosen[provider] = account?.id
         model.tileAccounts[surface.id] = chosen
@@ -324,7 +328,7 @@ struct BoardAccountsView: View {
                 }
             }
             .frame(maxWidth: 220)
-            .onAppear { if venice.models.isEmpty { venice.refresh() } }
+            .onAppear { venice.refreshIfEmpty() }
         } else {
             Button("Connect Venice…") { LocalModelsWindow.show() }
                 .buttonStyle(ExtremeButtonStyle())
@@ -347,7 +351,7 @@ struct BoardAccountsView: View {
                 Text("● ACTIVE").font(Extreme.font(10, weight: .bold)).foregroundColor(Extreme.core)
             } else {
                 Button("Use") {
-                    if let account, account.isVenice, (try? controller.prepareVenice(account)) != true { return }
+                    if let account, account.isVenice, !controller.prepareVenice(account) { return }
                     store.use(account?.id, for: provider)
                 }
                 .buttonStyle(ExtremeButtonStyle(prominent: true))

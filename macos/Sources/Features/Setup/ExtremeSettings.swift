@@ -228,15 +228,21 @@ final class ExtremeSettings: ObservableObject {
 
     /// Mirrors the switches the hooks need into files. Called at launch and on every change.
     static func writeFlags() {
-        let folder = flagsFolder
         for (feature, name) in [(ExtremeFeature.localhost, "localhost-off"), (.sharedMemory, "shared-memory-off")] {
-            let flag = folder.appendingPathComponent(name)
-            if isOn(feature) {
-                try? FileManager.default.removeItem(at: flag)
-            } else {
-                try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                FileManager.default.createFile(atPath: flag.path, contents: Data())
-            }
+            setFlag(name, on: !isOn(feature))
+        }
+    }
+
+    private static let log = StoredFile.logger("Settings")
+
+    /// A flag file in `flagsFolder`, there or not: how the hooks and `tellurion doctor` read a
+    /// switch without asking the app.
+    static func setFlag(_ name: String, on: Bool, in folder: URL = flagsFolder) {
+        let flag = folder.appendingPathComponent(name)
+        if on {
+            StoredFile.write(Data(), to: flag, what: "the \(name) flag", log: log)
+        } else {
+            StoredFile.remove(flag, what: "the \(name) flag", log: log)
         }
     }
 

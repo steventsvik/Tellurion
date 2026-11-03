@@ -67,8 +67,6 @@ final class PhoneDevices: ObservableObject {
         pairingCode = nil
     }
 
-    var pairingExpiresAt: Date? { pairingCode == nil ? nil : pairingExpires }
-
     enum PairResult {
         case paired(token: String, device: PhoneDevice)
         case invalid

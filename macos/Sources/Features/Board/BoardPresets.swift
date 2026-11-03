@@ -53,7 +53,7 @@ enum BoardPresets {
     }
 
     private static func write(_ presets: [BoardPreset]) {
-        StoredFile.write(json: presets, to: file, what: "the board presets", log: StoredFile.logger("Board"))
+        StoredFile.write(json: presets, to: file, what: "the board presets", log: BoardStore.log)
     }
 }
 

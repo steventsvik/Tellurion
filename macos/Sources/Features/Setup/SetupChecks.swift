@@ -88,9 +88,6 @@ final class SetupChecks: ObservableObject {
     var problems: [SetupCheck] { checks.filter { $0.status == .problem } }
     var worst: SetupCheck.Status { checks.map(\.status).max() ?? .ok }
 
-    /// Whether Claude Code or Codex is installed (or has been used here).
-    var hasAgents: Bool { tools["claude"] != nil || tools["codex"] != nil }
-
     // MARK: Agents not used
 
     /// Agents the user said they don't use. A `~/.codex` folder can exist without Codex
@@ -122,13 +119,7 @@ final class SetupChecks: ObservableObject {
 
     static func writeSkipFlags(_ skipped: Set<HookConfig.Agent>, in folder: URL) {
         for agent in [HookConfig.Agent.claude, .codex] {
-            let flag = folder.appendingPathComponent(agent.rawValue + "-off")
-            if skipped.contains(agent) {
-                try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                FileManager.default.createFile(atPath: flag.path, contents: Data())
-            } else {
-                try? FileManager.default.removeItem(at: flag)
-            }
+            ExtremeSettings.setFlag(agent.rawValue + "-off", on: skipped.contains(agent), in: folder)
         }
     }
 

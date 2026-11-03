@@ -70,7 +70,6 @@ final class VeniceAccount: ObservableObject {
     struct Star: Codable, Equatable {
         var uncensored: Bool
         var isPrivate: Bool
-        var worksInCodex: Bool
     }
 
     @Published private(set) var connected = VeniceKeychain.hasKey
@@ -86,12 +85,7 @@ final class VeniceAccount: ObservableObject {
     private static let acknowledgedKey = "VeniceNoticeAcknowledged"
 
     /// Where everything goes. Test copies can point this at a local server.
-    nonisolated static var base: URL {
-        #if TELLURION_TEST_HOOKS
-        if let url = TestHooks.veniceServer.flatMap(URL.init(string:)) { return url }
-        #endif
-        return VeniceAPI.base
-    }
+    nonisolated static var base: URL { TestHooks.veniceServer.flatMap(URL.init(string:)) ?? VeniceAPI.base }
 
     nonisolated static var proxyInfoFile: URL {
         URL(fileURLWithPath: HookInstaller.home + "/.ghostty-extreme/venice-proxy.json")
@@ -112,7 +106,7 @@ final class VeniceAccount: ObservableObject {
 
     /// Agents on Venice can be started from any terminal once the app is open. Doesn't read the
     /// keychain until the first request; with no account, does nothing.
-    func startAtLaunch() {
+    func startProxyIfConnected() {
         guard connected else { return }
         do {
             try proxy.start()
@@ -145,7 +139,7 @@ final class VeniceAccount: ObservableObject {
                 return
             }
             self.connected = true
-            self.startAtLaunch()
+            self.startProxyIfConnected()
             self.refresh()
             LocalModelsModel.shared.cloudModelsChanged()
         }
@@ -172,6 +166,11 @@ final class VeniceAccount: ObservableObject {
     }
 
     // MARK: The list
+
+    /// The list, read the first time a view shows it.
+    func refreshIfEmpty() {
+        if models.isEmpty { refresh() }
+    }
 
     func refresh() {
         guard !busy else { return }
@@ -202,9 +201,7 @@ final class VeniceAccount: ObservableObject {
     var starredModels: [LocalModel] {
         guard connected else { return [] }
         return starred.keys.sorted().map { id in
-            let star = starred[id]
-            return LocalModel(host: .venice, name: id, size: nil, detail: "Cloud", loaded: false, memory: nil, gpuShare: nil,
-                              uncensored: star?.uncensored ?? false, isPrivate: star?.isPrivate ?? false)
+            LocalModel.venice(id, uncensored: starred[id]?.uncensored ?? false, isPrivate: starred[id]?.isPrivate ?? false)
         }
     }
 
@@ -212,7 +209,7 @@ final class VeniceAccount: ObservableObject {
         if starred[model.id] != nil {
             starred[model.id] = nil
         } else {
-            starred[model.id] = Star(uncensored: model.uncensored, isPrivate: model.isPrivate, worksInCodex: model.worksInCodex)
+            starred[model.id] = Star(uncensored: model.uncensored, isPrivate: model.isPrivate)
         }
         if let data = try? JSONEncoder().encode(starred) { UserDefaults.standard.set(data, forKey: Self.starredKey) }
         LocalModelsModel.shared.cloudModelsChanged()
@@ -230,6 +227,23 @@ final class VeniceAccount: ObservableObject {
         try proxy.start()
         if HookInstaller.filesState() != .current { try HookInstaller.installFiles() }
         return true
+    }
+
+    /// `prepareUse`, with whatever stands in the way shown in the Local Models window, where
+    /// the account is managed. False if it can't go ahead.
+    func prepareUseOrShowProblem(modelName: String, isPrivate: Bool) -> Bool {
+        do {
+            return try prepareUse(modelName: modelName, isPrivate: isPrivate)
+        } catch {
+            showProblem(error.localizedDescription)
+            return false
+        }
+    }
+
+    /// Shows a problem in the Local Models window.
+    func showProblem(_ message: String) {
+        LocalModelsModel.shared.error = message
+        LocalModelsWindow.show()
     }
 
     private func confirmFirstUse() -> Bool {

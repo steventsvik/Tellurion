@@ -434,20 +434,8 @@ private final class EditorFileBridge: NSObject, WKScriptMessageHandlerWithReply 
     private func allFiles() -> [String] {
         guard let root else { return [] }
         if VerticalTabsGit.repoRoot(containing: root) != nil {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            process.arguments = ["-C", root] + AgentTools.gitGuards + ["ls-files", "--cached", "--others", "--exclude-standard"]
-            process.environment = AgentTools.gitEnvironment(in: root)
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = FileHandle.nullDevice
-            if (try? process.run()) != nil {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                if process.terminationStatus == 0, let output = String(data: data, encoding: .utf8) {
-                    return output.split(separator: "\n").prefix(50_000).map(String.init)
-                }
-            }
+            let listing = AgentTools.git(["ls-files", "--cached", "--others", "--exclude-standard"], in: root)
+            if listing.ok { return listing.output.split(separator: "\n").prefix(50_000).map(String.init) }
         }
         // Not a repository: walk the folder, but cheaply. Hidden folders and bundles are
         // skipped, a home folder (or anything above it) is only read two levels deep, and

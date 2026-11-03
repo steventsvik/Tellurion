@@ -457,6 +457,7 @@ final class Housekeeping: ObservableObject {
     /// Test-only sample data (see `refresh`).
     private static func sample() -> [Item] {
         let now = Date()
+        // swiftlint:disable:next function_parameter_count
         func item(_ id: String, _ kind: Kind, _ title: String, _ detail: String, _ command: String, folder: String?,
                   memory: Int64, reserved: Int64 = 0, cpu: Double = 0, up: TimeInterval, idle: TimeInterval, source: String,
                   ports: [Int] = [], terminal: Bool = false, orphaned: Bool = false, close: CloseAction = .terminate([1])) -> Item {

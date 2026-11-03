@@ -391,35 +391,46 @@ private struct ActivityDashboardView: View {
         return formatMoney(dollars) + "+ · \(unpriced) unpriced"
     }
 
+    /// One of the figures across the top.
+    private struct Tile {
+        let symbol: String, title: String, value: String, detail: String
+        init(_ symbol: String, _ title: String, _ value: String, _ detail: String) {
+            self.symbol = symbol
+            self.title = title
+            self.value = value
+            self.detail = detail
+        }
+    }
+
     private var tiles: some View {
         let sessions = model.sessions
         let files = Set(sessions.flatMap(\.files)).count
         let lines = sessions.map { $0.linesAdded + $0.linesRemoved }.reduce(0, +)
         let money = model.totalDollars
-        var items: [(String, String, String, String)] = [
-            ("dollarsign.circle.fill", "API value", formatMoney(money.input + money.output),
+        var items = [
+            Tile("dollarsign.circle.fill", "API value", formatMoney(money.input + money.output),
              "Claude \(formatMoney(model.dollars(agent: "claude")))"
                 + (model.codexModels.isEmpty ? "" : " · Codex " + codexValue)),
         ]
         if !showDollars { items.removeAll() }
         items += [
-            ("clock.fill", "Active time", formatDuration(model.totalActive), "\(sessions.count) session\(sessions.count == 1 ? "" : "s")"),
-            ("text.bubble.fill", "Prompts", "\(sessions.map(\.prompts).reduce(0, +))", "\(sessions.map(\.toolCalls).reduce(0, +)) tool calls"),
-            ("doc.text.fill", "Files changed", "\(files)", "\(formatCount(lines)) lines"),
-            ("terminal.fill", "Commands", "\(sessions.map(\.commands).reduce(0, +))", "\(sessions.map(\.tests).reduce(0, +)) test runs"),
-            ("arrow.down.circle.fill", "Tokens in", formatCount(sessions.map(\.tokensIn).reduce(0, +)),
+            Tile("clock.fill", "Active time", formatDuration(model.totalActive), "\(sessions.count) session\(sessions.count == 1 ? "" : "s")"),
+            Tile("text.bubble.fill", "Prompts", "\(sessions.map(\.prompts).reduce(0, +))", "\(sessions.map(\.toolCalls).reduce(0, +)) tool calls"),
+            Tile("doc.text.fill", "Files changed", "\(files)", "\(formatCount(lines)) lines"),
+            Tile("terminal.fill", "Commands", "\(sessions.map(\.commands).reduce(0, +))", "\(sessions.map(\.tests).reduce(0, +)) test runs"),
+            Tile("arrow.down.circle.fill", "Tokens in", formatCount(sessions.map(\.tokensIn).reduce(0, +)),
              showDollars ? "\(formatMoney(money.input)) at API prices" : "incl. cached context"),
-            ("arrow.up.circle.fill", "Tokens out", formatCount(sessions.map(\.tokensOut).reduce(0, +)),
+            Tile("arrow.up.circle.fill", "Tokens out", formatCount(sessions.map(\.tokensOut).reduce(0, +)),
              showDollars ? "\(formatMoney(money.output)) at API prices" : "written by agents"),
         ]
         // Seven tiles with the API value; keep them on one row in a normal-size window.
         return LazyVGrid(columns: [GridItem(.adaptive(minimum: showDollars ? 138 : 160), spacing: 12)], spacing: 12) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(item.1.uppercased()).font(Extreme.font(10, weight: .semibold)).kerning(0.8).foregroundColor(Extreme.muted)
-                    Text(item.2).font(Extreme.font(showDollars ? 23 : 26)).foregroundColor(index == 0 ? Extreme.core : Extreme.gold)
+                    Text(item.title.uppercased()).font(Extreme.font(10, weight: .semibold)).kerning(0.8).foregroundColor(Extreme.muted)
+                    Text(item.value).font(Extreme.font(showDollars ? 23 : 26)).foregroundColor(index == 0 ? Extreme.core : Extreme.gold)
                         .lineLimit(1).minimumScaleFactor(0.7)
-                    Text(item.3).font(Extreme.font(10)).foregroundColor(showDollars && item.1.hasPrefix("Tokens") ? Extreme.gold.opacity(0.8) : Extreme.dim)
+                    Text(item.detail).font(Extreme.font(10)).foregroundColor(showDollars && item.title.hasPrefix("Tokens") ? Extreme.gold.opacity(0.8) : Extreme.dim)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -695,15 +706,11 @@ private struct ActivitySessionRow: View {
         let id = AgentTools.shellQuote(session.id)
         if session.onVenice {
             // Back on Venice, or not at all: plain Codex would send this work to another provider.
-            guard let model = session.codexModel else { return resumeFailed("This session doesn't say which Venice model it used.") }
             let venice = VeniceAccount.shared
-            do {
-                let isPrivate = venice.models.first { $0.id == model }?.isPrivate ?? true
-                guard try venice.prepareUse(modelName: model, isPrivate: isPrivate) else { return }
-            } catch {
-                return resumeFailed(error.localizedDescription)
-            }
-            config.environmentVariables.merge(VeniceCodex.environment(model: model)) { _, new in new }
+            guard let model = session.codexModel else { return venice.showProblem("This session doesn't say which Venice model it used.") }
+            let isPrivate = venice.models.first { $0.id == model }?.isPrivate ?? true
+            guard venice.prepareUseOrShowProblem(modelName: model, isPrivate: isPrivate) else { return }
+            config.environmentVariables.merge(VeniceCodex.environment(model: model)) { $1 }
             config.initialInput = VeniceCodex.resumeLine(id)
         } else {
             config.initialInput = (session.agent == "codex" ? "codex resume \(id)" : "claude --resume \(id)") + "\n"
@@ -711,11 +718,6 @@ private struct ActivitySessionRow: View {
         if let surface = TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config) {
             TerminalWindows.controller(for: surface)?.window?.makeKeyAndOrderFront(nil)
         }
-    }
-
-    private func resumeFailed(_ message: String) {
-        LocalModelsModel.shared.error = message
-        LocalModelsWindow.show()
     }
 }
 #endif

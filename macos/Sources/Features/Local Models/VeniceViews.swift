@@ -32,7 +32,7 @@ struct VeniceSection: View {
             }
             if account.connected { list } else { connect }
         }
-        .onAppear { if account.connected, account.models.isEmpty { account.refresh() } }
+        .onAppear { if account.connected { account.refreshIfEmpty() } }
     }
 
     private var connect: some View {
@@ -196,10 +196,7 @@ private struct VeniceRow: View {
         .padding(.vertical, 3)
     }
 
-    private var item: LocalModel {
-        LocalModel(host: .venice, name: model.id, size: nil, detail: "Cloud", loaded: false, memory: nil, gpuShare: nil,
-                   uncensored: model.uncensored, isPrivate: model.isPrivate)
-    }
+    private var item: LocalModel { .venice(model.id, uncensored: model.uncensored, isPrivate: model.isPrivate) }
 
     private func tag(_ text: String, _ color: Color) -> some View {
         Text(text).font(Extreme.font(8.5, weight: .bold)).foregroundColor(color)

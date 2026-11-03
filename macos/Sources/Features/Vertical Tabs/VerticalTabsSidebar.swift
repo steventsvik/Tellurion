@@ -945,12 +945,21 @@ private struct VerticalTabPaneRow: View {
         .layoutPriority(1)
     }
 
+    /// The agent's task, or where it runs: a model chat's pane is titled by Claude Code, so it
+    /// says where the model is instead.
+    private static func doing(_ agent: VerticalTabAgentInfo, title: String) -> String {
+        let prefix = agent.veniceModel != nil ? "Venice · " : ""
+        if let task = agent.task { return prefix + task }
+        if agent.isCloudChat { return prefix + "Running on Venice" }
+        if agent.localModel != nil { return prefix + "Running on this Mac" }
+        return prefix + VerticalTabGroup.cleanTitle(title)
+    }
+
     /// What the pane is doing: the agent's task, or the terminal's title/command.
     @ViewBuilder
     private var primaryLine: some View {
         if let agent = pane.agent {
-            // A local model's pane is titled by Claude Code; say where it runs instead.
-            Text((agent.veniceModel != nil ? "Venice · " : "") + (agent.task ?? (agent.isCloudChat ? "Running on Venice" : agent.localModel != nil ? "Running on this Mac" : VerticalTabGroup.cleanTitle(pane.title))))
+            Text(Self.doing(agent, title: pane.title))
                 .font(Extreme.font(11))
                 .foregroundColor(Extreme.muted)
                 .lineLimit(1)

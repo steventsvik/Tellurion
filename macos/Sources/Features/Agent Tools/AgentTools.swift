@@ -94,12 +94,24 @@ enum AgentTools {
         return environment
     }
 
-    /// Runs git synchronously, with `gitGuards` and `gitEnvironment(in:)`. Call off the main
-    /// thread for anything that can be slow.
+    /// Runs git synchronously, with `gitGuards` and `gitEnvironment(in:)`; `environment` goes
+    /// on top of that. Call off the main thread for anything that can be slow.
     @discardableResult
-    static func git(_ args: [String], in directory: String) -> Result {
+    static func git(_ args: [String], in directory: String, gitPath: String = "/usr/bin/git",
+                    environment extra: [String: String] = [:]) -> Result {
+        run(gitProcess(args, in: directory, gitPath: gitPath, environment: extra))
+    }
+
+    /// A git process set up like `git(_:in:)` runs one, for a caller that has to feed its
+    /// standard input. The guards and the environment are the same.
+    static func gitProcess(_ args: [String], in directory: String, gitPath: String = "/usr/bin/git",
+                           environment extra: [String: String] = [:]) -> Process {
         let leading = Array(args.prefix { $0.hasPrefix("--git-dir=") || $0.hasPrefix("--work-tree=") })
-        return run(["-C", directory] + gitGuards + args, environment: gitEnvironment(in: directory, leading: leading))
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: gitPath)
+        process.arguments = ["-C", directory] + gitGuards + args
+        process.environment = gitEnvironment(in: directory, leading: leading).merging(extra) { $1 }
+        return process
     }
 
     private static func run(_ arguments: [String], environment: [String: String]) -> Result {
@@ -107,6 +119,11 @@ enum AgentTools {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = arguments
         process.environment = environment
+        return run(process)
+    }
+
+    /// Runs a process to the end and collects what it wrote.
+    private static func run(_ process: Process) -> Result {
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err

@@ -36,7 +36,6 @@ struct ActivitySession: Identifiable, Codable, Equatable {
     var activeByHour: [Int: Double] = [:]
 
     var kind: VerticalTabAgentKind { VerticalTabAgentKind(id: agent) }
-    var activeSeconds: Double { activeByDay.values.reduce(0, +) }
     var project: String { cwd.map { LocalhostProject(folder: $0).name } ?? "Unknown" }
     var label: String { title ?? firstPrompt ?? "Untitled session" }
 }

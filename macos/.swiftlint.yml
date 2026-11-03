@@ -12,6 +12,9 @@ disabled_rules:
   - line_length
   - nesting
   - no_fallthrough_only
+  # Tellurion: the output of programs the app runs (git, ps, lsof) is decoded lossily on
+  # purpose, so one bad byte never drops a whole listing.
+  - optional_data_string_conversion
   - todo
   - trailing_comma
   - trailing_newline

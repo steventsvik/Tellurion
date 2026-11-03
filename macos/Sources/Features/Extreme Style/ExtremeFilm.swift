@@ -164,8 +164,19 @@ struct FrameLights: NSViewRepresentable {
     var breathe = false
 
     final class View: NSView {
+        struct Config {
+            let color: CGColor
+            let length: CGFloat
+            let pulse: Bool
+            let breathe: Bool
+
+            func matches(_ other: Config) -> Bool {
+                color == other.color && length == other.length && pulse == other.pulse && breathe == other.breathe
+            }
+        }
+
         let corners = CALayer()
-        var config: (CGColor, CGFloat, Bool, Bool)?
+        var config: Config?
         var built: CGSize = .zero
 
         override init(frame: NSRect) {
@@ -192,7 +203,8 @@ struct FrameLights: NSViewRepresentable {
         }
 
         func rebuild() {
-            guard let (color, length, pulse, breathe) = config, bounds.width > 0 else { return }
+            guard let config, bounds.width > 0 else { return }
+            let (color, length, pulse, breathe) = (config.color, config.length, config.pulse, config.breathe)
             built = bounds.size
             CATransaction.begin()
             CATransaction.setDisableActions(true)
@@ -229,8 +241,8 @@ struct FrameLights: NSViewRepresentable {
     func makeNSView(context: Context) -> View { View(frame: .zero) }
 
     func updateNSView(_ view: View, context: Context) {
-        let next = (color.cgColor, length, pulse, breathe)
-        if let old = view.config, old.0 == next.0, old.1 == next.1, old.2 == next.2, old.3 == next.3 { return }
+        let next = View.Config(color: color.cgColor, length: length, pulse: pulse, breathe: breathe)
+        if let old = view.config, old.matches(next) { return }
         view.config = next
         view.rebuild()
     }
