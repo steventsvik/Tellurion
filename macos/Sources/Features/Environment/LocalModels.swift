@@ -2,10 +2,12 @@
 import AppKit
 import Combine
 
-/// A model on this Mac, from Ollama or LM Studio.
+/// A model to chat with: on this Mac, from Ollama or LM Studio and the like, or starred from a
+/// connected Venice account (the one host that isn't on this Mac).
 struct LocalModel: Identifiable, Equatable {
     enum Host: String {
         case ollama = "Ollama", lmStudio = "LM Studio", llamaCpp = "llama.cpp", mlx = "MLX", apple = "Apple"
+        case venice = "Venice"
 
         /// How Tellurion's local chat reaches it (`tellurion local --provider …`).
         var provider: String {
@@ -14,6 +16,7 @@ struct LocalModel: Identifiable, Equatable {
             case .lmStudio: return "lmstudio"
             case .llamaCpp, .mlx: return "openai"
             case .apple: return "apple"
+            case .venice: return "venice"
             }
         }
 
@@ -32,6 +35,10 @@ struct LocalModel: Identifiable, Equatable {
     /// Memory it takes while loaded (Ollama), and how much of that is on the GPU.
     var memory: Int64?
     var gpuShare: Double?
+    /// A cloud model that answers without refusing.
+    var uncensored = false
+    /// A cloud model whose host says it stores nothing; if not, its own provider may.
+    var isPrivate = true
     var id: String { host.rawValue + "/" + name }
 }
 
@@ -58,6 +65,8 @@ final class LocalModelsModel: ObservableObject {
     /// Downloads in progress: model name → fraction done (nil until Ollama reports sizes).
     @Published private(set) var downloads: [String: Double?] = [:]
 
+    /// What was found on this Mac; `models` adds the starred cloud ones.
+    private var onThisMac: [LocalModel] = []
     private var loading = false
     private var watchers = 0
     private var activation: NSObjectProtocol?
@@ -140,9 +149,15 @@ final class LocalModelsModel: ObservableObject {
             self.loading = false
             self.ollama = o.state
             self.lmStudio = l.state
-            let models = o.models + l.models + (await server) + Self.appleModels
-            if self.models != models { self.models = models }
+            self.onThisMac = o.models + l.models + (await server) + Self.appleModels
+            self.cloudModelsChanged()
         }
+    }
+
+    /// A cloud model was starred, or the account connected or disconnected. Needs no checking.
+    func cloudModelsChanged() {
+        let models = onThisMac + VeniceAccount.shared.starredModels
+        if self.models != models { self.models = models }
     }
 
     // MARK: Ollama
@@ -235,7 +250,7 @@ final class LocalModelsModel: ObservableObject {
                 } else {
                     failure = "Unload it in LM Studio (its lms command isn't installed)"
                 }
-            case .llamaCpp, .mlx, .apple:
+            case .llamaCpp, .mlx, .apple, .venice:
                 break
             }
             let message = failure
@@ -253,7 +268,7 @@ final class LocalModelsModel: ObservableObject {
             SetupChecks.openTab(running: "\(Self.ollamaBinary.map(AgentTools.shellQuote) ?? "ollama") run \(AgentTools.shellQuote(model.name))")
         case .lmStudio:
             SetupChecks.openTab(running: "\(Self.lmsBinary.map(AgentTools.shellQuote) ?? "lms") chat \(AgentTools.shellQuote(model.name))")
-        case .llamaCpp, .mlx, .apple:
+        case .llamaCpp, .mlx, .apple, .venice:
             guard let owner = LocalModelsWindow.frontTerminal else { return }
             LocalModelSessions.openTab(model, from: owner)
         }

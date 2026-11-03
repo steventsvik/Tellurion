@@ -34,7 +34,7 @@ sparkle_tool() {
 TAG="extreme-$VERSION"
 ROOT=${0:A:h}
 OUT=/private/tmp/ghostty-extreme-release/$VERSION
-ZIG=/opt/homebrew/opt/zig@0.15/bin/zig
+ZIG=/opt/homebrew/opt/zig/bin/zig
 
 step() { print -P "\n%F{yellow}▸ $1%f"; }
 pass() { print -P "  %F{green}✓%f $1"; }
@@ -168,7 +168,7 @@ pass "no home-folder paths in the app"
 # The test and demo switches were compiled out above; the binary shows whether that held.
 # GHOSTTY_EXTREME_TEST_HOME is the one that stays: the launch test below and test copies need it.
 BIN=$APP/Contents/MacOS/ghostty
-! LC_ALL=C grep -a -q -E 'GHOSTTY_EXTREME_(TEST_TABS|TEST_BOARD|TEST_LOG|DEMO)' $BIN || fail "the app contains test hooks (built with TELLURION_TEST_HOOKS set)"
+! LC_ALL=C grep -a -q -E 'GHOSTTY_EXTREME_(TEST_TABS|TEST_BOARD|TEST_LOG|TEST_VENICE|DEMO)' $BIN || fail "the app contains test hooks (built with TELLURION_TEST_HOOKS set)"
 LC_ALL=C grep -a -q 'GHOSTTY_EXTREME_TEST_HOME' $BIN || fail "the app lost GHOSTTY_EXTREME_TEST_HOME, which test copies and the launch test need"
 pass "no test or demo switches in the app (GHOSTTY_EXTREME_TEST_HOME kept)"
 # Ghostty's icons are its trademark; the only icon file in the app is Tellurion's.
@@ -217,14 +217,14 @@ pass "version $VERSION"
 
 HOOKS=$OUT/Tellurion-agent-hooks
 mkdir -p $HOOKS
-for f in agent-hook.sh ghostty-extreme.zsh tellurion ghostty-extreme install.sh localhost localhost-run codex-hook.py memory_context.py install-codex.py agent-event.py opencode-plugin.js; do
+for f in agent-hook.sh ghostty-extreme.zsh tellurion ghostty-extreme install.sh localhost localhost-run codex-hook.py memory_context.py install-codex.py agent-event.py opencode-plugin.js venice-catalog.py; do
   git show HEAD:agent-hooks/$f > $HOOKS/$f || fail "agent-hooks/$f missing"
 done
 chmod +x $HOOKS/{agent-hook.sh,tellurion,ghostty-extreme,install.sh,localhost,localhost-run,codex-hook.py,install-codex.py,agent-event.py}
 grep -rqE "/Users/|$USER" $HOOKS && fail "the hooks contain a personal path or name"
 for f in $HOOKS/*.sh $HOOKS/localhost $HOOKS/localhost-run $HOOKS/tellurion $HOOKS/ghostty-extreme; do bash -n $f || fail "$f has a syntax error"; done
 # The app installs these itself (welcome window, Check Setup).
-for f in agent-hook.sh ghostty-extreme.zsh tellurion ghostty-extreme codex-hook.py memory_context.py localhost localhost-run agent-event.py opencode-plugin.js; do
+for f in agent-hook.sh ghostty-extreme.zsh tellurion ghostty-extreme codex-hook.py memory_context.py localhost localhost-run agent-event.py opencode-plugin.js venice-catalog.py; do
   cmp -s $HOOKS/$f $APP/Contents/Resources/agent-hooks/$f || fail "the app's bundled agent-hooks/$f doesn't match the repo"
 done
 # Parse only: py_compile would leave a __pycache__ folder in the release.

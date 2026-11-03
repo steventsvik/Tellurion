@@ -950,7 +950,7 @@ private struct VerticalTabPaneRow: View {
     private var primaryLine: some View {
         if let agent = pane.agent {
             // A local model's pane is titled by Claude Code; say where it runs instead.
-            Text(agent.task ?? (agent.localModel != nil ? "Running on this Mac" : VerticalTabGroup.cleanTitle(pane.title)))
+            Text((agent.veniceModel != nil ? "Venice · " : "") + (agent.task ?? (agent.isCloudChat ? "Running on Venice" : agent.localModel != nil ? "Running on this Mac" : VerticalTabGroup.cleanTitle(pane.title))))
                 .font(Extreme.font(11))
                 .foregroundColor(Extreme.muted)
                 .lineLimit(1)

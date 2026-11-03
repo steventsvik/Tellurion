@@ -693,10 +693,29 @@ private struct ActivitySessionRow: View {
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = cwd
         let id = AgentTools.shellQuote(session.id)
-        config.initialInput = (session.agent == "codex" ? "codex resume \(id)" : "claude --resume \(id)") + "\n"
+        if session.onVenice {
+            // Back on Venice, or not at all: plain Codex would send this work to another provider.
+            guard let model = session.codexModel else { return resumeFailed("This session doesn't say which Venice model it used.") }
+            let venice = VeniceAccount.shared
+            do {
+                let isPrivate = venice.models.first { $0.id == model }?.isPrivate ?? true
+                guard try venice.prepareUse(modelName: model, isPrivate: isPrivate) else { return }
+            } catch {
+                return resumeFailed(error.localizedDescription)
+            }
+            config.environmentVariables.merge(VeniceCodex.environment(model: model)) { _, new in new }
+            config.initialInput = VeniceCodex.resumeLine(id)
+        } else {
+            config.initialInput = (session.agent == "codex" ? "codex resume \(id)" : "claude --resume \(id)") + "\n"
+        }
         if let surface = TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config) {
             TerminalWindows.controller(for: surface)?.window?.makeKeyAndOrderFront(nil)
         }
+    }
+
+    private func resumeFailed(_ message: String) {
+        LocalModelsModel.shared.error = message
+        LocalModelsWindow.show()
     }
 }
 #endif

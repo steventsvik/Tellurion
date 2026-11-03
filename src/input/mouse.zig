@@ -1,5 +1,11 @@
 const std = @import("std");
 
+/// The type of action associated with a mouse event. This is different
+/// from ButtonState because button state is simply the current state
+/// of a mouse button but an action is something that triggers via
+/// an GUI event and supports more.
+pub const Action = enum(c_int) { press, release, motion };
+
 /// The state of a mouse button.
 ///
 /// This is backed by a c_int so we can use this as-is for our embedding API.
@@ -23,12 +29,12 @@ pub const ButtonState = enum(c_int) {
 pub const Button = enum(c_int) {
     const Self = @This();
 
-    /// The maximum value in this enum. This can be used to create a densely
-    /// packed array, for example.
+    /// The maximum value in this enum. Since the values start at zero, a
+    /// densely packed array indexed by this enum needs `max + 1` elements.
     pub const max = max: {
         var cur = 0;
-        for (@typeInfo(Self).@"enum".fields) |field| {
-            if (field.value > cur) cur = field.value;
+        for (@typeInfo(Self).@"enum".field_values) |value| {
+            if (value > cur) cur = value;
         }
 
         break :max cur;

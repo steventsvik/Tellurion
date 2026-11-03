@@ -19,6 +19,18 @@ typeset -g _gc_running_agent=""
 # The shared Codex daemon does not inherit this terminal's environment. Keep local
 # terminal sessions attached to this pane so their hooks inherit the correct TTY.
 codex() {
+  # A pane on Venice (TELLURION_CODEX_BACKEND comes with the pane): Codex with its usual setup,
+  # its model requests going through Tellurion. This must never fall through to plain Codex,
+  # which would send the same work to another provider.
+  if [[ ${TELLURION_CODEX_BACKEND:-} == venice ]]; then
+    local _gc_cli="${GHOSTTY_EXTREME_TEST_HOME:-$HOME}/.ghostty-extreme/bin/tellurion"
+    if [[ ! -x $_gc_cli ]]; then
+      print -u2 "Tellurion's command isn't installed, so Codex can't reach Venice. Run Tellurion > Check Setup…"
+      return 1
+    fi
+    GHOSTTY_EXTREME_CODEX_TTY="${TTY:-}" "$_gc_cli" venice codex "$@"
+    return
+  fi
   if [[ -n $TTY && -t 1 ]]; then
     GHOSTTY_EXTREME_CODEX_TTY="$TTY" command codex --no-daemon "$@"
   else
@@ -55,12 +67,16 @@ _gc_agent_event() {
 _gc_agent_preexec() {
   # $3 is the command line with aliases expanded. Skip env assignments and wrappers
   # to find the program actually being run.
-  local word
+  local word venice=""
   for word in ${(z)3}; do
     [[ $word == *=* || $word == (command|exec|env|noglob|nocorrect|time|nohup) ]] && continue
+    # `tellurion venice codex …` is Codex.
+    if [[ ${${(Q)word}:t} == tellurion && $venice != done ]]; then venice=tellurion; continue; fi
+    if [[ $venice == tellurion && $word == venice ]]; then venice=done; continue; fi
     break
   done
-  local agent=${_gc_agent_commands[${word:t}]}
+  [[ $venice == tellurion ]] && return 0
+  local agent=${_gc_agent_commands[${${(Q)word}:t}]}
   [[ -n $agent ]] || return 0
   _gc_running_agent=$agent
   # Hooks often run without a terminal of their own: tell them which pane is theirs.

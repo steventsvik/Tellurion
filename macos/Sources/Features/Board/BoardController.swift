@@ -558,7 +558,9 @@ final class BoardController: BaseTerminalController {
         if let command { config.initialInput = command }
         // The active account profiles, unless it was given its own.
         let own = BoardAccount.Provider.allCases.contains { config.environmentVariables[$0.variable] != nil }
+            || config.environmentVariables[VeniceCodex.backendVariable] != nil
         let accounts = own ? [:] : applyAccounts(&config)
+        VeniceCodex.adapt(&config)
         let view = Ghostty.SurfaceView(app, baseConfig: config)
         if !accounts.isEmpty { model.tileAccounts[view.id] = accounts }
         if let folder = config.workingDirectory { launchFolders[view.id] = folder }
@@ -615,6 +617,7 @@ final class BoardController: BaseTerminalController {
             config.workingDirectory = folder ?? workspace.folder
             config.initialInput = line.command.isEmpty ? nil : line.command
             let accounts = applyAccounts(&config)
+            VeniceCodex.adapt(&config)
             let view = Ghostty.SurfaceView(app, baseConfig: config)
             if !accounts.isEmpty { model.tileAccounts[view.id] = accounts }
             let col = index % columns, row = index / columns

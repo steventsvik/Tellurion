@@ -2,27 +2,25 @@
 //! Specification: https://sw.kovidgoyal.net/kitty/text-sizing-protocol/
 
 const std = @import("std");
-const build_options = @import("terminal_options");
 
 const assert = @import("../../../quirks.zig").inlineAssert;
 
 const Parser = @import("../../osc.zig").Parser;
 const Command = @import("../../osc.zig").Command;
 const encoding = @import("../encoding.zig");
-const lib = @import("../../../lib/main.zig");
-const lib_target: lib.Target = if (build_options.c_abi) .c else .zig;
+const lib = @import("../../lib.zig");
 
 const log = std.log.scoped(.kitty_text_sizing);
 
 pub const max_payload_length = 4096;
 
-pub const VAlign = lib.Enum(lib_target, &.{
+pub const VAlign = lib.Enum(lib.target, &.{
     "top",
     "bottom",
     "center",
 });
 
-pub const HAlign = lib.Enum(lib_target, &.{
+pub const HAlign = lib.Enum(lib.target, &.{
     "left",
     "right",
     "center",
@@ -49,7 +47,7 @@ pub const OSC = struct {
         InvalidValue,
     }!void {
         // All values are numeric, so we can do a small hack here
-        const v = std.fmt.parseInt(
+        const v = lib.parseInt(
             u4,
             value,
             10,
@@ -73,17 +71,17 @@ pub const OSC = struct {
 pub fn parse(parser: *Parser, _: ?u8) ?*Command {
     assert(parser.state == .@"66");
 
-    const writer = parser.writer orelse {
+    const cap = if (parser.capture) |*c| c else {
         parser.state = .invalid;
         return null;
     };
 
     // Write a NUL byte to ensure that `text` is NUL-terminated
-    writer.writeByte(0) catch {
+    cap.writeByte(0) catch {
         parser.state = .invalid;
         return null;
     };
-    const data = writer.buffered();
+    const data = cap.trailing();
 
     const payload_start = std.mem.indexOfScalar(u8, data, ';') orelse {
         log.warn("missing semicolon before payload", .{});
@@ -145,6 +143,16 @@ pub fn parse(parser: *Parser, _: ?u8) ?*Command {
     }
 
     return &parser.command;
+}
+
+test "OSC 66: numeric fields reject digit separators" {
+    var p: Parser = .init(null);
+    for ("66;s=0_2;text") |ch| p.next(ch);
+    const cmd = p.end(null).?.*;
+    try std.testing.expectEqualDeep(
+        OSC{ .text = "text" },
+        cmd.kitty_text_sizing,
+    );
 }
 
 test "OSC 66: empty parameters" {
@@ -250,8 +258,8 @@ test "OSC 66: overlong UTF-8" {
 
     var p: Parser = .init(null);
 
-    const input = "66;;" ++ "bobr" ** 1025;
-    for (input) |ch| p.next(ch);
+    for ("66;;") |ch| p.next(ch);
+    for (0..1025) |_| for ("bobr") |ch| p.next(ch);
 
     try testing.expect(p.end('\x1b') == null);
 }

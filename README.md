@@ -582,6 +582,24 @@ Chat with a model that runs on your Mac: nothing leaves it, and it works offline
   it. A Hugging Face section adds the most downloaded models Ollama can run.
 - **From a terminal:** `tellurion local <model>`.
 
+**Abliterated models on Venice, with Codex's tools.** Connect a [Venice](https://venice.ai/)
+account with an API key in Tools → Local models, and its models are a click away, read live from
+Venice: filter to Uncensored or Private, and see each one's privacy tier, context, price and
+whether it can call tools. **Open in Codex** runs Codex on that model with your own setup: config,
+`AGENTS.md`, skills, MCP servers, hooks and sessions all stay as they are, and its sandbox and
+approvals still apply, since commands run on your Mac. **Chat** opens a plain chat. On a board, a
+Venice model is an account in Accounts, so its tiles stay on it through restarts. It's billed to
+your Venice account, not your ChatGPT plan. From a terminal, while Tellurion is running:
+`tellurion venice codex [options]` and `tellurion local --provider venice <model>`.
+
+What's different from a model on your Mac: your prompts, and what an agent reads while it works
+(your code, and the output of its commands), go to Venice's servers. For models marked Private,
+Venice and its partners say nothing is stored, which can't be verified from here. Models marked
+Anonymized hide who you are, but their own provider sees what's sent and may store it, and
+Tellurion warns each time you pick one. Compared with Codex on its own models: Venice serves
+other models through a translation layer that drops reasoning between turns, so they think again
+each turn, and its web search only works on some of them.
+
 ### Localhost sessions
 
 <p align="center">
@@ -817,8 +835,18 @@ Apple silicon MacBook).
 
 ## Security and privacy
 
-- **Nothing leaves your Mac.** There's no account, telemetry or server. Agent tracking and
+- **Nothing leaves your Mac unless you ask.** There's no account of ours, telemetry or server.
+  What goes elsewhere is what you send to a cloud provider yourself: your agents' own sign-ins
+  and, once you've connected a Venice account and opened a model, those chats and Codex sessions.
+  Agent tracking and
   shared memory read the files Claude Code and Codex already write.
+- **Your Venice key stays in the keychain.** It isn't in any terminal's environment, command line
+  or file. Agents and chats reach Venice through a small server inside the app, on 127.0.0.1 with a
+  token made each launch, which only passes on model requests and the model list. It leaves out
+  the folder paths and install id Codex attaches to each request's metadata; the working folder
+  Codex tells its model about is still part of the prompt. A program running as you could read that
+  token and use your account while Tellurion runs, but it can't learn the key or reach anything
+  else the key can do. Disconnect removes the key and stops the server.
 - **Only your own hooks can talk to it.** Agent status arrives as terminal escape
   sequences, which any printed text could imitate. Each launch creates a secret that only
   its own terminals and hooks know, and events without it are ignored.
@@ -844,6 +872,7 @@ always one rename away.
 | What | Where | Undo |
 |---|---|---|
 | Tellurion's own folder: the hooks and the `localhost` and `tellurion` commands (`agent-hooks/`, `bin/`), boards, sketches, documents, designs, presets, localhost session records, review snapshots, Codex tracking, the board agent's images and the feature flags the hooks read | `~/.ghostty-extreme/` | Remove the hooks first (Settings → Agents → **Remove…**, so no agent still points at them), then delete the folder |
+| Venice, once connected: the API key in your login keychain, and in Tellurion's folder the server's address and token (`venice-proxy.json`, owner-only) and Codex's list of Venice models (`venice/`). Codex's own files aren't changed | Keychain, `~/.ghostty-extreme/` | **Disconnect** in Tools → Local models removes the key and the address; `venice/` can be deleted |
 | Claude Code hooks: entries whose command ends in `agent-hook.sh claude <event>` | `~/.claude/settings.json` | Settings → Agents → **Remove…** takes out only those entries. Or delete them yourself, or put a backup back |
 | Codex hooks: entries whose command ends in `agent-hook.sh codex <event>` | `~/.codex/hooks.json` | Same |
 | Shell integration: a comment and a `source` line at the end | `~/.zshrc` | **Remove…** deletes those two lines, even if you re-spaced them, and tells you if it finds a line it didn't write. Or delete them yourself |
@@ -1026,24 +1055,22 @@ own settings.
 
 - macOS 13 or newer (developed and tested on macOS 26, Apple silicon)
 - Xcode 26 or newer
-- Zig 0.15 from Homebrew: `brew install zig@0.15` (the ziglang.org build fails to link
-  against the macOS 26.4+ SDKs)
+- Zig 0.17: `brew install zig`
 - `jq` for the agent hooks: `brew install jq`
 
 ```sh
 git clone https://github.com/steventsvik/Tellurion.git
 cd Tellurion
-/opt/homebrew/opt/zig@0.15/bin/zig build -Doptimize=ReleaseFast -Dxcframework-target=native
+/opt/homebrew/opt/zig/bin/zig build -Doptimize=ReleaseFast -Dxcframework-target=native
 ditto macos/build/ReleaseLocal/Ghostty.app /Applications/Tellurion.app
 ```
 
 If the repo is in an iCloud-synced folder (like Desktop or Documents), codesign fails on
-iCloud's extended attributes. Point `macos/build` at a folder outside iCloud first;
-`update-ghostty.sh` does this for you.
+iCloud's extended attributes. Point `macos/build` at a folder outside iCloud first.
 
-`./update-ghostty.sh` rebases this fork onto the newest official Ghostty release, rebuilds
-and installs it (it needs an `upstream` remote pointing at `ghostty-org/ghostty`).
-`--check` only reports whether a new release exists.
+`./update-ghostty.sh` merges the newest official Ghostty release into a new branch off
+`dev` (it needs an `upstream` remote pointing at `ghostty-org/ghostty`), for you to build,
+test and open as a pull request. `--check` only reports whether a new release exists.
 
 </details>
 

@@ -17,6 +17,9 @@ enum ResumeAfterUpdate {
         let cwd: String?
         /// The agent's session id, or the server's command.
         let value: String
+        /// The Venice model a Codex pane ran on, so it comes back on Venice and not on another
+        /// provider ("" if it was given on its command line).
+        var venice: String?
     }
 
     private struct Plan: Codable {
@@ -43,7 +46,7 @@ enum ResumeAfterUpdate {
             for surface in controller.surfaceTree {
                 guard let info = VerticalTabsAgents.shared.info(for: surface), let id = session(for: info) else { continue }
                 let kind: Entry.Kind = info.kind == .claude ? .claude : .codex
-                result.append(Entry(kind: kind, surface: surface.id.uuidString, cwd: surface.pwd, value: id))
+                result.append(Entry(kind: kind, surface: surface.id.uuidString, cwd: surface.pwd, value: id, venice: info.veniceModel))
             }
         }
         return result
@@ -152,7 +155,12 @@ enum ResumeAfterUpdate {
     private static func command(for entry: Entry) -> String {
         switch entry.kind {
         case .claude: return "claude --resume \(entry.value)"
-        case .codex: return "codex resume \(entry.value)"
+        case .codex:
+            guard let model = entry.venice else { return "codex resume \(entry.value)" }
+            // The file this comes from is plain JSON, so neither value is typed unchecked.
+            guard UUID(uuidString: entry.value) != nil else { return "true" }
+            let chosen = VeniceAPI.isValidSlug(model) ? "\(VeniceCodex.modelVariable)=\(AgentTools.shellQuote(model)) " : ""
+            return chosen + VeniceCodex.command("resume \(entry.value)")
         case .localhost: return entry.value
         }
     }

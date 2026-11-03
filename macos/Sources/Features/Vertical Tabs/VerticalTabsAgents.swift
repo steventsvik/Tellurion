@@ -52,9 +52,13 @@ struct VerticalTabAgentInfo: Equatable {
     var codexSessionID: String?
     /// The model, for Tellurion's local chat ("qwen3:4b").
     var localModel: String?
+    /// The agent is on Venice, and the model it was started with ("" if given on its command line).
+    var veniceModel: String?
 
     /// The local model's name, or the agent's.
-    var name: String { localModel ?? kind.displayName }
+    var name: String { localModel ?? kind.displayName + (veniceModel != nil ? " · Venice" : "") }
+    /// A chat on a model that isn't on this Mac: the chat ends its session's name in " · cloud".
+    var isCloudChat: Bool { localModel?.hasSuffix(" · cloud") ?? false }
 }
 
 /// Receives agent status events and remembers the latest state per pane.
@@ -78,6 +82,9 @@ final class VerticalTabsAgents {
 
     /// Weak keys: a closed pane's agent state disappears with it.
     private let states = NSMapTable<Ghostty.SurfaceView, Box>.weakToStrongObjects()
+    /// Panes whose agent runs on Venice, from the signed event its start sends. Apart from
+    /// `states`, which agents' own events replace (a new session, say).
+    private let veniceModels = NSMapTable<Ghostty.SurfaceView, NSString>.weakToStrongObjects()
 
     private struct Event: Decodable {
         let agent: String?
@@ -87,7 +94,9 @@ final class VerticalTabsAgents {
     }
 
     func info(for surface: Ghostty.SurfaceView) -> VerticalTabAgentInfo? {
-        states.object(forKey: surface)?.info
+        guard var info = states.object(forKey: surface)?.info else { return nil }
+        info.veniceModel = veniceModels.object(forKey: surface) as String?
+        return info
     }
 
     /// How many live panes have an agent matching `predicate`.
@@ -176,8 +185,17 @@ final class VerticalTabsAgents {
         if event.agent == "local", event.event == "session_start" || event.event == "session_end" {
             Task { @MainActor in LocalModelsModel.shared.load() }
         }
+        if event.event == "backend" {
+            if let detail = event.detail, detail.hasPrefix("venice:") {
+                veniceModels.setObject(String(detail.dropFirst("venice:".count)) as NSString, forKey: surface)
+            }
+            return
+        }
         if event.event == "session_end" {
             states.removeObject(forKey: surface)
+            // The shell's own event, when the process is gone. Codex's hook also sends one, with
+            // its session, for a session ending in a Codex that keeps running: still on Venice.
+            if event.session == nil { veniceModels.removeObject(forKey: surface) }
             return
         }
         if event.event == "transcript" {

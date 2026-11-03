@@ -12,6 +12,39 @@ struct AboutView: View {
     private var build: String? { Bundle.main.infoDictionary?["CFBundleVersion"] as? String }
     private var commit: String? { Bundle.main.infoDictionary?["GhosttyCommit"] as? String }
     private var version: String? { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String }
+
+    private enum VersionConfig {
+        case stable(version: String)
+        case tip(commit: String?)
+        case other(String)
+        case none
+
+        init(version: String?) {
+            guard let version else { self = .none; return }
+            if version.range(of: #"^\d+\.\d+\.\d+$"#, options: .regularExpression) != nil {
+                self = .stable(version: version)
+                return
+            }
+            if version.range(of: #"^[0-9a-f]{7,40}$"#, options: .regularExpression) != nil {
+                self = .tip(commit: version)
+                return
+            }
+            self = .other(version)
+        }
+
+        var url: URL? {
+            switch self {
+            case .stable(let version):
+                let slug = version.replacingOccurrences(of: ".", with: "-")
+                return URL(string: "https://ghostty.org/docs/install/release-notes/\(slug)")
+            default:
+                return nil
+            }
+        }
+    }
+
+    private var versionConfig: VersionConfig { VersionConfig(version: version) }
+
     private var copyright: String? { Bundle.main.infoDictionary?["NSHumanReadableCopyright"] as? String }
 
     /// This version's release notes.

@@ -26,7 +26,7 @@ People watch this repo. Keep `custom` (the default branch) release-quality.
 ```sh
 # The core library, only when files outside macos/ changed:
 ZIG_GLOBAL_CACHE_DIR=/private/tmp/gx-zig-global ZIG_LOCAL_CACHE_DIR=/private/tmp/gx-zig-local \
-  /opt/homebrew/opt/zig@0.15/bin/zig build -Doptimize=ReleaseFast -Dxcframework-target=native -Demit-macos-app=false
+  /opt/homebrew/opt/zig/bin/zig build -Doptimize=ReleaseFast -Dxcframework-target=native -Demit-macos-app=false
 
 # The app:
 cd macos && xcodebuild -project Ghostty.xcodeproj -scheme Ghostty -configuration ReleaseLocal \
@@ -53,7 +53,7 @@ The maintainer runs Tellurion all day with live agent sessions.
   capture a single window (`screencapture -l <window id>`), never the whole screen.
 - Test-only switches: `GHOSTTY_EXTREME_TEST_TABS=N`, `GHOSTTY_EXTREME_DEMO=<script>`
   (see `DemoDirector.swift`), `GHOSTTY_EXTREME_TEST_BOARD=<script>` (see `BoardTest.swift`),
-  `GHOSTTY_EXTREME_TEST_LOG=<file>`. They're read through `TestHooks.swift` and exist only
+  `GHOSTTY_EXTREME_TEST_LOG=<file>`, `GHOSTTY_EXTREME_TEST_VENICE=<url>` (a mock in place of Venice). They're read through `TestHooks.swift` and exist only
   in builds made with the `TELLURION_TEST_HOOKS` flag: Debug, and ReleaseLocal as built
   above. `release.sh` builds without it and checks that the shipped app has none of them.
 - Always set `GHOSTTY_EXTREME_TEST_HOME=<empty folder>` on a test copy: it moves
