@@ -71,13 +71,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Zig 0.15 from Homebrew
-        # The same build CLAUDE.md uses. Homebrew's zig@0.15 is built from source with its
-        # own LLVM and patches; the official 0.15.2 binary can't link against the macOS 26.4
-        # and later SDKs (every symbol of libSystem comes up undefined).
+      - name: Zig 0.17 from Homebrew
+        # The same build CLAUDE.md uses; Ghostty 1.4 needs Zig 0.17.
         run: |
-          brew install zig@0.15
-          echo "$(brew --prefix zig@0.15)/bin" >> "$GITHUB_PATH"
+          brew install zig
+          echo "$(brew --prefix zig)/bin" >> "$GITHUB_PATH"
 
       - name: Restore the Zig core
         id: core
@@ -87,9 +85,9 @@ jobs:
             macos/GhosttyKit.xcframework
             .zig-global-cache
             .zig-cache
-          key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-brew-zig0.15-${{ hashFiles('build.zig', 'build.zig.zon', 'src/**', 'pkg/**', 'include/**', 'vendor/**') }}
+          key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-brew-zig0.17-${{ hashFiles('build.zig', 'build.zig.zon', 'src/**', 'pkg/**', 'include/**', 'vendor/**') }}
           restore-keys: |
-            ghosttykit-${{ runner.os }}-${{ runner.arch }}-brew-zig0.15-
+            ghosttykit-${{ runner.os }}-${{ runner.arch }}-brew-zig0.17-
 
       - name: Toolchain
         run: |

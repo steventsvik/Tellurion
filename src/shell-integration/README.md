@@ -61,12 +61,6 @@ if (eq $E:TERM "xterm-ghostty") {
 }
 ```
 
-The [Elvish](https://elv.sh) shell integration is supported by
-the community and is not officially supported by Ghostty. We distribute
-it for ease of access and use but do not provide support for it.
-If you experience issues with the Elvish shell integration, I welcome
-any contributions to fix them. Thank you!
-
 ### Fish
 
 For [Fish](https://fishshell.com/), Ghostty prepends to the
@@ -88,10 +82,15 @@ so our integration focuses on Ghostty-specific features like `sudo`,
 `ssh-env`, and `ssh-terminfo`.
 
 The shell integration is automatically enabled when running Nushell in Ghostty,
-but you can also load it manually is shell integration is disabled:
+but you can also load it manually if shell integration is disabled.
+
+Note that Nushell doesn't allow sourcing not _parse-time constants_,
+so `GHOSTTY_RESOURCES_DIR` environment variable cannot be used.
+
+Here is an example of `config.nu` with default `GHOSTTY_RESOURCES_DIR` for macOS:
 
 ```nushell
-source $GHOSTTY_RESOURCES_DIR/shell-integration/nushell/vendor/autoload/ghostty.nu
+source /Applications/Ghostty.app/Contents/Resources/ghostty/shell-integration/nushell/vendor/autoload/ghostty.nu
 use ghostty *
 ```
 

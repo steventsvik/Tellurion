@@ -72,9 +72,9 @@ const ranges: []const Range = ranges: {
     // Count how many draw fns we have
     var range_count = 0;
     for (structs) |s| {
-        for (@typeInfo(s).@"struct".decls) |decl| {
-            if (!@hasDecl(s, decl.name)) continue;
-            if (!std.mem.startsWith(u8, decl.name, "draw")) continue;
+        for (@typeInfo(s).@"struct".decl_names) |decl| {
+            if (!@hasDecl(s, decl)) continue;
+            if (!std.mem.startsWith(u8, decl, "draw")) continue;
             range_count += 1;
         }
     }
@@ -84,25 +84,25 @@ const ranges: []const Range = ranges: {
     var names: [range_count][:0]const u8 = undefined;
     var i = 0;
     for (structs) |s| {
-        for (@typeInfo(s).@"struct".decls) |decl| {
-            if (!@hasDecl(s, decl.name)) continue;
-            if (!std.mem.startsWith(u8, decl.name, "draw")) continue;
+        for (@typeInfo(s).@"struct".decl_names) |decl| {
+            if (!@hasDecl(s, decl)) continue;
+            if (!std.mem.startsWith(u8, decl, "draw")) continue;
 
-            const sep = std.mem.indexOfScalar(u8, decl.name, '_') orelse decl.name.len;
+            const sep = std.mem.indexOfScalar(u8, decl, '_') orelse decl.len;
 
-            const min = std.fmt.parseInt(u21, decl.name[4..sep], 16) catch unreachable;
+            const min = std.fmt.parseInt(u21, decl[4..sep], 16) catch unreachable;
 
-            const max = if (sep == decl.name.len)
+            const max = if (sep == decl.len)
                 min
             else
-                std.fmt.parseInt(u21, decl.name[sep + 1 ..], 16) catch unreachable;
+                std.fmt.parseInt(u21, decl[sep + 1 ..], 16) catch unreachable;
 
             r[i] = .{
                 .min = min,
                 .max = max,
-                .draw = @field(s, decl.name),
+                .draw = @field(s, decl),
             };
-            names[i] = decl.name;
+            names[i] = decl;
             i += 1;
         }
     }
@@ -147,7 +147,7 @@ const ranges: []const Range = ranges: {
 fn getDrawFn(cp: u32) ?*const DrawFn {
     // For special sprites (cursors, underlines, etc.) all sprites are drawn
     // by functions from `Special` that share the name of the enum field.
-    if (cp >= Sprite.start) switch (@as(Sprite, @enumFromInt(cp))) {
+    if (cp >= Sprite.start) switch (@as(Sprite, @fromBackingInt(cp))) {
         inline else => |sprite| {
             return @field(special, @tagName(sprite));
         },
@@ -176,7 +176,7 @@ pub fn renderGlyph(
     alloc: Allocator,
     atlas: *font.Atlas,
     cp: u32,
-    opts: font.face.RenderOptions,
+    opts: font.Glyph.RenderOptions,
 ) !font.Glyph {
     if (std.debug.runtime_safety) {
         if (!self.hasCodepoint(cp, null)) {
@@ -205,7 +205,16 @@ pub fn renderGlyph(
         else => |width| metrics.cell_width * width,
     };
 
-    const height = metrics.cell_height;
+    // Sprite glyphs generally get the full cell height, but cursor glyphs need
+    // to be affected by `adjust-cursor-height`, so we use `cursor_height` for
+    // the height if it's one of the full-height cursors.
+    const height = switch (cp) {
+        @backingInt(Sprite.cursor_rect),
+        @backingInt(Sprite.cursor_hollow_rect),
+        @backingInt(Sprite.cursor_bar),
+        => metrics.cursor_height,
+        else => metrics.cell_height,
+    };
 
     const padding_x = width / 4;
     const padding_y = height / 4;
@@ -219,11 +228,32 @@ pub fn renderGlyph(
     // Write the drawing to the atlas
     const region = try canvas.writeAtlas(alloc, atlas);
 
+    // The X offset is the displacement from the left edge of the cell that our
+    // drawn sprite will be drawn in the grid. That's the same as the distance
+    // we have calculated from the left of the canvas, minus the padding, since
+    // the padding represents extra pixels to the left of the cell.
+    const offset_x: i32 =
+        @as(i32, @intCast(canvas.clip_left)) -
+        @as(i32, @intCast(padding_x));
+    // Similar logic applies for the Y offset, but with the additional factor
+    // that we want to re-center cursor glyphs in the cell if they were drawn
+    // taller or shorter than a normal cell is; this only applies to cursors
+    // currently, but could conceivably apply to other things in the future.
+    const offset_y: i32 =
+        @as(i32, @intCast(region.height +| canvas.clip_bottom)) -
+        @as(i32, @intCast(padding_y)) +
+        @divTrunc(
+            // By adding half the difference between the cell height and the
+            // height we passed to the draw function, we center it in the cell.
+            @as(i32, @intCast(metrics.cell_height)) - @as(i32, @intCast(height)),
+            2,
+        );
+
     return .{
         .width = region.width,
         .height = region.height,
-        .offset_x = @as(i32, @intCast(canvas.clip_left)) - @as(i32, @intCast(padding_x)),
-        .offset_y = @as(i32, @intCast(region.height +| canvas.clip_bottom)) - @as(i32, @intCast(padding_y)),
+        .offset_x = offset_x,
+        .offset_y = offset_y,
         .atlas_x = region.x,
         .atlas_y = region.y,
     };
@@ -243,26 +273,26 @@ fn testDiffAtlas(
     // Get the file contents, we compare the PNG data first in
     // order to ensure that no one smuggles arbitrary binary
     // data in to the reference PNGs.
-    const test_file = try std.fs.openFileAbsolute(path, .{ .mode = .read_only });
-    defer test_file.close();
-    const test_bytes = try test_file.readToEndAlloc(
+    const test_file = try std.Io.Dir.openFileAbsolute(std.testing.io, path, .{ .mode = .read_only });
+    defer test_file.close(std.testing.io);
+    var test_file_reader = test_file.reader(std.testing.io, &.{});
+    const test_bytes = try test_file_reader.interface.readAlloc(
         alloc,
-        std.math.maxInt(usize),
+        (try test_file.stat(std.testing.io)).size,
     );
     defer alloc.free(test_bytes);
 
-    const cwd_absolute = try std.fs.cwd().realpathAlloc(alloc, ".");
+    const cwd_absolute = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", alloc);
     defer alloc.free(cwd_absolute);
 
     // Get the reference file contents to compare.
-    const ref_path = try std.fmt.allocPrint(
-        alloc,
+    const ref_path = try alloc.print(
         "./src/font/sprite/testdata/U+{X}...U+{X}-{d}x{d}+{d}.png",
         .{ i, i + 0xFF, width, height, thickness },
     );
     defer alloc.free(ref_path);
     const ref_file =
-        std.fs.cwd().openFile(ref_path, .{ .mode = .read_only }) catch |err| {
+        std.Io.Dir.cwd().openFile(std.testing.io, ref_path, .{ .mode = .read_only }) catch |err| {
             log.err("Can't open reference file {s}: {}\n", .{
                 ref_path,
                 err,
@@ -270,20 +300,20 @@ fn testDiffAtlas(
 
             // Copy the test PNG in to the CWD so it isn't
             // cleaned up with the rest of the tmp dir files.
-            const test_path = try std.fmt.allocPrint(
-                alloc,
+            const test_path = try alloc.print(
                 "{s}/sprite_face_test-U+{X}...U+{X}-{d}x{d}+{d}.png",
                 .{ cwd_absolute, i, i + 0xFF, width, height, thickness },
             );
             defer alloc.free(test_path);
-            try std.fs.copyFileAbsolute(path, test_path, .{});
+            try std.Io.Dir.copyFileAbsolute(path, test_path, std.testing.io, .{});
 
             return true;
         };
-    defer ref_file.close();
-    const ref_bytes = try ref_file.readToEndAlloc(
+    defer ref_file.close(std.testing.io);
+    var ref_file_reader = ref_file.reader(std.testing.io, &.{});
+    const ref_bytes = try ref_file_reader.interface.readAlloc(
         alloc,
-        std.math.maxInt(usize),
+        (try ref_file.stat(std.testing.io)).size,
     );
     defer alloc.free(ref_bytes);
 
@@ -294,13 +324,12 @@ fn testDiffAtlas(
 
     // Copy the test PNG in to the CWD so it isn't
     // cleaned up with the rest of the tmp dir files.
-    const test_path = try std.fmt.allocPrint(
-        alloc,
+    const test_path = try alloc.print(
         "{s}/sprite_face_test-U+{X}...U+{X}-{d}x{d}+{d}.png",
         .{ cwd_absolute, i, i + 0xFF, width, height, thickness },
     );
     defer alloc.free(test_path);
-    try std.fs.copyFileAbsolute(path, test_path, .{});
+    try std.Io.Dir.copyFileAbsolute(path, test_path, std.testing.io, .{});
 
     // Use wuffs to decode the reference PNG to raw pixels.
     // These will be RGBA, so when diffing we can just compare
@@ -358,13 +387,12 @@ fn testDiffAtlas(
     }
 
     // Drop the diff image as a PNG in the cwd.
-    const diff_path = try std.fmt.allocPrint(
-        alloc,
+    const diff_path = try alloc.print(
         "./sprite_face_diff-U+{X}...U+{X}-{d}x{d}+{d}.png",
         .{ i, i + 0xFF, width, height, thickness },
     );
     defer alloc.free(diff_path);
-    try z2d.png_exporter.writeToPNGFile(diff, diff_path, .{});
+    try z2d.png_exporter.writeToPNGFile(std.testing.io, diff, diff_path, .{});
     log.err(
         "One or more glyphs differ from reference file in range U+{X}...U+{X}! " ++
             "test={s}, reference={s}, diff={s}",
@@ -432,7 +460,7 @@ fn testDrawRanges(
     // Try to make the sprite_face_test folder if it doesn't already exist.
     var dir = testing.tmpDir(.{});
     defer dir.cleanup();
-    const tmp_dir = try dir.dir.realpathAlloc(alloc, ".");
+    const tmp_dir = try dir.dir.realPathFileAlloc(testing.io, ".", alloc);
     defer alloc.free(tmp_dir);
 
     // We set this to true if we have any fails so we can
@@ -445,13 +473,12 @@ fn testDrawRanges(
             // current one and clear the surface for the next one.
             if (cp - i >= 0x100) {
                 // Export to our tmp dir.
-                const path = try std.fmt.allocPrint(
-                    alloc,
+                const path = try alloc.print(
                     "{s}/U+{X}...U+{X}-{d}x{d}+{d}.png",
                     .{ tmp_dir, i, i + 0xFF, width, height, thickness },
                 );
                 defer alloc.free(path);
-                try z2d.png_exporter.writeToPNGFile(atlas, path, .{});
+                try z2d.png_exporter.writeToPNGFile(testing.io, atlas, path, .{});
 
                 if (try testDiffAtlas(
                     alloc,
@@ -490,13 +517,12 @@ fn testDrawRanges(
         }
     }
 
-    const path = try std.fmt.allocPrint(
-        alloc,
+    const path = try alloc.print(
         "{s}/U+{X}...U+{X}-{d}x{d}+{d}.png",
         .{ tmp_dir, i, i + 0xFF, width, height, thickness },
     );
     defer alloc.free(path);
-    try z2d.png_exporter.writeToPNGFile(atlas, path, .{});
+    try z2d.png_exporter.writeToPNGFile(std.testing.io, atlas, path, .{});
     if (try testDiffAtlas(
         alloc,
         &atlas,
@@ -533,6 +559,92 @@ test "sprite face render all sprites" {
     if (try testDrawRanges(9, 15, 2, 1)) diff = true;
 
     try std.testing.expect(!diff); // There should be no diffs from reference.
+}
+
+test "full height cursor sprites respect cursor height metric" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var atlas: font.Atlas = try .init(alloc, 128, .grayscale);
+    defer atlas.deinit(alloc);
+
+    // face with a 8x16 cell dimension.
+    var face: Face = .{
+        .metrics = .calc(.{
+            // Fudged number, not used in anything we care about here.
+            .px_per_em = 16,
+
+            .cell_width = 8.0,
+            .ascent = 12.0,
+            .descent = -4.0,
+            .line_gap = 0.0,
+        }),
+    };
+
+    try testing.expectEqual(16, face.metrics.cell_height);
+
+    // --- smaller than cell height ---
+    face.metrics.cursor_height = 12;
+    // bar
+    {
+        const glyph = try face.renderGlyph(alloc, &atlas, @backingInt(Sprite.cursor_bar), .{ .grid_metrics = face.metrics });
+        try testing.expectEqual(12, glyph.height);
+        try testing.expectEqual(14, glyph.offset_y);
+    }
+    // rect
+    {
+        const glyph = try face.renderGlyph(alloc, &atlas, @backingInt(Sprite.cursor_rect), .{ .grid_metrics = face.metrics });
+        try testing.expectEqual(12, glyph.height);
+        try testing.expectEqual(14, glyph.offset_y);
+    }
+    // hollow rect
+    {
+        const glyph = try face.renderGlyph(alloc, &atlas, @backingInt(Sprite.cursor_hollow_rect), .{ .grid_metrics = face.metrics });
+        try testing.expectEqual(12, glyph.height);
+        try testing.expectEqual(14, glyph.offset_y);
+    }
+
+    // --- equal to the cell height ---
+    face.metrics.cursor_height = 16;
+    // bar
+    {
+        const glyph = try face.renderGlyph(alloc, &atlas, @backingInt(Sprite.cursor_bar), .{ .grid_metrics = face.metrics });
+        try testing.expectEqual(16, glyph.height);
+        try testing.expectEqual(16, glyph.offset_y);
+    }
+    // rect
+    {
+        const glyph = try face.renderGlyph(alloc, &atlas, @backingInt(Sprite.cursor_rect), .{ .grid_metrics = face.metrics });
+        try testing.expectEqual(16, glyph.height);
+        try testing.expectEqual(16, glyph.offset_y);
+    }
+    // hollow rect
+    {
+        const glyph = try face.renderGlyph(alloc, &atlas, @backingInt(Sprite.cursor_hollow_rect), .{ .grid_metrics = face.metrics });
+        try testing.expectEqual(16, glyph.height);
+        try testing.expectEqual(16, glyph.offset_y);
+    }
+
+    // --- greater than the cell height ---
+    face.metrics.cursor_height = 20;
+    // bar
+    {
+        const glyph = try face.renderGlyph(alloc, &atlas, @backingInt(Sprite.cursor_bar), .{ .grid_metrics = face.metrics });
+        try testing.expectEqual(20, glyph.height);
+        try testing.expectEqual(18, glyph.offset_y);
+    }
+    // rect
+    {
+        const glyph = try face.renderGlyph(alloc, &atlas, @backingInt(Sprite.cursor_rect), .{ .grid_metrics = face.metrics });
+        try testing.expectEqual(20, glyph.height);
+        try testing.expectEqual(18, glyph.offset_y);
+    }
+    // hollow rect
+    {
+        const glyph = try face.renderGlyph(alloc, &atlas, @backingInt(Sprite.cursor_hollow_rect), .{ .grid_metrics = face.metrics });
+        try testing.expectEqual(20, glyph.height);
+        try testing.expectEqual(18, glyph.offset_y);
+    }
 }
 
 // test "sprite face print all sprites" {

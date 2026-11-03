@@ -4,6 +4,12 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Built on Ghostty 1.4.** Tellurion moves from Ghostty 1.3.1 to 1.4.0, which brings Ghostty's security fixes (Cmd-clicking a crafted link could open unsafe local files or custom URL schemes, dragged text skipped paste protection, a file name with control characters could run a different command than the confirmation showed, crashes in tmux control mode, and memory corruption when clearing a small scrollback) and Sparkle 2.9.6, the updater's own security release. It also brings faster terminal output, less memory and GPU use for terminals you can't see, and better macOS 27 support.
+- **Selecting text no longer copies it unless you ask.** This is Ghostty 1.4's new default on macOS. To get it back, set `copy-on-select = clipboard` in your config.
+- **⌘↑ and ⌘↓ jump between prompts again.** Also from Ghostty 1.4; ⌘Home and ⌘End scroll to the top and bottom.
+
 ## 1.8.5
 
 Security fixes (#98, #101, #102, #103, #109): a board file, a repository's git config or a project's own wrangler can no longer run a program just by being opened, and Rerun no longer runs a command another program printed. Plus fixes for orchestrator pictures, tiles back from Classic, the Agent Map, removing the shell integration and saving a sketch.

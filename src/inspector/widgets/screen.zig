@@ -246,14 +246,14 @@ fn keyboardTable(
 
     if (kitty_flags.int() != 0) {
         const Flags = @TypeOf(kitty_flags);
-        inline for (@typeInfo(Flags).@"struct".fields) |field| {
+        inline for (@typeInfo(Flags).@"struct".field_names) |field| {
             {
-                const value = @field(kitty_flags, field.name);
+                const value = @field(kitty_flags, field);
 
                 cimgui.c.ImGui_TableNextRow();
                 {
                     _ = cimgui.c.ImGui_TableSetColumnIndex(0);
-                    const field_name = std.fmt.comptimePrint("{s}", .{field.name});
+                    const field_name = std.fmt.comptimePrint("{s}", .{field});
                     cimgui.c.ImGui_Text("%s", field_name.ptr);
                 }
                 {
@@ -353,7 +353,12 @@ pub fn internalStateTable(
     _ = cimgui.c.ImGui_TableSetColumnIndex(0);
     cimgui.c.ImGui_Text("Memory Limit");
     _ = cimgui.c.ImGui_TableSetColumnIndex(1);
-    cimgui.c.ImGui_Text("%d bytes (%d KiB)", pages.maxSize(), units.toKibiBytes(pages.maxSize()));
+    const max_bytes = pages.limits.max(.bytes);
+    cimgui.c.ImGui_Text(
+        "%d bytes (%d KiB)",
+        max_bytes,
+        units.toKibiBytes(max_bytes),
+    );
 
     cimgui.c.ImGui_TableNextRow();
     _ = cimgui.c.ImGui_TableSetColumnIndex(0);
@@ -393,7 +398,7 @@ pub fn semanticPromptTable(
         _ = cimgui.c.ImGui_TableSetColumnIndex(1);
         switch (semantic_prompt.click) {
             .none => cimgui.c.ImGui_TextDisabled("(none)"),
-            .click_events => cimgui.c.ImGui_Text("click_events"),
+            .click_events => |click_events| cimgui.c.ImGui_Text("click_events=%s", @tagName(click_events).ptr),
             .cl => |cl| cimgui.c.ImGui_Text("cl=%s", @tagName(cl).ptr),
         }
     }

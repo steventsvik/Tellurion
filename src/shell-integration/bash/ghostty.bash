@@ -115,72 +115,16 @@ if [[ "$GHOSTTY_SHELL_FEATURES" == *"sudo"* && -n "$TERMINFO" ]]; then
 fi
 
 # SSH Integration
+#
+# Wrap `ssh` with `ghostty +ssh` and translate the shell-integration
+# feature flags into command options.
 if [[ "$GHOSTTY_SHELL_FEATURES" == *ssh-* ]]; then
   function ssh() {
-    builtin local ssh_term ssh_opts
-    ssh_term="xterm-256color"
-    ssh_opts=()
-
-    # Configure environment variables for remote session
-    if [[ "$GHOSTTY_SHELL_FEATURES" == *ssh-env* ]]; then
-      ssh_opts+=(-o "SetEnv COLORTERM=truecolor")
-      ssh_opts+=(-o "SendEnv TERM_PROGRAM TERM_PROGRAM_VERSION")
-    fi
-
-    # Install terminfo on remote host if needed
-    if [[ "$GHOSTTY_SHELL_FEATURES" == *ssh-terminfo* ]]; then
-      builtin local ssh_user ssh_hostname
-
-      while IFS=' ' read -r ssh_key ssh_value; do
-        case "$ssh_key" in
-        user) ssh_user="$ssh_value" ;;
-        hostname) ssh_hostname="$ssh_value" ;;
-        esac
-        [[ -n "$ssh_user" && -n "$ssh_hostname" ]] && break
-      done < <(builtin command ssh -G "$@" 2>/dev/null)
-
-      if [[ -n "$ssh_hostname" ]]; then
-        builtin local ssh_target="${ssh_user}@${ssh_hostname}"
-
-        # Check if terminfo is already cached
-        if "$GHOSTTY_BIN_DIR/ghostty" +ssh-cache --host="$ssh_target" >/dev/null 2>&1; then
-          ssh_term="xterm-ghostty"
-        elif builtin command -v infocmp >/dev/null 2>&1; then
-          builtin local ssh_terminfo ssh_cpath_dir ssh_cpath
-
-          ssh_terminfo=$(infocmp -0 -x xterm-ghostty 2>/dev/null)
-
-          if [[ -n "$ssh_terminfo" ]]; then
-            builtin echo "Setting up xterm-ghostty terminfo on $ssh_hostname..." >&2
-
-            ssh_cpath_dir=$(mktemp -d "/tmp/ghostty-ssh-$ssh_user.XXXXXX" 2>/dev/null) || ssh_cpath_dir="/tmp/ghostty-ssh-$ssh_user.$$"
-            ssh_cpath="$ssh_cpath_dir/socket"
-
-            if builtin echo "$ssh_terminfo" | builtin command ssh -o ControlMaster=yes -o ControlPath="$ssh_cpath" -o ControlPersist=60s "$@" '
-              infocmp xterm-ghostty >/dev/null 2>&1 && exit 0
-              command -v tic >/dev/null 2>&1 || exit 1
-              mkdir -p ~/.terminfo 2>/dev/null && tic -x - 2>/dev/null && exit 0
-              exit 1
-            ' 2>/dev/null; then
-              ssh_term="xterm-ghostty"
-              ssh_opts+=(-o "ControlPath=$ssh_cpath")
-
-              # Cache successful installation
-              "$GHOSTTY_BIN_DIR/ghostty" +ssh-cache --add="$ssh_target" >/dev/null 2>&1 || true
-            else
-              builtin echo "Warning: Failed to install terminfo." >&2
-            fi
-          else
-            builtin echo "Warning: Could not generate terminfo data." >&2
-          fi
-        else
-          builtin echo "Warning: ghostty command not available for cache management." >&2
-        fi
-      fi
-    fi
-
-    # Execute SSH with TERM environment variable
-    TERM="$ssh_term" builtin command ssh "${ssh_opts[@]}" "$@"
+    builtin local -a flags
+    flags=()
+    [[ "$GHOSTTY_SHELL_FEATURES" != *ssh-env* ]] && flags+=(--forward-env=false)
+    [[ "$GHOSTTY_SHELL_FEATURES" != *ssh-terminfo* ]] && flags+=(--terminfo=false)
+    "$GHOSTTY_BIN_DIR/ghostty" +ssh "${flags[@]}" -- "$@"
   }
 fi
 
@@ -190,7 +134,7 @@ _ghostty_executing=""
 _ghostty_last_reported_cwd=""
 
 function __ghostty_precmd() {
-  local ret="$?"
+  local ret="${1:-$?}"
   if test "$_ghostty_executing" != "0"; then
     _GHOSTTY_SAVE_PS1="$PS1"
     _GHOSTTY_SAVE_PS2="$PS2"
@@ -233,15 +177,28 @@ function __ghostty_precmd() {
     builtin printf "\e]133;D;%s;aid=%s\a" "$ret" "$BASHPID"
   fi
 
-  # Fresh line and start of prompt.
-  builtin printf "\e]133;A;redraw=last;cl=line;aid=%s\a" "$BASHPID"
+  # Fresh line and start of prompt. When ble.sh is active, emit 133;P instead
+  # of 133;A because ble.sh maintains its own cursor position tracking. 133;A's
+  # cursor movement (CR+LF when not at column 0) is invisible to ble.sh and
+  # desyncs its position state, causing display artifacts like duplicate
+  # prompts. See: https://github.com/akinomyoga/ble.sh/issues/684
+  if [[ -n "${BLE_VERSION-}" ]]; then
+    builtin printf "\e]133;P;k=i\a"
+  else
+    builtin printf "\e]133;A;redraw=last;cl=line;aid=%s\a" "$BASHPID"
+  fi
 
   # unfortunately bash provides no hooks to detect cwd changes
   # in particular this means cwd reporting will not happen for a
   # command like cd /test && cat. PS0 is evaluated before cd is run.
   if [[ "$_ghostty_last_reported_cwd" != "$PWD" ]]; then
     _ghostty_last_reported_cwd="$PWD"
-    builtin printf "\e]7;kitty-shell-cwd://%s%s\a" "$HOSTNAME" "$PWD"
+    # Remove control bytes from the hostname and directory before sending
+    # them. A directory name that contains a raw ESC or BEL byte could
+    # otherwise end our OSC 7 early and start a sequence of its own, such
+    # as an OSC 52 clipboard write. Backslashes are safe here because
+    # printf only expands escapes in the format string, not in %s values.
+    builtin printf "\e]7;kitty-shell-cwd://%s%s\a" "${HOSTNAME//[[:cntrl:]]/}" "${PWD//[[:cntrl:]]/}"
   fi
 
   _ghostty_executing=0
@@ -271,41 +228,52 @@ if (( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 4) )
     [[ -n "$cmd" ]] && __ghostty_preexec "$cmd"
   }
 
-  # Use function substitution in 5.3+. Otherwise, use command substitution.
-  # Any output (including escape sequences) goes to the terminal.
-  # Only define if not already set (allows re-sourcing).
-  if [[ -z "${__ghostty_ps0+x}" ]]; then
-    if (( BASH_VERSINFO[0] > 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] >= 3) )); then
-      # shellcheck disable=SC2016
-      builtin readonly __ghostty_ps0='${ __ghostty_preexec_hook; }'
-    else
-      # shellcheck disable=SC2016
-      builtin readonly __ghostty_ps0='$(__ghostty_preexec_hook >/dev/tty)'
-    fi
-  fi
+  # Bash 5.1+ restores the command status for each PROMPT_COMMAND array entry.
+  # Scalar values need to save and restore it before existing commands run.
+  __ghostty_restore_status() {
+    builtin return "$1"
+  }
 
   __ghostty_hook() {
-    builtin local ret=$?
+    builtin local ret="${__ghostty_status:-$?}"
+    builtin unset __ghostty_status
     __ghostty_precmd "$ret"
-    if [[ "$PS0" != *"$__ghostty_ps0"* ]]; then
-      PS0=$PS0"${__ghostty_ps0}"
+
+    # Append preexec hook to PS0 if not already present.
+    # Use function substitution in 5.3+, otherwise command substitution.
+    if [[ "$PS0" != *"__ghostty_preexec_hook"* ]]; then
+      if (( BASH_VERSINFO[0] > 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] >= 3) )); then
+        # shellcheck disable=SC2016
+        PS0+='${ __ghostty_preexec_hook; }'
+      else
+        # shellcheck disable=SC2016
+        PS0+='$(__ghostty_preexec_hook >/dev/tty)'
+      fi
     fi
   }
 
-  # Append our hook to PROMPT_COMMAND, preserving its existing type.
+  # Append our hook to PROMPT_COMMAND, preserving its existing type. Array
+  # entries receive their command's status directly, while scalar values
+  # need a leading status capture before existing commands run.
+  #
+  # The 2>/dev/null suppresses "command not found" in subshells that inherit
+  # PROMPT_COMMAND without the function definitions. This also silences any
+  # errors from inside our hooks, but those are all terminal escape sequences
+  # and non-actionable.
   # shellcheck disable=SC2128,SC2178,SC2179
-  if [[ ";${PROMPT_COMMAND[*]:-};" != *";__ghostty_hook;"* ]]; then
+  if [[ "${PROMPT_COMMAND[*]:-}" != *"__ghostty_hook 2>/dev/null"* ]]; then
     if [[ -z "${PROMPT_COMMAND[*]}" ]]; then
       if (( BASH_VERSINFO[0] > 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] >= 1) )); then
-        PROMPT_COMMAND=(__ghostty_hook)
+        PROMPT_COMMAND=("__ghostty_hook 2>/dev/null")
       else
-        PROMPT_COMMAND="__ghostty_hook"
+        PROMPT_COMMAND="__ghostty_hook 2>/dev/null"
       fi
-    elif [[ $(builtin declare -p PROMPT_COMMAND 2>/dev/null) == "declare -a "* ]]; then
-      PROMPT_COMMAND+=(__ghostty_hook)
+    elif [[ $(builtin declare -p PROMPT_COMMAND 2>/dev/null) == "declare -a"* ]]; then
+      PROMPT_COMMAND+=("__ghostty_hook 2>/dev/null")
     else
-      [[ "${PROMPT_COMMAND}" =~ \;[[:space:]]*$ ]] || PROMPT_COMMAND+=";"
-      PROMPT_COMMAND+=" __ghostty_hook"
+      PROMPT_COMMAND='__ghostty_status=$?;if builtin declare -F __ghostty_restore_status >/dev/null;then __ghostty_restore_status "$__ghostty_status";else (exit "$__ghostty_status");fi;'"${PROMPT_COMMAND}"
+      [[ "${PROMPT_COMMAND}" =~ (\;[[:space:]]*|$'\n')$ ]] || PROMPT_COMMAND+=";"
+      PROMPT_COMMAND+="__ghostty_hook 2>/dev/null"
     fi
   fi
 else

@@ -17,6 +17,7 @@ const Application = @import("application.zig").Application;
 const CloseConfirmationDialog = @import("close_confirmation_dialog.zig").CloseConfirmationDialog;
 const Surface = @import("surface.zig").Surface;
 const SurfaceScrolledWindow = @import("surface_scrolled_window.zig").SurfaceScrolledWindow;
+const Overrides = @import("Overrides.zig");
 
 const log = std.log.scoped(.gtk_ghostty_split_tree);
 
@@ -158,6 +159,13 @@ pub const SplitTree = extern struct {
         /// used to debounce updates.
         rebuild_source: ?c_uint = null,
 
+        /// The source that we use to restore focus. With enough nested
+        /// splits, some surfaces might initially be allocated a width or
+        /// height of 0 which causes them to get unmapped and lose focus.
+        /// We can reliably restore focus to the last focused surface only
+        /// once it is mapped again.
+        restore_focus_source: ?c_uint = null,
+
         /// Used to store state about a pending surface close for the
         /// close dialog.
         pending_close: ?Surface.Tree.Node.Handle,
@@ -186,6 +194,7 @@ pub const SplitTree = extern struct {
             .init("new-split", actionNewSplit, s_variant_type),
             .init("equalize", actionEqualize, null),
             .init("zoom", actionZoom, null),
+            .init("close-split", actionCloseSplit, null),
         };
 
         _ = ext.actions.addAsGroup(Self, self, "split-tree", &actions);
@@ -204,19 +213,14 @@ pub const SplitTree = extern struct {
         self: *Self,
         direction: Surface.Tree.Split.Direction,
         parent_: ?*Surface,
-        overrides: struct {
-            command: ?configpkg.Command = null,
-            working_directory: ?[:0]const u8 = null,
-            title: ?[:0]const u8 = null,
-
-            pub const none: @This() = .{};
-        },
+        overrides: Overrides,
     ) Allocator.Error!void {
         const alloc = Application.default().allocator();
 
         // Create our new surface.
         const surface: *Surface = .new(.{
             .command = overrides.command,
+            .shell_integration = overrides.shell_integration,
             .working_directory = overrides.working_directory,
             .title = overrides.title,
         });
@@ -231,12 +235,7 @@ pub const SplitTree = extern struct {
         }
 
         // Bind is-split property for new surface
-        _ = self.as(gobject.Object).bindProperty(
-            "is-split",
-            surface.as(gobject.Object),
-            "is-split",
-            .{ .sync_create = true },
-        );
+        surface.bindIsSplit(self);
 
         // Create our tree
         var single_tree = try Surface.Tree.init(alloc, surface);
@@ -298,18 +297,26 @@ pub const SplitTree = extern struct {
         const height_f64: f64 = @floatFromInt(height);
         const amount_f64: f64 = @floatFromInt(amount);
 
-        // Get our ratio and use positive/neg for directions.
-        const ratio: f64 = switch (direction) {
+        // Get our ratio and use positive/neg for directions. The amount can
+        // be larger than the split, which can only resize it as far as the
+        // edge, so the ratio is clamped.
+        const ratio: f64 = std.math.clamp(switch (direction) {
             .right => amount_f64 / width_f64,
             .left => -(amount_f64 / width_f64),
             .down => amount_f64 / height_f64,
             .up => -(amount_f64 / height_f64),
-        };
+        }, -1, 1);
 
         const layout: Surface.Tree.Split.Layout = switch (direction) {
             .left, .right => .horizontal,
             .up, .down => .vertical,
         };
+
+        // If the split is held at its minimum size, resize from the ratio
+        // it shows rather than the one in the tree.
+        if (findParentSplit(old_tree.nodes[active.idx()].leaf, layout)) |split| {
+            split.syncSplitRatio(.clamped_to_tree);
+        }
 
         var new_tree = try old_tree.resize(
             Application.default().allocator(),
@@ -320,6 +327,27 @@ pub const SplitTree = extern struct {
         defer new_tree.deinit();
         self.setTree(&new_tree);
         return true;
+    }
+
+    /// Find the nearest SplitTreeSplit ancestor of the surface with the
+    /// given layout. This is the split that Surface.Tree.resize resizes.
+    fn findParentSplit(
+        surface: *Surface,
+        layout: Surface.Tree.Split.Layout,
+    ) ?*SplitTreeSplit {
+        const orientation: gtk.Orientation = switch (layout) {
+            .horizontal => .horizontal,
+            .vertical => .vertical,
+        };
+
+        var widget = surface.as(gtk.Widget);
+        while (ext.getAncestor(SplitTreeSplit, widget)) |split| {
+            const paned = split.private().paned;
+            if (paned.as(gtk.Orientable).getOrientation() == orientation) return split;
+            widget = split.as(gtk.Widget).getParent() orelse return null;
+        }
+
+        return null;
     }
 
     /// Move focus from the currently focused surface to the given
@@ -379,6 +407,76 @@ pub const SplitTree = extern struct {
         return true;
     }
 
+    /// Move the source split onto the target split in a given direction.
+    /// The target split must be located within this tree.
+    pub fn moveSplit(
+        self: *Self,
+        source: *Surface,
+        target: *Surface,
+        dir: Surface.Tree.Split.Direction,
+    ) Allocator.Error!void {
+        const alloc = Application.default().allocator();
+        const target_tree = self.getTree() orelse return;
+
+        // This really shouldn't fail, but just in case
+        const target_handle = target_tree.locate(target) orelse {
+            log.warn("target is not placed in a split tree", .{});
+            return;
+        };
+
+        // Try to find the source within the current tree.
+        // If it exists, then it's a local move; otherwise the logic gets more
+        // complicated
+        const source_handle = target_tree.locate(source);
+
+        // First add the source into this tree.
+        // We have to do this no matter what
+        var branch = try Surface.Tree.init(alloc, source);
+        defer branch.deinit();
+
+        var after_split = try target_tree.split(
+            alloc,
+            target_handle,
+            dir,
+            0.5,
+            &branch,
+        );
+        defer after_split.deinit();
+
+        if (source_handle) |handle| {
+            // Happy path: source and target are located within the same tree.
+            // In that case, we just remove the existing source from this tree
+
+            var after_remove = try after_split.remove(alloc, handle);
+            defer after_remove.deinit();
+
+            self.setTree(&after_remove);
+        } else {
+            // :( Cross-tree moves are a bit more complicated.
+
+            // TODO: Find a better way to access the split tree from here
+            const source_tree_widget = ext.getAncestor(
+                SplitTree,
+                source.as(gtk.Widget),
+            ) orelse {
+                log.warn("source is not placed in a split tree", .{});
+                return;
+            };
+            const source_tree = source_tree_widget.getTree() orelse return;
+
+            // Remove the source from its own tree. This also moves focus
+            // in the source tree to another surface, as closing it would.
+            const handle = source_tree.locate(source) orelse return;
+            try source_tree_widget.removeHandle(handle);
+
+            // Finally, set the final tree structure for this tree widget
+            self.setTree(&after_split);
+
+            // Re-bind vital properties like `is-split`
+            source.bindIsSplit(self);
+        }
+    }
+
     fn disconnectSurfaceHandlers(self: *Self) void {
         const tree = self.getTree() orelse return;
         var it = tree.iterator();
@@ -414,6 +512,13 @@ pub const SplitTree = extern struct {
                 propSurfaceFocused,
                 self,
                 .{ .detail = "focused" },
+            );
+            _ = gobject.Object.signals.notify.connect(
+                surface,
+                *Self,
+                propSurfaceMapped,
+                self,
+                .{ .detail = "mapped" },
             );
         }
     }
@@ -564,12 +669,18 @@ pub const SplitTree = extern struct {
 
     fn dispose(self: *Self) callconv(.c) void {
         const priv = self.private();
-        priv.last_focused.set(null);
+        priv.last_focused.deinit();
         if (priv.rebuild_source) |v| {
             if (glib.Source.remove(v) == 0) {
                 log.warn("unable to remove rebuild source", .{});
             }
             priv.rebuild_source = null;
+        }
+        if (priv.restore_focus_source) |v| {
+            if (glib.Source.remove(v) == 0) {
+                log.warn("unable to remove restore_focus source", .{});
+            }
+            priv.restore_focus_source = null;
         }
 
         gtk.Widget.disposeTemplate(
@@ -663,6 +774,15 @@ pub const SplitTree = extern struct {
         self.as(gobject.Object).notifyByPspec(properties.tree.impl.param_spec);
     }
 
+    pub fn actionCloseSplit(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const surface = self.getActiveSurface() orelse return;
+        surface.close();
+    }
+
     fn surfaceCloseRequest(
         surface: *Surface,
         self: *Self,
@@ -675,17 +795,8 @@ pub const SplitTree = extern struct {
 
         // Find the surface in the tree to verify this is valid and
         // set our pending close handle.
-        priv.pending_close = handle: {
-            const tree = self.getTree() orelse return;
-            var it = tree.iterator();
-            while (it.next()) |entry| {
-                if (entry.view == surface) {
-                    break :handle entry.handle;
-                }
-            }
-
-            return;
-        };
+        const tree = self.getTree() orelse return;
+        priv.pending_close = tree.locate(surface) orelse return;
 
         // If we don't need to confirm then just close immediately.
         if (!core.needsConfirmQuit()) {
@@ -717,6 +828,17 @@ pub const SplitTree = extern struct {
         const handle = priv.pending_close orelse return;
         priv.pending_close = null;
 
+        self.removeHandle(handle) catch |err| {
+            log.warn("unable to remove surface from tree: {}", .{err});
+        };
+    }
+
+    /// Remove the node with the given handle from the tree, making the
+    /// surface next to it the last focused surface of the tree.
+    fn removeHandle(
+        self: *Self,
+        handle: Surface.Tree.Node.Handle,
+    ) Allocator.Error!void {
         // Figure out our next focus target. The next focus target is
         // always the "previous" surface unless we're the leftmost then
         // its the next.
@@ -736,19 +858,16 @@ pub const SplitTree = extern struct {
         };
 
         // Remove it from the tree.
-        var new_tree = old_tree.remove(
+        var new_tree = try old_tree.remove(
             Application.default().allocator(),
             handle,
-        ) catch |err| {
-            log.warn("unable to remove surface from tree: {}", .{err});
-            return;
-        };
+        );
         defer new_tree.deinit();
         self.setTree(&new_tree);
 
         // Grab focus. We have to set this on the "last focused" because our
         // focus will be set when the tree is redrawn.
-        if (next_focus) |v| priv.last_focused.set(v);
+        if (next_focus) |v| self.private().last_focused.set(v);
     }
 
     fn propSurfaceFocused(
@@ -766,6 +885,24 @@ pub const SplitTree = extern struct {
         self.as(gobject.Object).notifyByPspec(properties.@"active-surface".impl.param_spec);
     }
 
+    fn propSurfaceMapped(
+        surface: *Surface,
+        _: *gobject.ParamSpec,
+        self: *Self,
+    ) callconv(.c) void {
+        if (!surface.getMapped()) return;
+
+        // We could add the idle callback only if this is actually the last
+        // focused surface. But we can avoid that check because usually all
+        // the surfaces get mapped at once, so the idle callback will run
+        // only once anyway.
+        const priv = self.private();
+        if (priv.restore_focus_source == null) priv.restore_focus_source = glib.idleAdd(
+            onRestoreFocus,
+            self,
+        );
+    }
+
     fn propTree(
         self: *Self,
         _: *gobject.ParamSpec,
@@ -779,13 +916,19 @@ pub const SplitTree = extern struct {
         self.as(gobject.Object).notifyByPspec(properties.@"has-surfaces".impl.param_spec);
         self.as(gobject.Object).notifyByPspec(properties.@"is-zoomed".impl.param_spec);
 
-        // If we were planning a rebuild, always remove that so we can
-        // start from a clean slate.
+        // If we were planning a rebuild or focus restore, always remove
+        // that so we can start from a clean slate.
         if (priv.rebuild_source) |v| {
             if (glib.Source.remove(v) == 0) {
                 log.warn("unable to remove rebuild source", .{});
             }
             priv.rebuild_source = null;
+        }
+        if (priv.restore_focus_source) |v| {
+            if (glib.Source.remove(v) == 0) {
+                log.warn("unable to remove restore_focus source", .{});
+            }
+            priv.restore_focus_source = null;
         }
 
         // If we transitioned to an empty tree, clear immediately instead of
@@ -839,6 +982,26 @@ pub const SplitTree = extern struct {
         // Our active surface may have changed
         self.as(gobject.Object).notifyByPspec(properties.@"active-surface".impl.param_spec);
 
+        return 0;
+    }
+
+    fn onRestoreFocus(ud: ?*anyopaque) callconv(.c) c_int {
+        const self: *Self = @ptrCast(@alignCast(ud orelse return 0));
+
+        // Always mark our source as null since we're done.
+        const priv = self.private();
+        priv.restore_focus_source = null;
+
+        // If we have a last-focused surface and it is mapped, restore focus
+        // to it. Depending on the available size, the surface might already
+        // have focus because it never got unmapped. In that case grabbing
+        // focus will have no effect.
+        if (priv.last_focused.get()) |v| {
+            defer v.unref();
+            if (v.getMapped()) {
+                v.grabFocus();
+            }
+        }
         return 0;
     }
 
@@ -978,7 +1141,7 @@ pub const SplitTree = extern struct {
                 class.as(gtk.Widget.Class),
                 comptime gresource.blueprint(.{
                     .major = 1,
-                    .minor = 5,
+                    .minor = 0,
                     .name = "split-tree",
                 }),
             );
@@ -1041,8 +1204,20 @@ const SplitTreeSplit = extern struct {
         /// Assumed to be correct.
         handle: Surface.Tree.Node.Handle,
 
+        /// Cache the split ratio. Looking it up is relatively expensive
+        /// because we have to first walk the widget tree to find the
+        /// SplitTree widget.
+        ratio: f64,
+
         /// Source to handle repositioning the split when properties change.
         idle: ?c_uint = null,
+
+        /// Whether the min-position/max-position or position property of the
+        /// gtk.Paned widget changed. We use these to distinguish between a
+        /// resize and the user manually moving the split divider. See the
+        /// "onIdle" function.
+        limits_changed: bool = false,
+        pos_changed: bool = false,
 
         // Template bindings
         paned: *gtk.Paned,
@@ -1064,6 +1239,7 @@ const SplitTreeSplit = extern struct {
         const self = gobject.ext.newInstance(Self, .{});
         const priv = self.private();
         priv.handle = handle;
+        priv.ratio = split.ratio;
 
         // Setup our paned fields
         const paned = priv.paned;
@@ -1083,32 +1259,19 @@ const SplitTreeSplit = extern struct {
         gtk.Widget.initTemplate(self.as(gtk.Widget));
     }
 
-    fn refresh(self: *Self) void {
-        const priv = self.private();
-        if (priv.idle == null) priv.idle = glib.idleAdd(
-            onIdle,
-            self,
-        );
-    }
+    const SyncDirection = enum {
+        // Update gtk.Paned widget to match ratio from split tree node.
+        tree_to_widget,
+        // Update split tree node to match ratio from gtk.Paned widget.
+        widget_to_tree,
+        // Like widget_to_tree, but only if the split is held at its minimum.
+        clamped_to_tree,
+    };
 
-    fn onIdle(ud: ?*anyopaque) callconv(.c) c_int {
-        const self: *Self = @ptrCast(@alignCast(ud orelse return 0));
+    // Sync split ratio between the gtk.Paned widget and the split tree.
+    fn syncSplitRatio(self: *Self, direction: SyncDirection) void {
         const priv = self.private();
         const paned = priv.paned;
-
-        // Our idle source is always over
-        priv.idle = null;
-
-        // Get our split. This is the most dangerous part of this entire
-        // widget. We assume that this widget is always a child of a
-        // SplitTree, we assume that our handle is valid, and we assume
-        // the handle is always a split node.
-        const split_tree = ext.getAncestor(
-            SplitTree,
-            self.as(gtk.Widget),
-        ) orelse return 0;
-        const tree = split_tree.getTree() orelse return 0;
-        const split: *const Surface.Tree.Split = &tree.nodes[priv.handle.idx()].split;
 
         // Current, min, and max positions as pixels.
         const pos = paned.getPosition();
@@ -1132,33 +1295,36 @@ const SplitTreeSplit = extern struct {
             );
             break :max gobject.ext.Value.get(&val, c_int);
         };
-        const pos_set: bool = max: {
-            var val = gobject.ext.Value.new(c_int);
-            defer val.unset();
-            gobject.Object.getProperty(
-                paned.as(gobject.Object),
-                "position-set",
-                &val,
+
+        // The size of the split as pixels, which ratios are relative to.
+        // Since gtk.Paned doesn't shrink the end child below its minimum
+        // size, max is reduced by that minimum size, so add it back.
+        const size: c_int = size: {
+            const end_child = paned.getEndChild() orelse break :size max;
+            var end_min: c_int = 0;
+            end_child.measure(
+                paned.as(gtk.Orientable).getOrientation(),
+                -1,
+                &end_min,
+                null,
+                null,
+                null,
             );
-            break :max gobject.ext.Value.get(&val, c_int) != 0;
+            break :size max + end_min;
         };
 
-        // We don't actually use min, but we don't expect this to ever
-        // be non-zero, so let's add an assert to ensure that.
-        assert(min == 0);
-
-        // If our max is zero then we can't do any math. I don't know
+        // If our size is zero then we can't do any math. I don't know
         // if this is possible but I suspect it can be if you make a nested
         // split completely minimized.
-        if (max == 0) return 0;
+        if (size == 0) return;
 
         // Determine our current ratio.
         const current_ratio: f64 = ratio: {
             const pos_f64: f64 = @floatFromInt(pos);
-            const max_f64: f64 = @floatFromInt(max);
-            break :ratio pos_f64 / max_f64;
+            const size_f64: f64 = @floatFromInt(size);
+            break :ratio pos_f64 / size_f64;
         };
-        const desired_ratio: f64 = @floatCast(split.ratio);
+        const desired_ratio: f64 = priv.ratio;
 
         // If our ratio is close enough to our desired ratio, then
         // we ignore the update. This is to avoid constant split updates
@@ -1169,54 +1335,166 @@ const SplitTreeSplit = extern struct {
             desired_ratio,
             0.001,
         )) {
+            return;
+        }
+
+        // The position in gtk.Paned matching the desired ratio. Note that if
+        // the size is small, it might not be possible to accurately set
+        // the desired ratio. E.g. with a size of 2 you can only have
+        // ratios 0, 0.5 and 1.
+        const desired_pos: c_int = desired_pos: {
+            const size_f64: f64 = @floatFromInt(size);
+            break :desired_pos @intFromFloat(@round(size_f64 * desired_ratio));
+        };
+        const clamped_pos = std.math.clamp(desired_pos, min, @max(min, max));
+
+        switch (direction) {
+            // gtk.Paned would clamp this too, but a frame later. The tree
+            // keeps the desired ratio for when the split grows again.
+            .tree_to_widget => paned.setPosition(clamped_pos),
+            .widget_to_tree => self.setTreeRatio(current_ratio),
+            .clamped_to_tree => if (clamped_pos != desired_pos) {
+                const pos_f64: f64 = @floatFromInt(clamped_pos);
+                const size_f64: f64 = @floatFromInt(size);
+                self.setTreeRatio(pos_f64 / size_f64);
+            },
+        }
+    }
+
+    /// Update ratio of the split tree node. This is the most dangerous
+    /// part of this widget. We assume that this widget is always a child
+    /// of a SplitTree, we assume that our handle is valid, and we assume
+    /// the handle is always a split node.
+    fn setTreeRatio(self: *Self, ratio: f64) void {
+        const priv = self.private();
+        const split_tree = ext.getAncestor(
+            SplitTree,
+            self.as(gtk.Widget),
+        ) orelse {
+            log.warn("SplitTree ancestor not found", .{});
+            return;
+        };
+
+        // A pending rebuild means our handle is for the old tree.
+        if (split_tree.private().rebuild_source != null) return;
+
+        const tree = split_tree.getTree() orelse {
+            log.warn("no tree data model set", .{});
+            return;
+        };
+        assert(priv.handle.idx() < tree.nodes.len);
+        assert(tree.nodes[priv.handle.idx()] == .split);
+        tree.resizeInPlace(priv.handle, @floatCast(ratio));
+        priv.ratio = ratio;
+    }
+
+    // We need to keep the split ratios from the tree datastructure and
+    // widget tree in sync. Using the min-position, max-position and position
+    // properties of the gtk.Paned widget, we can distinguish a resize from a
+    // manual update (e.g. the user dragging the divider). If min-position or
+    // max-position changes, we always have a widget resize (of the split or
+    // of a child's minimum size) and we sync the ratio directly from
+    // the propPositionLimits function. Usually position will change as well
+    // but it might not if the size change is small enough. If only position
+    // changes, we have a manual human update and we sync the ratio here.
+    //
+    // This is a hack, it relies on the timing of property notifcations.
+    // From looking at the GTK source code, it should not be possible that
+    // we interpret a position change from a resize as a manual update.
+    // When a gtk.Paned is resized, internally the gtk_paned_calc_position
+    // function will change min-position, max-position and position and
+    // synchronously call our propPositionLimits and propPosition functions.
+    // I.e. when the widget is resized, it should not be possible for onIdle
+    // to run before we have been notified of all property changes.
+    fn onIdle(ud: ?*anyopaque) callconv(.c) c_int {
+        const self: *Self = @ptrCast(@alignCast(ud orelse return 0));
+        const priv = self.private();
+
+        // Clear source and fields.
+        defer {
+            priv.idle = null;
+            priv.limits_changed = false;
+            priv.pos_changed = false;
+        }
+
+        if (priv.limits_changed) {
+            // Nothing to do, syncSplitRatio was already called
+            // directly from propPositionLimits.
+            return 0;
+        }
+        if (!priv.pos_changed) {
             return 0;
         }
 
-        // If we're out of bounds, then we need to either set the position
-        // to what we expect OR update our expected ratio.
-
-        // If we've never set the position, then we set it to the desired.
-        if (!pos_set) {
-            const desired_pos: c_int = desired_pos: {
-                const max_f64: f64 = @floatFromInt(max);
-                break :desired_pos @intFromFloat(@round(max_f64 * desired_ratio));
-            };
-            paned.setPosition(desired_pos);
-            return 0;
-        }
-
-        // If we've set the position, then this is a manual human update
-        // and we need to write our update back to the tree.
-        tree.resizeInPlace(priv.handle, @floatCast(current_ratio));
-
+        // If only position changed, this is a manual human update and
+        // we need to write our update back to the tree.
+        self.syncSplitRatio(.widget_to_tree);
         return 0;
     }
 
     //---------------------------------------------------------------
     // Signal handlers
 
+    fn propPositionLimits(
+        _: *gtk.Paned,
+        _: *gobject.ParamSpec,
+        self: *Self,
+    ) callconv(.c) void {
+        const priv = self.private();
+        priv.limits_changed = true;
+
+        // Widget or the minimum size of a child got resized, update position
+        // to match desired ratio.
+        //
+        // Syncing the split ratio directly here ensures that every surface
+        // gets the correct size allocated immediately. This works because
+        // this callback runs during size allocation, so that we update the
+        // divider position right after the gtk.Paned widget computes it and
+        // right before it will use the position to compute the sizes of its
+        // children. See the size_allocate and calc_position functions of the
+        // gtk.Paned widget.
+        //
+        // If we synced the ratio in an idle callback, there might be some
+        // flickering as surfaces are shown with the wrong size for a few
+        // frames until our idle callback runs. Depending on the split layout
+        // it might take multiple rounds of size allocation and idle callbacks
+        // for every widget to get the correct size.
+        //
+        // Note that gtk.Paned calls Widget.setChildVisible(true/false) for
+        // both children based on the initial divider position it computes.
+        // If we then update the position here, we might sometimes have to
+        // call setChildVisible again. This would be necessary if we updated
+        // the position from initially 0 (max), where start (end) child is
+        // invisible, to a value > 0 (< max). However, we can skip this because
+        // set_position already queues another round of size allocation, during
+        // which gtk.Paned will keep the correct position we set manually and
+        // then call setChildVisible again based on that. The only problematic
+        // situation is when we update the position from 0 to a value > 0,
+        // because setChildVisible(false) will unmap the start child widget.
+        // It will not be visible for a single frame which introduces some
+        // flickering. This can't happen because surfaces always have a minimum
+        // size (see Surface.setCellSize) that gtk.Paned doesn't shrink below.
+        self.syncSplitRatio(.tree_to_widget);
+
+        // We still need the idle callback to clear the limits_changed field
+        // later, because propPosition might or might not still get called.
+        if (priv.idle == null) priv.idle = glib.idleAdd(
+            onIdle,
+            self,
+        );
+    }
+
     fn propPosition(
         _: *gtk.Paned,
         _: *gobject.ParamSpec,
         self: *Self,
     ) callconv(.c) void {
-        self.refresh();
-    }
-
-    fn propMaxPosition(
-        _: *gtk.Paned,
-        _: *gobject.ParamSpec,
-        self: *Self,
-    ) callconv(.c) void {
-        self.refresh();
-    }
-
-    fn propMinPosition(
-        _: *gtk.Paned,
-        _: *gobject.ParamSpec,
-        self: *Self,
-    ) callconv(.c) void {
-        self.refresh();
+        const priv = self.private();
+        priv.pos_changed = true;
+        if (priv.idle == null) priv.idle = glib.idleAdd(
+            onIdle,
+            self,
+        );
     }
 
     //---------------------------------------------------------------
@@ -1265,7 +1543,7 @@ const SplitTreeSplit = extern struct {
                 class.as(gtk.Widget.Class),
                 comptime gresource.blueprint(.{
                     .major = 1,
-                    .minor = 5,
+                    .minor = 0,
                     .name = "split-tree-split",
                 }),
             );
@@ -1274,8 +1552,7 @@ const SplitTreeSplit = extern struct {
             class.bindTemplateChildPrivate("paned", .{});
 
             // Template Callbacks
-            class.bindTemplateCallback("notify_max_position", &propMaxPosition);
-            class.bindTemplateCallback("notify_min_position", &propMinPosition);
+            class.bindTemplateCallback("notify_position_limits", &propPositionLimits);
             class.bindTemplateCallback("notify_position", &propPosition);
 
             // Virtual methods

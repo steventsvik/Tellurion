@@ -2,6 +2,7 @@ const std = @import("std");
 const adw = @import("adw");
 const gobject = @import("gobject");
 const gtk = @import("gtk");
+const gtk_version = @import("../gtk_version.zig");
 
 const gresource = @import("../build/gresource.zig");
 const Common = @import("../class.zig").Common;
@@ -59,18 +60,37 @@ pub const SurfaceScrolledWindow = extern struct {
         config: ?*Config = null,
         config_binding: ?*gobject.Binding = null,
         surface: ?*Surface = null,
+        scrolled_window: *gtk.ScrolledWindow,
         pub var offset: c_int = 0;
     };
 
     fn init(self: *Self, _: *Class) callconv(.c) void {
         gtk.Widget.initTemplate(self.as(gtk.Widget));
+        if (gtk_version.runtimeUntil(4, 20, 1)) self.disableKineticScroll();
+    }
+
+    fn disableKineticScroll(self: *Self) void {
+        // Until gtk 4.20.1 trackpads have kinetic scrolling behavior regardless
+        // of `Gtk.ScrolledWindow.kinetic_scrolling`. As a workaround, disable
+        // EventControllerScroll.kinetic
+        const controllers = self.private().scrolled_window.as(gtk.Widget).observeControllers();
+        defer controllers.unref();
+        var i: c_uint = 0;
+        while (controllers.getObject(i)) |obj| : (i += 1) {
+            defer obj.unref();
+            const controller = gobject.ext.cast(gtk.EventControllerScroll, obj) orelse continue;
+            var flags = controller.getFlags();
+            flags.kinetic = false;
+            controller.setFlags(flags);
+        }
     }
 
     fn dispose(self: *Self) callconv(.c) void {
         const priv = self.private();
 
         if (priv.config_binding) |binding| {
-            binding.as(gobject.Object).unref();
+            binding.unbind();
+            binding.unref();
             priv.config_binding = null;
         }
 
@@ -138,30 +158,46 @@ pub const SurfaceScrolledWindow = extern struct {
         };
     }
 
+    /// Update our size request to match the smallest size our surface
+    /// can be resized to within a split.
+    pub fn syncSplitMinSize(self: *Self) void {
+        const surface = self.private().surface orelse return;
+        const size = surface.getSplitMinSize();
+        self.as(gtk.Widget).setSizeRequest(
+            @intCast(size.width),
+            @intCast(size.height),
+        );
+    }
+
     fn propSurface(
         self: *Self,
         _: *gobject.ParamSpec,
         _: ?*anyopaque,
     ) callconv(.c) void {
         const priv = self.private();
-        const child: *gtk.Widget = self.as(Parent).getChild().?;
-        const scrolled_window = gobject.ext.cast(gtk.ScrolledWindow, child).?;
+        const scrolled_window = self.private().scrolled_window.as(gtk.ScrolledWindow);
         scrolled_window.setChild(if (priv.surface) |s| s.as(gtk.Widget) else null);
+        self.syncSplitMinSize();
 
         // Unbind old config binding if it exists
         if (priv.config_binding) |binding| {
-            binding.as(gobject.Object).unref();
+            binding.unbind();
+            binding.unref();
             priv.config_binding = null;
         }
 
         // Bind config from surface to our config property
         if (priv.surface) |surface| {
-            priv.config_binding = surface.as(gobject.Object).bindProperty(
+            const binding = surface.as(gobject.Object).bindProperty(
                 properties.config.name,
                 self.as(gobject.Object),
                 properties.config.name,
                 .{ .sync_create = true },
             );
+            // Keep another ref, otherwise the binding would be freed and
+            // our pointer become stale if the surface gets finalized.
+            binding.ref();
+            priv.config_binding = binding;
         }
     }
 
@@ -181,7 +217,7 @@ pub const SurfaceScrolledWindow = extern struct {
                 class.as(gtk.Widget.Class),
                 comptime gresource.blueprint(.{
                     .major = 1,
-                    .minor = 5,
+                    .minor = 0,
                     .name = "surface-scrolled-window",
                 }),
             );
@@ -189,6 +225,7 @@ pub const SurfaceScrolledWindow = extern struct {
             // Bindings
             class.bindTemplateCallback("scrollbar_policy", &closureScrollbarPolicy);
             class.bindTemplateCallback("notify_surface", &propSurface);
+            class.bindTemplateChildPrivate("scrolled_window", .{});
 
             // Properties
             gobject.ext.registerProperties(class, &.{

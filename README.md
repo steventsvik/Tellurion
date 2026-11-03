@@ -1026,24 +1026,22 @@ own settings.
 
 - macOS 13 or newer (developed and tested on macOS 26, Apple silicon)
 - Xcode 26 or newer
-- Zig 0.15 from Homebrew: `brew install zig@0.15` (the ziglang.org build fails to link
-  against the macOS 26.4+ SDKs)
+- Zig 0.17: `brew install zig`
 - `jq` for the agent hooks: `brew install jq`
 
 ```sh
 git clone https://github.com/steventsvik/Tellurion.git
 cd Tellurion
-/opt/homebrew/opt/zig@0.15/bin/zig build -Doptimize=ReleaseFast -Dxcframework-target=native
+/opt/homebrew/opt/zig/bin/zig build -Doptimize=ReleaseFast -Dxcframework-target=native
 ditto macos/build/ReleaseLocal/Ghostty.app /Applications/Tellurion.app
 ```
 
 If the repo is in an iCloud-synced folder (like Desktop or Documents), codesign fails on
-iCloud's extended attributes. Point `macos/build` at a folder outside iCloud first;
-`update-ghostty.sh` does this for you.
+iCloud's extended attributes. Point `macos/build` at a folder outside iCloud first.
 
-`./update-ghostty.sh` rebases this fork onto the newest official Ghostty release, rebuilds
-and installs it (it needs an `upstream` remote pointing at `ghostty-org/ghostty`).
-`--check` only reports whether a new release exists.
+`./update-ghostty.sh` merges the newest official Ghostty release into a new branch off
+`dev` (it needs an `upstream` remote pointing at `ghostty-org/ghostty`), for you to build,
+test and open as a pull request. `--check` only reports whether a new release exists.
 
 </details>
 

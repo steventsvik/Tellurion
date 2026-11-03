@@ -31,7 +31,10 @@ pub const ftplugin =
     \\" Use syntax keywords for completion
     \\setlocal omnifunc=syntaxcomplete#Complete
     \\
-    \\let b:undo_ftplugin = 'setl cms< isk< ofu<'
+    \\" Ask ghostty to explain config keywords
+    \\setlocal keywordprg=ghostty\ +explain-config
+    \\
+    \\let b:undo_ftplugin = 'setl cms< isk< ofu< kp<'
     \\
     \\if !exists('current_compiler')
     \\  compiler ghostty
@@ -93,10 +96,10 @@ fn writeSyntax(writer: *std.Io.Writer) !void {
         \\syn keyword ghosttyConfigKeyword
     );
 
-    const config_fields = @typeInfo(Config).@"struct".fields;
+    const config_fields = @typeInfo(Config).@"struct".field_names;
     inline for (config_fields) |field| {
-        if (field.name[0] == '_') continue;
-        try writer.print("\n\t\\ {s}", .{field.name});
+        if (field[0] == '_') continue;
+        try writer.print("\n\t\\ {s}", .{field});
     }
 
     try writer.writeAll(
