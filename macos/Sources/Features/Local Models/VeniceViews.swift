@@ -101,7 +101,7 @@ private struct VeniceOptions: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Codex sessions you start from now on").font(Extreme.font(11, weight: .medium)).foregroundColor(Extreme.dim)
-            option("Search the web with Exa", "Sends what it searches for to Exa, free within Exa's rate limit. Results count as tokens on Venice.",
+            option("Search the web", "Sends what it searches for to Exa, free for about 50 searches a day. For more, run tellurion venice search setup, which needs Docker. Results count as tokens on Venice.",
                    .webSearch, $webSearch)
             option("Use my Codex memory", "Sends what Codex remembers about you and your projects to Venice. Venice sessions never add to it.",
                    .memory, $memory)

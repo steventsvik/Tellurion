@@ -264,14 +264,65 @@ class TellurionVeniceTests(unittest.TestCase):
 
     def test_web_search_is_off_by_default(self):
         self.run_cli(TELLURION_VENICE_MODEL="chosen-model")
-        self.assertNotIn("mcp.exa.ai", "\n".join(self.argv()))
+        self.assertNotIn("tellurion_search", "\n".join(self.argv()))
 
     def test_web_search_can_be_turned_on(self):
         (self.root / "venice").mkdir(exist_ok=True)
         (self.root / "venice" / "use-web-search").touch()
         self.run_cli(TELLURION_VENICE_MODEL="chosen-model")
         argv = self.argv()
-        self.assertIn('mcp_servers.exa_search={url="https://mcp.exa.ai/mcp"}', argv)
+        setting = next(a for a in argv if a.startswith("mcp_servers.tellurion_search="))
+        self.assertIn('venice-search.py', setting)
+        self.assertIn(f'"--folder","{self.root}/venice"', setting)
+
+    def search_cli(self, *args):
+        fake = self.bin
+        for name, body in (("docker", 'printf "%s\\n" "$*" >> "$FAKE_DOCKER_LOG"\n[ "$1" = inspect ] && [ -z "${FAKE_EXISTS:-}" ] && exit 1\nexit 0\n'),
+                           ("curl", 'exit 0\n'), ("openssl", 'echo abc123\n')):
+            (fake / name).write_text("#!/bin/sh\n" + body)
+            (fake / name).chmod(0o755)
+        environment = {"HOME": str(self.home), "PATH": f"{fake}:/usr/bin:/bin", "GHOSTTY_EXTREME_TEST_HOME": str(self.home),
+                       "FAKE_DOCKER_LOG": str(self.log) + ".docker", **self.search_env}
+        return subprocess.run([str(HERE / "tellurion"), "venice", "search", *args], env=environment, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
+
+    search_env = {}
+
+    def test_search_setup_runs_searxng_for_this_mac_only(self):
+        result = self.search_cli("setup")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = Path(str(self.log) + ".docker").read_text()
+        run = next(line for line in calls.splitlines() if line.startswith("run "))
+        self.assertIn("-p 127.0.0.1:8899:8080", run)
+        self.assertIn("--restart unless-stopped", run)
+        self.assertIn(f"-v {self.root}/venice/searxng:/etc/searxng", run)
+        self.assertRegex(run, r"searxng/searxng:\d{4}\.\d+\.\d+-[0-9a-f]+$", "a pinned image")
+        settings = (self.root / "venice" / "searxng" / "settings.yml").read_text()
+        self.assertIn("- json", settings)
+        self.assertIn("limiter: false", settings)
+        self.assertIn('secret_key: "abc123"', settings)
+
+    def test_search_setup_keeps_its_settings_and_reuses_the_container(self):
+        self.search_cli("setup")
+        path = self.root / "venice" / "searxng" / "settings.yml"
+        path.write_text("mine")
+        self.search_env = {"FAKE_EXISTS": "1"}
+        self.search_cli("setup")
+        self.assertEqual(path.read_text(), "mine")
+        self.assertIn("start tellurion-searxng", Path(str(self.log) + ".docker").read_text())
+
+    def test_search_use_needs_a_web_address(self):
+        self.assertEqual(self.search_cli("use", "https://search.example").returncode, 0)
+        self.assertEqual((self.root / "venice" / "searxng-url").read_text().strip(), "https://search.example")
+        for bad in ("file:///etc/passwd", "search.example", ""):
+            self.assertNotEqual(self.search_cli("use", bad).returncode, 0, bad)
+
+    def test_search_status_says_what_is_on(self):
+        self.assertIn("Web search: off", self.search_cli("status").stdout)
+        (self.root / "venice").mkdir(exist_ok=True)
+        (self.root / "venice" / "use-web-search").touch()
+        out = self.search_cli().stdout
+        self.assertIn("Web search: on", out)
+        self.assertIn("answering at http://127.0.0.1:8899", out)
 
     def test_catalog_comes_from_the_live_list(self):
         Models.seen.clear()

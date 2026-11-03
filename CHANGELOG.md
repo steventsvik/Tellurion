@@ -6,7 +6,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 
 ## Unreleased
 
-- **Web search for Venice models in Codex.** Turn on **Search the web with Exa** in Local models. Sessions you start from then on can search, and what they search for goes to Exa, with no fee or account within Exa's rate limit. Results count as tokens on Venice. Left off, a session has no web access, and a model asked to go online may spend money trying before it gives up.
+- **Web search for Venice models in Codex.** Turn on **Search the web** in Local models, and sessions you start from then on can search and read pages. What they search for goes to Exa, with no fee or account for about 50 searches a day. When Exa's limit is reached, search moves to SearXNG if you've set it up: `tellurion venice search setup` runs it in Docker for your Mac only, or `tellurion venice search use <address>` points to your own. Results count as tokens on Venice. Left off, a session has no web access, and a model asked to go online may spend money trying before it gives up.
 
 ## 1.9.0
 

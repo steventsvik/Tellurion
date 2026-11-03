@@ -243,7 +243,7 @@ final class VeniceAccount: ObservableObject {
         • It's billed to your Venice account. Your Claude or ChatGPT subscription isn't used.
 
         • Your Codex memory, computer use and secret files like .env stay out of reach unless you turn them on in Local models. It can still read your other files.
-        • It has no web search unless you turn it on in Local models, which sends its searches to Exa.
+        • It has no web search unless you turn it on in Local models, which sends what it searches for to Exa, or to search engines through your own SearXNG.
         • It stops for the day at $\(String(format: "%.2f", VeniceSpendMeter.shared.limit)) spent, which you can change there.
 
         Commands an agent runs still run on this Mac, under its usual sandbox and approvals.

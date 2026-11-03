@@ -58,6 +58,8 @@ jobs:
         run: |
           python3 -m py_compile agent-hooks/*.py
           python3 agent-hooks/test_codex_hook.py
+          python3 agent-hooks/test_venice.py
+          python3 agent-hooks/test_venice_search.py
 
   build-and-test:
     name: Build and test the app
