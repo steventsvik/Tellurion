@@ -4,7 +4,9 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
-## Unreleased
+## 1.9.0
+
+Built on Ghostty 1.4, with abliterated models on Venice, in Codex, from your own account.
 
 - **Built on Ghostty 1.4.** Tellurion moves from Ghostty 1.3.1 to 1.4.0, which brings Ghostty's security fixes (Cmd-clicking a crafted link could open unsafe local files or custom URL schemes, dragged text skipped paste protection, a file name with control characters could run a different command than the confirmation showed, crashes in tmux control mode, and memory corruption when clearing a small scrollback) and Sparkle 2.9.6, the updater's own security release. It also brings faster terminal output, less memory and GPU use for terminals you can't see, and better macOS 27 support.
 - **Selecting text no longer copies it unless you ask.** This is Ghostty 1.4's new default on macOS. To get it back, set `copy-on-select = clipboard` in your config.
