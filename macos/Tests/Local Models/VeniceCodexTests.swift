@@ -19,6 +19,14 @@ struct VeniceCodexTests {
         #expect(back.isVenice && back.used)
     }
 
+    @Test func aVeniceSessionAsksForAProjectRatherThanStartingAnywhere() {
+        #expect(VeniceCodex.needsFolder(nil, home: "/Users/me"))
+        #expect(VeniceCodex.needsFolder("", home: "/Users/me"))
+        #expect(VeniceCodex.needsFolder("/", home: "/Users/me"))
+        #expect(VeniceCodex.needsFolder("/Users/me/", home: "/Users/me"))
+        #expect(!VeniceCodex.needsFolder("/Users/me/project", home: "/Users/me"))
+    }
+
     @Test func startingCodexInAVenicePaneGoesThroughTellurion() {
         let adapted = VeniceCodex.adapted("codex\n")
         #expect(adapted.hasPrefix(" "))

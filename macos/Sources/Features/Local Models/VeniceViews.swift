@@ -84,6 +84,40 @@ struct VeniceSection: View {
                 }
             }
             .frame(maxHeight: 300)
+            VeniceOptions()
+        }
+    }
+}
+
+/// What Codex sessions on Venice may use, for the ones started from now on.
+private struct VeniceOptions: View {
+    @ObservedObject private var account = VeniceAccount.shared
+    @State private var memory = VeniceCodexOption.memory.isOn
+    @State private var computerUse = VeniceCodexOption.computerUse.isOn
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Codex sessions you start from now on").font(Extreme.font(11, weight: .medium)).foregroundColor(Extreme.dim)
+            option("Use my Codex memory", "Sends what Codex remembers about you and your projects to Venice. Venice sessions never add to it.",
+                   .memory, $memory)
+            option("Allow computer use", "Lets the model control apps and your browser on this Mac, outside Codex's sandbox.",
+                   .computerUse, $computerUse)
+        }
+    }
+
+    private func option(_ title: String, _ detail: String, _ option: VeniceCodexOption, _ value: Binding<Bool>) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Toggle(title, isOn: value).toggleStyle(.checkbox).font(Extreme.font(12))
+                .onChange(of: value.wrappedValue) { on in
+                    do {
+                        try option.set(on)
+                    } catch {
+                        account.error = error.localizedDescription
+                        value.wrappedValue = option.isOn
+                    }
+                }
+            Text(detail).font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

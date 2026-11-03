@@ -157,6 +157,7 @@ class TellurionVeniceTests(unittest.TestCase):
         joined = "\n".join(argv)
         self.assertIn('model_provider="venice"', argv)
         self.assertIn('analytics.enabled=false', argv)
+        self.assertIn('features.apps=false', argv)
         self.assertIn(f'base_url="http://127.0.0.1:{self.server.server_address[1]}/api/v1"', joined)
         self.assertIn('env_key="TELLURION_VENICE_TOKEN"', joined)
         self.assertIn('wire_api="responses"', joined)
@@ -167,6 +168,33 @@ class TellurionVeniceTests(unittest.TestCase):
         self.assertIn('shell_environment_policy.set.TELLURION_VENICE_TOKEN=""', argv, "commands the agent runs don't get it")
         self.assertIn(f'model_catalog_json="{self.root}/venice/codex-catalog.json"', argv)
         self.assertFalse((self.home / ".codex").exists(), "Codex's own folder isn't touched")
+
+    def test_memory_and_computer_use_are_off_by_default(self):
+        self.run_cli(TELLURION_VENICE_MODEL="chosen-model")
+        argv = self.argv()
+        self.assertIn('features.memories=false', argv)
+        self.assertIn('memories.generate_memories=false', argv)
+        self.assertIn('features.computer_use=false', argv)
+        for server in ('cua_repl', 'computer-use', 'node_repl'):
+            self.assertIn(f'mcp_servers.{server}={{command="/usr/bin/false",enabled=false}}', argv)
+
+    def test_memory_can_be_used_but_is_never_written_from_venice(self):
+        (self.root / "venice").mkdir(exist_ok=True)
+        (self.root / "venice" / "use-codex-memory").touch()
+        self.run_cli(TELLURION_VENICE_MODEL="chosen-model")
+        argv = self.argv()
+        self.assertNotIn('features.memories=false', argv)
+        self.assertIn('memories.generate_memories=false', argv)
+        self.assertIn('features.computer_use=false', argv, "each switch is its own")
+
+    def test_computer_use_can_be_allowed(self):
+        (self.root / "venice").mkdir(exist_ok=True)
+        (self.root / "venice" / "allow-computer-use").touch()
+        self.run_cli(TELLURION_VENICE_MODEL="chosen-model")
+        joined = "\n".join(self.argv())
+        self.assertNotIn('computer_use', joined)
+        self.assertNotIn('cua_repl', joined)
+        self.assertIn('features.memories=false', joined, "each switch is its own")
 
     def test_catalog_comes_from_the_live_list(self):
         Models.seen.clear()

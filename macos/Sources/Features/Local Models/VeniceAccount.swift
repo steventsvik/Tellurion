@@ -38,6 +38,27 @@ enum VeniceKeychain {
     static func delete() { SecItemDelete(query as CFDictionary) }
 }
 
+/// What a Codex session on Venice may use beyond coding tools. Both are off unless chosen, and
+/// each is a file `tellurion venice codex` looks for, so every way of starting a session agrees.
+enum VeniceCodexOption: String {
+    case memory = "use-codex-memory"
+    case computerUse = "allow-computer-use"
+
+    private var file: URL { AgentTools.root.appendingPathComponent("venice/\(rawValue)") }
+
+    var isOn: Bool { FileManager.default.fileExists(atPath: file.path) }
+
+    func set(_ on: Bool) throws {
+        guard on != isOn else { return }
+        if on {
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data().write(to: file)
+        } else {
+            try FileManager.default.removeItem(at: file)
+        }
+    }
+}
+
 /// A connected Venice account: its models, which are starred for the sidebar, and the proxy
 /// agents and chats reach it through. The list is public, so reading it needs no key; it's read
 /// when the Local Models window shows it and on Refresh, never in the background.
@@ -214,6 +235,8 @@ final class VeniceAccount: ObservableObject {
         • For models marked Private, Venice and its partners say nothing is stored. Tellurion can't verify that.
         • It's billed to your Venice account. Your Claude or ChatGPT subscription isn't used.
 
+        • Your Codex memory and computer use stay off unless you turn them on in Local models.
+
         Commands an agent runs still run on this Mac, under its usual sandbox and approvals.
         """
         alert.addButton(withTitle: "Continue")
@@ -254,6 +277,25 @@ enum VeniceCodex {
 
     static func environment(model: String) -> [String: String] {
         [backendVariable: "venice", modelVariable: model]
+    }
+
+    /// A session sends what it reads to Venice, so it doesn't start where that could be anything.
+    static func needsFolder(_ folder: String?, home: String) -> Bool {
+        guard let folder, !folder.isEmpty else { return true }
+        let path = (folder as NSString).standardizingPath
+        return path == "/" || path == (home as NSString).standardizingPath
+    }
+
+    /// The folder to start a session in: this one, or the one asked for. Nil if that's cancelled.
+    @MainActor
+    static func projectFolder(_ current: String?) -> String? {
+        guard needsFolder(current, home: NSHomeDirectory()) else { return current }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.prompt = "Start Codex Here"
+        panel.message = "Codex on Venice sends what it reads to Venice. Choose the project to work in."
+        return panel.runModal() == .OK ? panel.url?.path : nil
     }
 
     private static var cli: String { AgentTools.shellQuote(HookInstaller.binFolder.appendingPathComponent("tellurion").path) }

@@ -181,7 +181,9 @@ extension BoardController {
         if account.isVenice {
             // With the Accounts switch off as well: this tile was asked for by name, and it has to
             // come back on Venice.
-            guard (try? prepareVenice(account)) == true else { return }
+            guard (try? prepareVenice(account)) == true, let folder = VeniceCodex.projectFolder(workspace.folder) else { return }
+            setFolder(folder)
+            config.workingDirectory = folder
             for (key, value) in BoardAccounts.shared.environment(chosen) { config.environmentVariables[key] = value }
             guard let tile = addTile(config: config, command: "codex\n") else { return }
             model.tileAccounts[tile.id] = chosen

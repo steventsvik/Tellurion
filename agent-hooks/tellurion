@@ -362,13 +362,26 @@ venice_codex() {
     settings=(--no-daemon "${settings[@]}")
   fi
 
+  # Off unless switched on in Tools → Local models. A Venice session is never written to Codex's
+  # memory either way, or its contents could reach OpenAI from a later subscription session.
+  # Computer use comes from plugins, whose servers only a whole definition can replace.
+  local options=(-c 'memories.generate_memories=false')
+  [ -e "$folder/use-codex-memory" ] || options+=(-c 'features.memories=false')
+  if [ ! -e "$folder/allow-computer-use" ]; then
+    local off='{command="/usr/bin/false",enabled=false}'
+    options+=(-c 'features.computer_use=false' -c "mcp_servers.cua_repl=$off" -c "mcp_servers.computer-use=$off" -c "mcp_servers.node_repl=$off")
+  fi
+
   # Settings for this run only. A project's own config can't override them (Codex ignores
   # model_provider there). Commands the agent runs get the token blanked, by one dotted setting
-  # that leaves any of the user's own environment rules alone.
+  # that leaves any of the user's own environment rules alone. ChatGPT's connected apps stay off:
+  # they act through the ChatGPT sign-in, and their tool definitions alone are most of a request.
   TELLURION_VENICE_TOKEN="$token" exec "$codex" "${settings[@]}" \
     -c 'model_provider="venice"' \
     -c 'analytics.enabled=false' \
+    -c 'features.apps=false' \
     -c 'shell_environment_policy.set.TELLURION_VENICE_TOKEN=""' \
+    "${options[@]}" \
     -c "model_providers.venice={name=\"Venice\",base_url=\"http://127.0.0.1:$port/api/v1\",env_key=\"TELLURION_VENICE_TOKEN\",wire_api=\"responses\"}" \
     "$@"
 }
