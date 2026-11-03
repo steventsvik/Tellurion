@@ -68,9 +68,8 @@ struct VeniceCodexTests {
         #expect(entry.venice == nil)
     }
 
-    @Test func aSessionOnVeniceResumesThroughTellurion() throws {
-        let cached = #"{"id":"s1","agent":"codex","prompts":0,"toolCalls":0,"commands":0,"tests":0,"files":[],"linesAdded":0,"linesRemoved":0,"tokensIn":0,"tokensOut":0}"#
-        var session = try JSONDecoder().decode(ActivitySession.self, from: Data(cached.utf8))
+    @Test func aSessionOnVeniceResumesThroughTellurion() {
+        var session = ActivitySession(id: "s1", agent: "codex")
         #expect(!session.onVenice)
         session.codexProvider = "openai"
         #expect(!session.onVenice)
