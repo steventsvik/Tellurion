@@ -196,6 +196,72 @@ class TellurionVeniceTests(unittest.TestCase):
         self.assertNotIn('cua_repl', joined)
         self.assertIn('features.memories=false', joined, "each switch is its own")
 
+    def test_secret_files_are_out_of_reach_by_default(self):
+        self.run_cli(TELLURION_VENICE_MODEL="chosen-model")
+        argv = self.argv()
+        self.assertIn('default_permissions="tellurion-venice"', argv)
+        self.assertIn('permissions.tellurion-venice.extends=":workspace"', argv)
+        table = next(a for a in argv if a.startswith("permissions.tellurion-venice.filesystem="))
+        for path in (".ssh", ".codex/auth.json", "**/.env", "**/*.pem"):
+            self.assertIn(f'"{self.home}/{path}"="deny"', table)
+        self.assertIn(f'"{self.root}/venice-proxy.json"="deny"', table)
+        self.assertIn('":workspace_roots"={"**/.env"="deny"', table)
+        self.assertNotIn(".env.example", table, "examples stay readable")
+
+    def test_a_sandbox_flag_keeps_secret_files_out_of_reach(self):
+        for flag in (["--sandbox", "workspace-write"], ["-s", "workspace-write"], ["--sandbox=workspace-write"], ["-sworkspace-write"]):
+            result = self.run_cli(*flag, "exec", "hi", TELLURION_VENICE_MODEL="chosen-model")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            argv = self.argv()
+            self.assertIn('default_permissions="tellurion-venice"', argv, flag)
+            self.assertIn('permissions.tellurion-venice.extends=":workspace"', argv, flag)
+            self.assertFalse({"--sandbox", "-s", "--sandbox=workspace-write", "-sworkspace-write"} & set(argv), flag)
+            self.assertEqual(argv[-2:], ["exec", "hi"])
+
+    def test_read_only_stays_read_only(self):
+        self.run_cli("exec", "--sandbox", "read-only", "hi", TELLURION_VENICE_MODEL="chosen-model")
+        argv = self.argv()
+        self.assertIn('permissions.tellurion-venice.extends=":read-only"', argv)
+        self.assertEqual(argv[-2:], ["exec", "hi"])
+
+    def test_what_would_remove_the_protection_is_refused(self):
+        for flags in (["--sandbox", "danger-full-access"], ["-s", "danger-full-access"], ["--sandbox=danger-full-access"],
+                      ["--dangerously-bypass-approvals-and-sandbox"], ["--yolo"], ["-c", 'default_permissions=":workspace"'],
+                      ["-c", 'permissions.tellurion-venice.extends=":danger-full-access"'], ["--config=default_permissions=x"], ["--sandbox", "nonsense"]):
+            Path(str(self.log) + ".argv").unlink(missing_ok=True)
+            result = self.run_cli(*flags, TELLURION_VENICE_MODEL="chosen-model")
+            self.assertNotEqual(result.returncode, 0, flags)
+            self.assertIn("Let it read secret files", result.stderr, flags)
+            self.assertFalse(Path(str(self.log) + ".argv").exists(), "Codex doesn't start")
+
+    def test_the_same_words_in_a_prompt_are_not_refused(self):
+        result = self.run_cli("exec", "permissions.py needs a fix", TELLURION_VENICE_MODEL="chosen-model")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.argv()[-1], "permissions.py needs a fix")
+        result = self.run_cli("-c", "model_reasoning_effort=low", "exec", "hi", TELLURION_VENICE_MODEL="chosen-model")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.argv()[-4:], ["-c", "model_reasoning_effort=low", "exec", "hi"])
+
+    def test_flags_are_codexs_own_once_secret_files_are_allowed(self):
+        (self.root / "venice").mkdir(exist_ok=True)
+        (self.root / "venice" / "allow-secret-files").touch()
+        result = self.run_cli("--sandbox", "danger-full-access", TELLURION_VENICE_MODEL="chosen-model")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.argv()[-2:], ["--sandbox", "danger-full-access"])
+
+    def test_everything_after_a_bare_separator_is_left_alone(self):
+        self.run_cli("exec", "--", "--sandbox", "danger-full-access", TELLURION_VENICE_MODEL="chosen-model")
+        self.assertEqual(self.argv()[-4:], ["exec", "--", "--sandbox", "danger-full-access"])
+
+    def test_secret_files_can_be_allowed(self):
+        (self.root / "venice").mkdir(exist_ok=True)
+        (self.root / "venice" / "allow-secret-files").touch()
+        self.run_cli(TELLURION_VENICE_MODEL="chosen-model")
+        joined = "\n".join(self.argv())
+        self.assertNotIn('default_permissions', joined)
+        self.assertNotIn('tellurion-venice', joined)
+        self.assertIn('features.memories=false', joined, "each switch is its own")
+
     def test_catalog_comes_from_the_live_list(self):
         Models.seen.clear()
         self.run_cli()

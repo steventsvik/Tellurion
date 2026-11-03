@@ -51,13 +51,48 @@ enum VeniceAPI {
     ///
     /// Keys are written in sorted order, so a request's tools come out the same every turn: the
     /// model's prompt cache only matches on an identical start.
-    static func forwardedBody(_ body: Data) -> Data? {
+    ///
+    /// Known key formats are taken out too, unless `keepSecrets`, for whatever the sandbox doesn't
+    /// cover: what an MCP server returned, or a key in an ordinary file.
+    static func forwardedBody(_ body: Data, keepSecrets: Bool = false) -> Data? {
         guard var request = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return nil }
+        if !keepSecrets, let cleaned = removingSecrets(from: request) as? [String: Any] { request = cleaned }
         request["client_metadata"] = nil
         var parameters = request["venice_parameters"] as? [String: Any] ?? [:]
         parameters["include_venice_system_prompt"] = false
         request["venice_parameters"] = parameters
         return try? JSONSerialization.data(withJSONObject: request, options: [.sortedKeys, .withoutEscapingSlashes])
+    }
+
+    static let secretPlaceholder = "[secret removed by Tellurion]"
+
+    /// Only formats that can't be mistaken for code, since a changed line can stop an edit applying.
+    private static let secretPatterns: [NSRegularExpression] = [
+        "-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?-----END [A-Z ]*PRIVATE KEY-----",
+        "\\bsk-[A-Za-z0-9_-]{20,}",
+        "\\bgh[pousr]_[A-Za-z0-9]{30,}",
+        "\\bgithub_pat_[A-Za-z0-9_]{30,}",
+        "\\bAKIA[0-9A-Z]{16}\\b",
+        "\\bxox[abprs]-[0-9A-Za-z-]{20,}",
+        "\\bAIza[0-9A-Za-z_-]{30,}",
+        "\\bVENICE_INFERENCE_KEY_[A-Za-z0-9_-]{16,}",
+        "(?i)(private[_ ]?key|secret)[^\\n]{0,20}[:=]\\s*[\"']?0x[0-9a-f]{64}",
+    ].compactMap { try? NSRegularExpression(pattern: $0) }
+
+    static func removingSecrets(from text: String) -> String {
+        secretPatterns.reduce(text) { text, pattern in
+            pattern.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text),
+                                             withTemplate: NSRegularExpression.escapedTemplate(for: secretPlaceholder))
+        }
+    }
+
+    private static func removingSecrets(from value: Any) -> Any {
+        switch value {
+        case let text as String: return removingSecrets(from: text)
+        case let list as [Any]: return list.map { removingSecrets(from: $0) }
+        case let object as [String: Any]: return object.mapValues { removingSecrets(from: $0) }
+        default: return value
+        }
     }
 
     struct Model: Identifiable, Equatable {

@@ -43,6 +43,7 @@ enum VeniceKeychain {
 enum VeniceCodexOption: String {
     case memory = "use-codex-memory"
     case computerUse = "allow-computer-use"
+    case secretFiles = "allow-secret-files"
 
     private var file: URL { AgentTools.root.appendingPathComponent("venice/\(rawValue)") }
 
@@ -76,6 +77,8 @@ final class VeniceAccount: ObservableObject {
     @Published private(set) var models: [VeniceAPI.Model] = []
     @Published private(set) var busy = false
     @Published var error: String?
+    /// Today's, from the balance Venice reports.
+    @Published private(set) var spending = VeniceSpendMeter.shared.today
     /// Starred models, which show in the sidebar.
     @Published private(set) var starred: [String: Star] = [:]
 
@@ -98,6 +101,9 @@ final class VeniceAccount: ObservableObject {
     private static let log = StoredFile.logger("Venice")
 
     private init() {
+        VeniceSpendMeter.shared.onChange = { [weak self] spending in
+            Task { @MainActor in self?.spending = spending }
+        }
         if let data = UserDefaults.standard.data(forKey: Self.starredKey),
            let saved = try? JSONDecoder().decode([String: Star].self, from: data) {
             starred = saved
@@ -235,7 +241,8 @@ final class VeniceAccount: ObservableObject {
         • For models marked Private, Venice and its partners say nothing is stored. Tellurion can't verify that.
         • It's billed to your Venice account. Your Claude or ChatGPT subscription isn't used.
 
-        • Your Codex memory and computer use stay off unless you turn them on in Local models.
+        • Your Codex memory, computer use and secret files like .env stay out of reach unless you turn them on in Local models. It can still read your other files.
+        • It stops for the day at $\(String(format: "%.2f", VeniceSpendMeter.shared.limit)) spent, which you can change there.
 
         Commands an agent runs still run on this Mac, under its usual sandbox and approvals.
         """

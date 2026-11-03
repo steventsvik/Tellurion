@@ -49,6 +49,49 @@ struct VeniceAPITests {
         #expect(!VeniceAPI.proxyAllows(method: "GET", target: "/api/v1/models?x=@evil"))
     }
 
+    @Test func knownKeyFormatsAreTakenOutOfWhatsSent() throws {
+        let keys = ["sk-" + String(repeating: "a", count: 24), "gh" + "p_" + String(repeating: "b", count: 36),
+                    "AK" + "IA" + String(repeating: "C", count: 16), "VENICE_INFERENCE_KEY_" + String(repeating: "d", count: 20),
+                    "-----BEGIN RSA PRIVATE " + "KEY-----\nabc\n-----END RSA PRIVATE " + "KEY-----",
+                    "private_key = 0x" + String(repeating: "e", count: 64)]
+        for key in keys {
+            #expect(VeniceAPI.removingSecrets(from: "before \(key) after") == "before \(VeniceAPI.secretPlaceholder) after")
+        }
+        let body = try JSONSerialization.data(withJSONObject: ["input": [["content": [["text": keys[0]]]]]])
+        let out = try #require(VeniceAPI.forwardedBody(body))
+        #expect(String(bytes: out, encoding: .utf8)?.contains(keys[0]) == false)
+        let kept = try #require(VeniceAPI.forwardedBody(body, keepSecrets: true))
+        #expect(String(bytes: kept, encoding: .utf8)?.contains(keys[0]) == true)
+    }
+
+    @Test func ordinaryCodeIsLeftAloneWhenRemovingSecrets() {
+        for text in ["task-" + String(repeating: "a", count: 30), "api_key = config.read_the_api_key_value_now()",
+                     "commit 0x" + String(repeating: "a", count: 64), "hash = 0x" + String(repeating: "a", count: 64)] {
+            #expect(VeniceAPI.removingSecrets(from: text) == text)
+        }
+    }
+
+    @Test func spendingCountsWhatLeftTheBalanceAndNotMoneyAdded() {
+        var spending = VeniceSpending.updated(nil, balance: 10, day: "2026-11-03")
+        #expect(spending.spent == 0)
+        spending = VeniceSpending.updated(spending, balance: 9, day: "2026-11-03")
+        #expect(spending.spent == 1)
+        spending = VeniceSpending.updated(spending, balance: 29, day: "2026-11-03")
+        #expect(spending.spent == 1 && spending.balance == 29)
+        spending = VeniceSpending.updated(spending, balance: 28.5, day: "2026-11-03")
+        #expect(spending.spent == 1.5)
+        spending = VeniceSpending.updated(spending, balance: 28, day: "2026-11-04")
+        #expect(spending.spent == 0 && spending.day == "2026-11-04")
+    }
+
+    @Test func theLimitStopsAtItsAmountAndZeroMeansNone() {
+        let spending = VeniceSpending(day: "d", startBalance: 10, balance: 5)
+        #expect(VeniceSpendMeter.isOver(spending, limit: 5))
+        #expect(!VeniceSpendMeter.isOver(spending, limit: 5.01))
+        #expect(!VeniceSpendMeter.isOver(spending, limit: 0))
+        #expect(!VeniceSpendMeter.isOver(nil, limit: 5))
+    }
+
     private func forwarded(_ json: String) throws -> [String: Any] {
         let out = try #require(VeniceAPI.forwardedBody(Data(json.utf8)))
         return try #require(try JSONSerialization.jsonObject(with: out) as? [String: Any])

@@ -19,6 +19,8 @@ final class VeniceProxy: @unchecked Sendable {
 
     /// The most a request can carry: a long conversation, with pictures.
     private static let maxRequest = 64 * 1_048_576
+    /// How long a request waits for the keychain before it's told why nothing is happening.
+    private static let keyPatience: TimeInterval = 15
 
     private let queue = DispatchQueue(label: "com.steventsvik.ghostty-extreme.venice-proxy")
     private let upstream: URL
@@ -26,13 +28,17 @@ final class VeniceProxy: @unchecked Sendable {
     /// Reads the key when the first request needs it, so that starting at launch doesn't touch
     /// the keychain (which can ask the user).
     private let readKey: @Sendable () -> String?
+    private let meter: VeniceSpendMeter
     private let token = UUID().uuidString + UUID().uuidString
     private var listener: NWListener?
     private var apiKey: String?
+    /// Requests waiting for the keychain, which can be waiting for the user.
+    private var keyWaiters: [(String?) -> Void] = []
     /// The requests in flight; closing one's connection stops it, which stops the model too.
     private var relays: [ObjectIdentifier: Relay] = [:]
 
-    init(upstream: URL, infoFile: URL, readKey: @escaping @Sendable () -> String?) {
+    init(upstream: URL, infoFile: URL, meter: VeniceSpendMeter = .shared, readKey: @escaping @Sendable () -> String?) {
+        self.meter = meter
         self.upstream = upstream
         self.infoFile = infoFile
         self.readKey = readKey
@@ -142,22 +148,59 @@ final class VeniceProxy: @unchecked Sendable {
         if request[0] == "POST", unreadable {
             return respond(connection, status: "415 Unsupported Media Type", code: "unreadable_body", message: "Send the request as plain JSON with a Content-Length")
         }
-        if apiKey == nil { apiKey = readKey() }
-        guard let apiKey, !apiKey.isEmpty else {
-            return respond(connection, status: "503 Service Unavailable", code: "not_connected", message: "Not connected")
+        // Reading the model list costs nothing; every model request is checked against the limit.
+        if request[0] == "POST", meter.overLimit {
+            return respond(connection, status: "402 Payment Required", code: "spending_limit", message: meter.limitMessage)
         }
+        var answered = false
+        queue.asyncAfter(deadline: .now() + Self.keyPatience) { [weak self] in
+            guard !answered else { return }
+            answered = true
+            self?.respond(connection, status: "503 Service Unavailable", code: "waiting_for_keychain",
+                          message: "Waiting for your Venice key. Look for a Keychain prompt from Tellurion and click Always Allow.")
+        }
+        withKey { [weak self] key in
+            guard let self, !answered else { return }
+            answered = true
+            guard let key, !key.isEmpty else {
+                return self.respond(connection, status: "503 Service Unavailable", code: "not_connected", message: "Not connected")
+            }
+            self.forward(request, url: url, body: body, key: key, on: connection)
+        }
+    }
+
+    /// Off this queue, since macOS can sit on the read until the user answers its prompt, and
+    /// nothing else here could run meanwhile.
+    private func withKey(_ use: @escaping (String?) -> Void) {
+        if let apiKey { return use(apiKey) }
+        keyWaiters.append(use)
+        guard keyWaiters.count == 1 else { return }
+        let read = readKey
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let key = read()
+            self?.queue.async {
+                guard let self else { return }
+                if self.listener != nil { self.apiKey = key }
+                let waiting = self.keyWaiters
+                self.keyWaiters = []
+                waiting.forEach { $0(self.apiKey) }
+            }
+        }
+    }
+
+    private func forward(_ request: [String], url: URL, body: Data, key apiKey: String, on connection: NWConnection) {
         var outgoing = URLRequest(url: url, timeoutInterval: 600)
         outgoing.httpMethod = request[0]
         outgoing.setValue("Bearer " + apiKey, forHTTPHeaderField: "Authorization")
         outgoing.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         if request[0] == "POST" {
-            guard let forwarded = VeniceAPI.forwardedBody(body) else {
+            guard let forwarded = VeniceAPI.forwardedBody(body, keepSecrets: VeniceCodexOption.secretFiles.isOn) else {
                 return respond(connection, status: "400 Bad Request", code: "not_json", message: "The request isn't a JSON object")
             }
             outgoing.setValue("application/json", forHTTPHeaderField: "Content-Type")
             outgoing.httpBody = forwarded
         }
-        let relay = Relay(connection: connection, queue: queue) { [weak self] relay in
+        let relay = Relay(connection: connection, queue: queue, meter: meter) { [weak self] relay in
             self?.relays[ObjectIdentifier(relay)] = nil
         }
         relays[ObjectIdentifier(relay)] = relay
@@ -178,11 +221,13 @@ final class VeniceProxy: @unchecked Sendable {
     private final class Relay: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         private let connection: NWConnection
         private let queue: DispatchQueue
+        private let meter: VeniceSpendMeter
         private let finished: (Relay) -> Void
         private var session: URLSession?
         private var closed = false
 
-        init(connection: NWConnection, queue: DispatchQueue, finished: @escaping (Relay) -> Void) {
+        init(connection: NWConnection, queue: DispatchQueue, meter: VeniceSpendMeter, finished: @escaping (Relay) -> Void) {
+            self.meter = meter
             self.connection = connection
             self.queue = queue
             self.finished = finished
@@ -231,6 +276,9 @@ final class VeniceProxy: @unchecked Sendable {
                         completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
             let http = response as? HTTPURLResponse
             let status = http?.statusCode ?? 502
+            if let balance = http?.value(forHTTPHeaderField: "x-venice-balance-usd").flatMap(Double.init) {
+                meter.record(balance: balance)
+            }
             var head = "HTTP/1.1 \(status) \(status == 200 ? "OK" : "Error")\r\n"
             head += "Content-Type: \(Self.headerValue(http?.value(forHTTPHeaderField: "Content-Type") ?? "application/json"))\r\n"
             // What an agent reads to back off and to size its requests.

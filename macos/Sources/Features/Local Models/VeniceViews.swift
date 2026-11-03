@@ -94,6 +94,8 @@ private struct VeniceOptions: View {
     @ObservedObject private var account = VeniceAccount.shared
     @State private var memory = VeniceCodexOption.memory.isOn
     @State private var computerUse = VeniceCodexOption.computerUse.isOn
+    @State private var secretFiles = VeniceCodexOption.secretFiles.isOn
+    @State private var limit = VeniceSpendMeter.shared.limit
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -102,7 +104,35 @@ private struct VeniceOptions: View {
                    .memory, $memory)
             option("Allow computer use", "Lets the model control apps and your browser on this Mac, outside Codex's sandbox.",
                    .computerUse, $computerUse)
+            option("Let it read secret files", "Leaves .env files, SSH keys and saved logins readable, and known key formats in what's sent. Off, they stay on this Mac. Its other files can still be read.",
+                   .secretFiles, $secretFiles)
+            spendingRow
         }
+    }
+
+    private var spendingRow: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Text("Stop for the day at $").font(Extreme.font(12))
+                TextField("", value: $limit, format: .number)
+                    .textFieldStyle(.plain).font(Extreme.mono(12)).frame(width: 52)
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Extreme.raised))
+                    .onChange(of: limit) { VeniceSpendMeter.shared.limit = $0 }
+            }
+            Text(spendingText)
+                .font(Extreme.font(11))
+                .foregroundColor(VeniceSpendMeter.isOver(account.spending, limit: limit) ? Extreme.danger : Extreme.dim)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var spendingText: String {
+        let money = { (value: Double) in "$" + String(format: "%.2f", value) }
+        let limitNote = limit > 0 ? "" : " No limit is set."
+        guard let spending = account.spending else { return "Nothing spent today." + limitNote }
+        let stopped = VeniceSpendMeter.isOver(spending, limit: limit) ? " Limit reached: requests are stopped." : ""
+        return "Spent today \(money(spending.spent)) · Balance \(money(spending.balance)), including anything else using this key." + stopped + limitNote
     }
 
     private func option(_ title: String, _ detail: String, _ option: VeniceCodexOption, _ value: Binding<Bool>) -> some View {

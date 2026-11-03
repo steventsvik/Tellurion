@@ -308,6 +308,27 @@ venice_stop() {
 # skills, MCP servers and sessions. Only where its model requests go changes, through command-line
 # settings for this run; its config file isn't touched. It talks to the proxy inside Tellurion
 # with a token, set for this one command, so it never has the account's key.
+# Codex's table of paths a Venice session can't read: logins, keys and history in the home folder, and
+# secret files in any project, under the home folder or the one it's working in.
+venice_denied_reads() {
+  local root="$1" home item table="" names="" name
+  home=${HOME//\\/\\\\}; home=${home//\"/\\\"}
+  root=${root//\\/\\\\}; root=${root//\"/\\\"}
+  for item in .ssh .aws .azure .gnupg .kube .netrc .npmrc .pypirc .git-credentials .docker/config.json \
+    .config/gcloud .config/gh .config/op .password-store .codex/auth.json .claude/.credentials.json \
+    .zsh_history .bash_history Library/Keychains Library/Cookies Library/Mail Library/Messages Library/Safari \
+    "Library/Application Support/Google/Chrome" "Library/Application Support/Firefox"; do
+    table+="\"$home/$item\"=\"deny\","
+  done
+  table+="\"$root/venice-proxy.json\"=\"deny\",\"$root/accounts\"=\"deny\","
+  for name in .env .env.local '.env.*.local' .env.development .env.production .env.staging .env.test \
+    '*.pem' '*.key' '*.p12' '*.pfx' id_rsa id_ed25519 id_ecdsa credentials.json; do
+    table+="\"$home/**/$name\"=\"deny\","
+    names+="\"**/$name\"=\"deny\","
+  done
+  printf '{%s":workspace_roots"={%s},glob_scan_max_depth=8}' "$table" "${names%,}"
+}
+
 venice_codex() {
   local root="${GHOSTTY_EXTREME_TEST_HOME:-$HOME}/.ghostty-extreme"
   local info="$root/venice-proxy.json" folder="$root/venice" here port token codex model="" chosen=0 argument
@@ -370,6 +391,56 @@ venice_codex() {
   if [ ! -e "$folder/allow-computer-use" ]; then
     local off='{command="/usr/bin/false",enabled=false}'
     options+=(-c 'features.computer_use=false' -c "mcp_servers.cua_repl=$off" -c "mcp_servers.computer-use=$off" -c "mcp_servers.node_repl=$off")
+  fi
+
+  # What it reads goes to Venice, so secret files stay out of its reach unless that's switched on.
+  # The sandbox enforces this for commands and edits; MCP servers and hooks run outside it, which is
+  # why the proxy also takes known key formats out of what it sends.
+  # A --sandbox flag would replace that protection without saying so, so the flag becomes the profile's
+  # base instead, and anything that would take the protection away is refused.
+  if [ ! -e "$folder/allow-secret-files" ]; then
+    local base=":workspace" kept=() mode next="" setting=""
+    for argument in "$@"; do
+      if [ -n "$setting" ]; then
+        # Only as a setting: the same words in a prompt are just words.
+        setting=""
+        case "$argument" in
+          default_permissions=*|permissions.*) mode=danger-full-access ;;
+          *) kept+=("$argument"); continue ;;
+        esac
+      elif [ -n "$next" ]; then
+        next=""; mode=$argument
+      else
+        mode=""
+        case "$argument" in
+          --) kept+=("$argument"); next=""; break ;;
+          -s|--sandbox) next=1; continue ;;
+          --sandbox=*) mode=${argument#--sandbox=} ;;
+          -s?*) mode=${argument#-s} ;;
+          -c|--config) kept+=("$argument"); setting=1; continue ;;
+          --config=default_permissions=*|--config=permissions.*|-cdefault_permissions=*|-cpermissions.*) mode=danger-full-access ;;
+          --dangerously-bypass-approvals-and-sandbox|--yolo) mode=danger-full-access ;;
+          *) kept+=("$argument"); continue ;;
+        esac
+      fi
+      case "$mode" in
+        read-only) base=":read-only" ;;
+        workspace-write) base=":workspace" ;;
+        *) venice_stop "That would let a Venice session read your secret files and send them to Venice. To allow it, turn on \"Let it read secret files\" in Tools → Local models." ;;
+      esac
+    done
+    # Whatever follows a bare -- is Codex's, untouched.
+    if [ "${#kept[@]}" -gt 0 ] && [ "${kept[${#kept[@]}-1]}" = "--" ]; then
+      local seen=0
+      for argument in "$@"; do
+        [ "$seen" = 1 ] && kept+=("$argument")
+        [ "$argument" = "--" ] && seen=1
+      done
+    fi
+    set -- "${kept[@]+"${kept[@]}"}"
+    options+=(-c 'default_permissions="tellurion-venice"' \
+      -c "permissions.tellurion-venice.extends=\"$base\"" \
+      -c "permissions.tellurion-venice.filesystem=$(venice_denied_reads "$root")")
   fi
 
   # Settings for this run only. A project's own config can't override them (Codex ignores
