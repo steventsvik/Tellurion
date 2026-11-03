@@ -1,4 +1,5 @@
 const std = @import("std");
+const translate_c = @import("translate_c");
 const NativeTargetInfo = std.zig.system.NativeTargetInfo;
 
 pub fn build(b: *std.Build) !void {
@@ -11,23 +12,11 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
-    // For dynamic linking, we prefer dynamic linking and to search by
-    // mode first. Mode first will search all paths for a dynamic library
-    // before falling back to static.
-    const dynamic_link_opts: std.Build.Module.LinkSystemLibraryOptions = .{
-        .preferred_link_mode = .dynamic,
-        .search_strategy = .mode_first,
-    };
-
     var test_exe: ?*std.Build.Step.Compile = null;
     if (target.query.isNative()) {
         test_exe = b.addTest(.{
             .name = "test",
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("main.zig"),
-                .target = target,
-                .optimize = optimize,
-            }),
+            .root_module = module,
         });
         const tests_run = b.addRunArtifact(test_exe.?);
         const test_step = b.step("test", "Run tests");
@@ -37,25 +26,29 @@ pub fn build(b: *std.Build) !void {
         b.installArtifact(test_exe.?);
     }
 
-    if (b.systemIntegrationOption("oniguruma", .{})) {
-        module.linkSystemLibrary("oniguruma", dynamic_link_opts);
-
-        if (test_exe) |exe| {
-            exe.linkSystemLibrary2("oniguruma", dynamic_link_opts);
-        }
-    } else {
-        const lib = try buildLib(b, module, .{
+    const lib: union(enum) {
+        system,
+        static: *std.Build.Step.Compile,
+    } = if (b.systemIntegrationOption("oniguruma", .{}))
+        .system
+    else
+        .{ .static = try buildLib(b, .{
             .target = target,
             .optimize = optimize,
-        });
+        }) };
 
-        if (test_exe) |exe| {
-            exe.linkLibrary(lib);
-        }
-    }
+    try translate_c.addImportToModule(b, "oniguruma_c", module, .{
+        .source = .{ .includes = .{
+            .files = &.{.{ .path = "oniguruma.h" }},
+        } },
+        .target = target,
+        .optimize = optimize,
+        .link_system_libs = if (lib == .system) &.{"oniguruma"} else &.{},
+        .link_libs = if (lib == .static) &.{lib.static} else &.{},
+    });
 }
 
-fn buildLib(b: *std.Build, module: *std.Build.Module, options: anytype) !*std.Build.Step.Compile {
+fn buildLib(b: *std.Build, options: anytype) !*std.Build.Step.Compile {
     const target = options.target;
     const optimize = options.optimize;
 
@@ -64,11 +57,12 @@ fn buildLib(b: *std.Build, module: *std.Build.Module, options: anytype) !*std.Bu
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         }),
         .linkage = .static,
     });
     const t = target.result;
-    lib.linkLibC();
+    const is_windows = t.os.tag == .windows;
 
     if (target.result.os.tag.isDarwin()) {
         const apple_sdk = @import("apple_sdk");
@@ -76,33 +70,37 @@ fn buildLib(b: *std.Build, module: *std.Build.Module, options: anytype) !*std.Bu
     }
 
     if (b.lazyDependency("oniguruma", .{})) |upstream| {
-        lib.addIncludePath(upstream.path("src"));
-        module.addIncludePath(upstream.path("src"));
-
-        lib.addConfigHeader(b.addConfigHeader(.{
+        lib.root_module.addIncludePath(upstream.path("src"));
+        lib.root_module.addConfigHeader(b.addConfigHeader(.{
             .style = .{ .cmake = upstream.path("src/config.h.cmake.in") },
         }, .{
             .PACKAGE = "oniguruma",
             .PACKAGE_VERSION = "6.9.9",
             .VERSION = "6.9.9",
             .HAVE_ALLOCA = true,
-            .HAVE_ALLOCA_H = true,
-            .USE_CRNL_AS_LINE_TERMINATOR = false,
+            .HAVE_ALLOCA_H = !is_windows,
+            .USE_CRNL_AS_LINE_TERMINATOR = is_windows,
             .HAVE_STDINT_H = true,
-            .HAVE_SYS_TIMES_H = true,
-            .HAVE_SYS_TIME_H = true,
+            .HAVE_SYS_TIMES_H = !is_windows,
+            .HAVE_SYS_TIME_H = !is_windows,
             .HAVE_SYS_TYPES_H = true,
-            .HAVE_UNISTD_H = true,
+            .HAVE_UNISTD_H = !is_windows,
             .HAVE_INTTYPES_H = true,
             .SIZEOF_INT = t.cTypeByteSize(.int),
             .SIZEOF_LONG = t.cTypeByteSize(.long),
             .SIZEOF_LONG_LONG = t.cTypeByteSize(.longlong),
-            .SIZEOF_VOIDP = t.ptrBitWidth() / t.cTypeBitSize(.char),
+            .SIZEOF_VOIDP = t.ptrBitWidth() / t.cTypeBitSize(.char).?,
         }));
 
         var flags: std.ArrayList([]const u8) = .empty;
         defer flags.deinit(b.allocator);
-        lib.addCSourceFiles(.{
+        if (target.result.abi == .msvc) {
+            try flags.appendSlice(b.allocator, &.{
+                "-fno-sanitize=undefined",
+                "-fno-sanitize-trap=undefined",
+            });
+        }
+        lib.root_module.addCSourceFiles(.{
             .root = upstream.path(""),
             .flags = flags.items,
             .files = &.{

@@ -1,72 +1,39 @@
 #!/usr/bin/env bash
-# Move the `custom` branch onto the newest official Ghostty release and rebuild.
-# Usage: ./update-ghostty.sh          (check + update + build)
+# Merge the newest official Ghostty release into a new branch off `dev`.
+# Usage: ./update-ghostty.sh          (check, then merge)
 #        ./update-ghostty.sh --check  (only report whether an update exists)
+#
+# It merges and never rebases: this history is public, with forks. It doesn't build, install
+# or push; the branch goes through a pull request like any other change.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 if [[ -n "$(git status --porcelain)" ]]; then
-  echo "Uncommitted changes present — commit or stash them first." >&2
+  echo "Uncommitted changes present. Commit or stash them first." >&2
   exit 1
 fi
 
+git fetch origin dev --quiet
 git fetch upstream --tags --quiet
 
-current=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' custom)
 latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
-
-echo "Your base: $current"
 echo "Latest official release: $latest"
 
-if [[ "$current" == "$latest" ]]; then
-  echo "Already up to date."
+if git merge-base --is-ancestor "$latest" origin/dev; then
+  echo "dev already has it."
   exit 0
 fi
 [[ "${1:-}" == "--check" ]] && exit 0
 
-git switch --quiet custom
-git branch --force "backup-before-$latest" custom
-if ! git rebase --onto "$latest" "$current" custom; then
+branch="ghostty-${latest#v}"
+git switch --quiet -c "$branch" origin/dev
+if ! git merge --no-ff --no-edit "$latest"; then
   echo
-  echo "Your changes conflict with $latest. Resolve them, then run: git rebase --continue"
-  echo "To give up and go back: git rebase --abort (backup branch: backup-before-$latest)"
+  echo "$latest conflicts with Tellurion on $branch. Resolve the conflicts, then: git commit"
+  echo "To give up: git merge --abort"
   exit 1
 fi
 
 zig_version=$(grep -o 'minimum_zig_version = "[^"]*"' build.zig.zon | cut -d'"' -f2)
-# Homebrew's Zig bottles carry patches for newer Xcode SDKs; the ziglang.org
-# tarballs of 0.15.x fail to link against the macOS 26.4+ SDKs.
-zig_bin=""
-for candidate in "/opt/homebrew/opt/zig@${zig_version%.*}/bin/zig" /opt/homebrew/bin/zig; do
-  if [[ -x "$candidate" && "$("$candidate" version)" == "$zig_version" ]]; then
-    zig_bin="$candidate"
-    break
-  fi
-done
-if [[ -z "$zig_bin" ]]; then
-  echo "$latest needs Zig $zig_version. Try: brew install zig@${zig_version%.*}" >&2
-  exit 1
-fi
-
-# The repo lives under ~/Desktop, where iCloud's File Provider tags new files
-# with xattrs that codesign rejects. Keep Xcode's build output outside it.
-build_cache="$HOME/Library/Caches/ghostty-extreme/macos-build"
-if [[ ! -L macos/build ]]; then
-  rm -rf macos/build
-  mkdir -p "$build_cache"
-  ln -s "$build_cache" macos/build
-fi
-
-"$zig_bin" build -Doptimize=ReleaseFast -Dxcframework-target=native
-# A copy installed before the rename keeps its old name until it next quits.
-app="/Applications/Tellurion.app"
-[[ ! -d "$app" && -d "/Applications/GhosttyEXTREME.app" ]] && app="/Applications/GhosttyEXTREME.app"
-ditto macos/build/ReleaseLocal/Ghostty.app "$app"
-# Sign with a stable identity (if one is set up) so macOS keeps the app's permissions
-# across updates; an ad-hoc signature changes with every build.
-if [[ -n "${GHOSTTY_EXTREME_SIGNING_IDENTITY:-}" ]]; then
-  codesign --force --deep --sign "$GHOSTTY_EXTREME_SIGNING_IDENTITY" "$app"
-fi
-./agent-hooks/install.sh
-git push --force-with-lease origin custom
-echo "Updated to $latest and rebuilt."
+echo "Merged $latest into $branch. It needs Zig $zig_version."
+echo "Next: build it (see CLAUDE.md), test it, and open a pull request into dev."

@@ -8,7 +8,7 @@ const Key = @import("key.zig").Key;
 
 /// The full list of entries for the current platform.
 pub const entries: []const Entry = entries: {
-    const native_idx = switch (builtin.os.tag) {
+    const native_idx = switch (builtin.target.os.tag) {
         .ios, .macos => 4, // mac
         .windows => 3, // win
         .freebsd, .linux => 2, // xkb
@@ -40,7 +40,7 @@ pub const Entry = struct {
 };
 
 /// A map from code to key. This isn't meant to be used at runtime
-/// (though it could), so it isn't exported. It it used to build the
+/// (though it could), so it isn't exported. It used to build the
 /// key value for Entry.
 const code_to_key = code_to_key: {
     @setEvalBranchQuota(5000);

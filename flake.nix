@@ -6,14 +6,19 @@
     # glibc versions used by our dependencies from Nix are compatible with the
     # system glibc that the user is building for.
     #
-    # We are currently on nixpkgs-unstable to get Zig 0.15 for our package.nix and
-    # Gnome 49/Gtk 4.20.
+    # We are currently on nixpkgs-unstable to get Zig 0.16 for our package.nix,
+    # Gnome 50/Gtk 4.22, and fontconfig 2.18.
     #
-    nixpkgs.url = "https://channels.nixos.org/nixpkgs-unstable/nixexprs.tar.xz";
+    nixpkgs.url = "https://channels.nixos.org/nixpkgs-unstable/nixexprs.tar.zst";
 
     # Used for shell.nix
     flake-compat = {
       url = "github:edolstra/flake-compat";
+      flake = false;
+    };
+
+    systems = {
+      url = "github:nix-systems/default";
       flake = false;
     };
 
@@ -22,11 +27,12 @@
       inputs = {
         nixpkgs.follows = "nixpkgs";
         flake-compat.follows = "flake-compat";
+        systems.follows = "systems";
       };
     };
 
     zon2nix = {
-      url = "github:jcollie/zon2nix?rev=c28e93f3ba133d4c1b1d65224e2eebede61fd071";
+      url = "github:jcollie/zon2nix";
       inputs = {
         nixpkgs.follows = "nixpkgs";
       };
@@ -53,6 +59,18 @@
     # Our supported systems are the same supported systems as the Zig binaries.
     platforms = lib.attrNames zig.packages;
 
+    # Backport https://codeberg.org/ziglang/zig/commit/0bfd34342b so
+    # cross-compiling C/C++ sources for iOS doesn't instantiate unsupported
+    # process spawning code in Zig 0.17's standard library.
+    zig_0_17 = system:
+      zig.packages.${system}."0.17.0".overrideAttrs (previousAttrs: {
+        patches =
+          (previousAttrs.patches or [])
+          ++ [
+            ./nix/patches/zig-0.17-ios-process-replace.patch
+          ];
+      });
+
     # It's not always possible to build Ghostty with Nix for each system,
     # one such example being macOS due to missing Swift 6 and xcodebuild
     # support in the Nix ecosystem. Therefore for things like package outputs
@@ -67,9 +85,9 @@
       revision = self.shortRev or self.dirtyShortRev or "dirty";
     };
   in {
-    devShells = forAllPlatforms (pkgs: {
-      default = pkgs.callPackage ./nix/devShell.nix {
-        zig = zig.packages.${pkgs.stdenv.hostPlatform.system}."0.15.2";
+    devShells = forAllPlatforms (pkgs: let
+      args = {
+        zig = zig_0_17 pkgs.stdenv.hostPlatform.system;
         wraptest = pkgs.callPackage ./nix/pkgs/wraptest.nix {};
         zon2nix = zon2nix;
 
@@ -82,21 +100,45 @@
           };
         };
       };
-    });
+    in
+      {
+        default = pkgs.callPackage ./nix/devShell.nix args;
+      }
+      // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+        fuzz = pkgs.callPackage ./nix/devShell.nix (args // {withAfl = true;});
+      });
 
     packages =
-      forAllPlatforms (pkgs: {
-        # Deps are needed for environmental setup on macOS
-        deps = pkgs.callPackage ./build.zig.zon.nix {};
-      })
-      // forBuildablePlatforms (pkgs: rec {
-        ghostty-debug = pkgs.callPackage ./nix/package.nix (mkPkgArgs "Debug");
-        ghostty-releasesafe = pkgs.callPackage ./nix/package.nix (mkPkgArgs "ReleaseSafe");
-        ghostty-releasefast = pkgs.callPackage ./nix/package.nix (mkPkgArgs "ReleaseFast");
+      builtins.foldl'
+      lib.recursiveUpdate
+      {}
+      [
+        (
+          forAllPlatforms (pkgs: rec {
+            # Deps are needed for environmental setup on macOS
+            deps = pkgs.callPackage ./build.zig.zon.nix {};
 
-        ghostty = ghostty-releasefast;
-        default = ghostty;
-      });
+            libghostty-vt-debug = pkgs.callPackage ./nix/libghostty-vt.nix (mkPkgArgs "debug");
+            libghostty-vt-releasesafe = pkgs.callPackage ./nix/libghostty-vt.nix (mkPkgArgs "safe");
+            libghostty-vt-releasefast = pkgs.callPackage ./nix/libghostty-vt.nix (mkPkgArgs "fast");
+            libghostty-vt-debug-no-simd = pkgs.callPackage ./nix/libghostty-vt.nix ((mkPkgArgs "debug") // {simd = false;});
+            libghostty-vt-releasesafe-no-simd = pkgs.callPackage ./nix/libghostty-vt.nix ((mkPkgArgs "safe") // {simd = false;});
+            libghostty-vt-releasefast-no-simd = pkgs.callPackage ./nix/libghostty-vt.nix ((mkPkgArgs "fast") // {simd = false;});
+
+            libghostty-vt = libghostty-vt-releasefast;
+          })
+        )
+        (
+          forBuildablePlatforms (pkgs: rec {
+            ghostty-debug = pkgs.callPackage ./nix/package.nix (mkPkgArgs "debug");
+            ghostty-releasesafe = pkgs.callPackage ./nix/package.nix (mkPkgArgs "safe");
+            ghostty-releasefast = pkgs.callPackage ./nix/package.nix (mkPkgArgs "fast");
+
+            ghostty = ghostty-releasefast;
+            default = ghostty;
+          })
+        )
+      ];
 
     formatter = forAllPlatforms (pkgs: pkgs.alejandra);
 
@@ -136,10 +178,10 @@
     overlays = {
       default = self.overlays.releasefast;
       releasefast = final: prev: {
-        ghostty = final.callPackage ./nix/package.nix (mkPkgArgs "ReleaseFast");
+        ghostty = final.callPackage ./nix/package.nix (mkPkgArgs "fast");
       };
       debug = final: prev: {
-        ghostty = final.callPackage ./nix/package.nix (mkPkgArgs "Debug");
+        ghostty = final.callPackage ./nix/package.nix (mkPkgArgs "debug");
       };
     };
   };

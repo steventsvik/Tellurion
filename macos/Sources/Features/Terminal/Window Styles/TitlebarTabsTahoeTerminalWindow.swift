@@ -51,6 +51,16 @@ class TitlebarTabsTahoeTerminalWindow: TransparentTitlebarTerminalWindow, NSTool
         self.toolbar = toolbar
         toolbarStyle = .unifiedCompact
     }
+    // Called after new tab finishes adjusting and setupTabBar is called in order to prevent Tab Bar hiding/size bug that occurs with some interactions with Mac UI
+    override func syncAppearance(_ surfaceConfig: Ghostty.SurfaceView.DerivedConfig) {
+        super.syncAppearance(surfaceConfig)
+        DispatchQueue.main.async {
+            // HACK: wait a tick before doing anything, to avoid edge cases during startup... :/
+            // If we don't do this then on launch windows with restored state with tabs will end
+            // up with messed up tab bars that don't show all tabs.
+            self.setupTabBar()
+        }
+    }
 
     override func becomeMain() {
         super.becomeMain()
@@ -67,42 +77,6 @@ class TitlebarTabsTahoeTerminalWindow: TransparentTitlebarTerminalWindow, NSTool
 
         viewModel.isMainWindow = false
     }
-
-    /// On our Tahoe titlebar tabs, we need to fix up right click events because they don't work
-    /// naturally due to whatever mess we made.
-    override func sendEvent(_ event: NSEvent) {
-        guard viewModel.hasTabBar else {
-            super.sendEvent(event)
-            return
-        }
-
-        let isRightClick =
-            event.type == .rightMouseDown ||
-            (event.type == .otherMouseDown && event.buttonNumber == 2) ||
-            (event.type == .leftMouseDown && event.modifierFlags.contains(.control))
-        guard isRightClick else {
-            super.sendEvent(event)
-            return
-        }
-
-        guard let tabBarView else {
-            super.sendEvent(event)
-            return
-        }
-
-        guard !tabTitleEditor.handleRightMouseDown(event) else {
-            return
-        }
-
-        let locationInTabBar = tabBarView.convert(event.locationInWindow, from: nil)
-        guard tabBarView.bounds.contains(locationInTabBar) else {
-            super.sendEvent(event)
-            return
-        }
-
-        tabBarView.rightMouseDown(with: event)
-    }
-
     // This is called by macOS for native tabbing in order to add the tab bar. We hook into
     // this, detect the tab bar being added, and override its behavior.
     override func addTitlebarAccessoryViewController(_ childViewController: NSTitlebarAccessoryViewController) {
@@ -190,7 +164,9 @@ class TitlebarTabsTahoeTerminalWindow: TransparentTitlebarTerminalWindow, NSTool
         }
 
         // Find our clip view
-        guard let clipView = tabBarView.firstSuperview(withClassName: "NSTitlebarAccessoryClipView") else { return }
+        // macOS 26: NSTitlebarAccessoryClipView
+        // macOS 27(beta 2): NSTitlebarAccessoryContainerView
+        guard let clipView = tabBarView.firstSuperview(withClassName: "NSTitlebarAccessoryClipView") ?? tabBarView.firstSuperview(withClassName: "NSTitlebarAccessoryContainerView") else { return }
         guard let accessoryView = clipView.subviews[safe: 0] else { return }
         guard let toolbarView = titlebarView.firstDescendant(withClassName: "NSToolbarView") else { return }
 
@@ -227,6 +203,14 @@ class TitlebarTabsTahoeTerminalWindow: TransparentTitlebarTerminalWindow, NSTool
 
         clipView.needsLayout = true
         accessoryView.needsLayout = true
+
+        if #available(macOS 27.0, *) {
+            // Add some delay to cover the case where:
+            // AppKit resets the style after exiting fullscreen
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(50)) { [weak self] in
+                self?.reduceTabBarBackgroundGoldenGate()
+            }
+        }
 
         // Setup an observer for the NSTabBar frame. When system appearance changes or
         // other events occur, the tab bar can resize and clear our constraints. When this
@@ -277,11 +261,11 @@ class TitlebarTabsTahoeTerminalWindow: TransparentTitlebarTerminalWindow, NSTool
         switch itemIdentifier {
         case .title:
             let item = NSToolbarItem(itemIdentifier: .title)
-            item.view = NSHostingView(rootView: TitleItem(viewModel: viewModel))
+            item.view = ClickThroughHostingView(rootView: TitleItem(viewModel: viewModel))
             // Fix: https://github.com/ghostty-org/ghostty/discussions/9027
             item.view?.setContentCompressionResistancePriority(.required, for: .horizontal)
             item.visibilityPriority = .user
-            item.isEnabled = true
+            item.isEnabled = false
 
             // This is the documented way to avoid the glass view on an item.
             // We don't want glass on our title.
@@ -342,5 +326,12 @@ extension TitlebarTabsTahoeTerminalWindow {
                 .frame(maxWidth: .greatestFiniteMagnitude, alignment: .center)
                 .opacity(viewModel.hasTabBar ? 0 : 1) // hide when in fullscreen mode, where title bar will appear in the leading area under window buttons
         }
+    }
+}
+
+/// A "Ghosting" Hosting View, that acts like it's not there
+private class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
     }
 }
