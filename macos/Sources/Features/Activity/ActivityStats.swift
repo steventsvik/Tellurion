@@ -7,6 +7,11 @@ import AppKit
 struct ActivitySession: Identifiable, Codable, Equatable {
     let id: String
     let agent: String
+    /// The provider Codex recorded for the session, and its latest model: a session on Venice
+    /// has to resume there, never on another provider.
+    var codexProvider: String?
+    var codexModel: String?
+    var onVenice: Bool { agent == "codex" && codexProvider == VeniceCodex.provider }
     var cwd: String?
     var title: String?
     var firstPrompt: String?
@@ -50,7 +55,7 @@ final class ActivityStats {
     private var cache: [String: CacheEntry] = [:]
     private let lock = NSLock()
     // v2 added per-day API costs; older summaries are rebuilt once.
-    private static let cacheFile = AgentTools.root.appendingPathComponent("activity-cache-v2.json")
+    private static let cacheFile = AgentTools.root.appendingPathComponent("activity-cache-v3.json")
     /// Gaps longer than this between events aren't counted as active time.
     private static let idleGap: TimeInterval = 300
 
@@ -310,9 +315,15 @@ final class ActivityStats {
                 session.cwd = payload["cwd"] as? String ?? session.cwd
                 if let id = payload["id"] as? String { session = ActivitySession(id: id, agent: "codex", cwd: session.cwd) }
             }
+            if type == "session_meta", let provider = payload["model_provider"] as? String {
+                session.codexProvider = provider
+            }
             if type == "turn_context" {
                 if session.cwd == nil { session.cwd = payload["cwd"] as? String }
-                if let name = payload["model"] as? String, !name.isEmpty { model = name }
+                if let name = payload["model"] as? String, !name.isEmpty {
+                    model = name
+                    session.codexModel = name
+                }
             }
             if type == "event_msg", kind == "user_message", let text = payload["message"] as? String, let prompt = cleanPrompt(text) {
                 userEvents += 1

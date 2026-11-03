@@ -40,6 +40,8 @@ enum TestHooks {
     static var log: String? { value("GHOSTTY_EXTREME_TEST_LOG") }
     /// `GHOSTTY_EXTREME_TEST_FEED=<url>`: points a test copy's updater at a local feed.
     static var updateFeed: String? { value("GHOSTTY_EXTREME_TEST_FEED") }
+    /// `GHOSTTY_EXTREME_TEST_VENICE=<url>`: points a test copy's Venice models at a local server.
+    static var veniceServer: String? { value("GHOSTTY_EXTREME_TEST_VENICE") }
     /// `GHOSTTY_EXTREME_TEST_WELCOME=1`: shows the welcome window even if it was finished before.
     static var welcome: Bool { flag("GHOSTTY_EXTREME_TEST_WELCOME") }
     /// `GHOSTTY_EXTREME_TEST_TOOL=<title>`: chooses that tool once the Tools panel is open.

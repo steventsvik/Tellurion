@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Chat with a model on this Mac. Nothing leaves the Mac.
+"""Chat with a model on this Mac, where nothing leaves it, or on a Venice account.
 
 Usage: local-chat.py [--provider P] [--base URL] <model>
        (Tellurion runs it as `tellurion local …`)
@@ -9,6 +9,10 @@ Usage: local-chat.py [--provider P] [--base URL] <model>
                         MLX's mlx_lm.server: 127.0.0.1:8080)
   apple                 Apple's on-device model, served by Tellurion itself (its address
                         and key are in ~/.ghostty-extreme/apple-model.json)
+  venice                a model on your Venice account, in the cloud: what you type goes to
+                        Venice's servers. Tellurion holds the account's key and forwards the
+                        chat; this only knows a token for that, in
+                        ~/.ghostty-extreme/venice-proxy.json
 
 A plain chat in the terminal: type a message, the reply streams in. Inside Tellurion it
 also reports to the sidebar (working while it answers, done when it's finished), with the
@@ -28,6 +32,19 @@ import urllib.request
 
 DIM, BOLD, GOLD, RED, RESET = "\033[2m", "\033[1m", "\033[38;5;179m", "\033[31m", "\033[0m"
 
+# Everything that can steer a terminal, left out of what a server sends: escape sequences
+# need these, and a model's answer or an error isn't to be trusted with them.
+CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def clean(text):
+    """A server's text, safe to print: only newlines and tabs of the control characters."""
+    return CONTROL.sub("", text)
+
+
+def tellurion_home():
+    return os.environ.get("GHOSTTY_EXTREME_TEST_HOME") or os.path.expanduser("~")
+
 
 def ollama_base():
     """OLLAMA_HOST read the way Ollama reads it: "host", "host:port", ":port" or a URL."""
@@ -44,7 +61,8 @@ def ollama_base():
     return f"{scheme}://{host}"
 
 
-PROVIDERS = {"ollama": "Ollama", "lmstudio": "LM Studio", "openai": "the model server", "apple": "Tellurion"}
+PROVIDERS = {"ollama": "Ollama", "lmstudio": "LM Studio", "openai": "the model server", "apple": "Tellurion",
+             "venice": "Tellurion"}
 PROVIDER = "ollama"
 BASE = ollama_base()
 HEADERS = {"Content-Type": "application/json"}
@@ -63,6 +81,12 @@ def configure(provider, base):
             server = json.load(handle)
         BASE = f"http://127.0.0.1:{int(server['port'])}"
         HEADERS["Authorization"] = "Bearer " + server["token"]
+    elif provider == "venice":
+        with open(os.path.join(tellurion_home(), ".ghostty-extreme", "venice-proxy.json")) as handle:
+            server = json.load(handle)
+        # Its paths are /api/v1/…, and the chat's own are /v1/…
+        BASE = f"http://127.0.0.1:{int(server['port'])}/api"
+        HEADERS["Authorization"] = "Bearer " + server["token"]
     elif base:
         BASE = base.rstrip("/")
 
@@ -73,7 +97,9 @@ def report(model, event, detail=""):
         return
     if event != "transcript":
         detail = " ".join("".join(c if c.isprintable() else " " for c in detail).split())[:48]
-    body = {"agent": "local", "event": event, "detail": detail, "session": model[:60],
+    # The sidebar names the chat after its session; a cloud chat says so there too.
+    session = model[:52] + " · cloud" if PROVIDER == "venice" else model[:60]
+    body = {"agent": "local", "event": event, "detail": detail, "session": session,
             "t": os.environ.get("GHOSTTY_EXTREME_EVENT_TOKEN", "")}
     # The terminal caps notification bodies at 255 bytes.
     while len(json.dumps(body, separators=(",", ":")).encode()) > 250 and body["detail"]:
@@ -112,17 +138,71 @@ def post(path, payload, timeout=600):
     return urllib.request.urlopen(request, timeout=timeout)
 
 
+NOT_SERVING = "Tellurion isn't connected to Venice right now. Open Tellurion, or connect your account in Tools → Local models."
+
+# Venice's errors are mostly a sentence and a status. For someone in a chat, by status.
+VENICE_STATUS = {
+    401: "Venice turned down the key: it may be expired or revoked. Connect a new one in Tools → Local models.",
+    402: "Out of Venice credits. Top up at https://venice.ai/settings/api",
+    404: "Venice doesn't have this model, or it's offline. Pick one from Tools → Local models.",
+    429: "Venice is limiting requests right now. Try again in a minute.",
+}
+# Those the proxy inside Tellurion answers with.
+PROXY_ERRORS = {"proxy_token": NOT_SERVING, "not_connected": NOT_SERVING}
+
+
+def server_error(body, status=None):
+    """The text of a server's error: `{"error": "…"}` or `{"error": {"message": "…", "code": …}}`,
+    in plain words when Venice's status says what it means, with how long it asks to wait
+    (`retry_after`, on an overloaded model). None if there's none to read."""
+    detail = body.get("error") if isinstance(body, dict) else None
+    code, message, wait = None, detail, None
+    if isinstance(detail, dict):
+        code, message, wait = detail.get("code"), detail.get("message"), detail.get("retry_after")
+    if isinstance(body, dict) and wait is None:
+        wait = body.get("retry_after")
+    text = clean(str(message)) if message else None
+    if PROVIDER == "venice":
+        text = PROXY_ERRORS.get(code) or VENICE_STATUS.get(status) or text
+    if text and isinstance(wait, (int, float)) and not isinstance(wait, bool) and wait > 0:
+        text += f" Try again in {int(wait)} seconds."
+    return text
+
+
 def error_text(error):
     if isinstance(error, urllib.error.HTTPError):
         try:
-            return json.loads(error.read().decode()).get("error", str(error))
+            text = server_error(json.loads(error.read().decode()), error.code)
         except ValueError:
-            return str(error)
+            text = None
+        return text or clean(str(error))
     if isinstance(error, urllib.error.URLError):
         if PROVIDER == "apple":
             return "Tellurion isn't serving Apple's model right now. Open it again from Local models."
+        if PROVIDER == "venice":
+            return NOT_SERVING
         return f"{PROVIDERS[PROVIDER]} isn't answering at {BASE}. Start it, then try again."
-    return str(error)
+    return clean(str(error))
+
+
+def venice_check(model):
+    """Asks for Venice's models, which proves the connection before anything is typed. Returns an
+    error (or None) and what's known of the model, whose privacy tier the banner says."""
+    request = urllib.request.Request(BASE + "/v1/models?type=text", headers=HEADERS)
+    spec = {}
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            for row in json.load(response).get("data", []):
+                if row.get("id") == model:
+                    spec = row.get("model_spec") or {}
+    except urllib.error.HTTPError as error:
+        if error.code == 401:
+            return error_text(error), spec
+    except urllib.error.URLError as error:
+        return error_text(error), spec
+    except (OSError, ValueError, AttributeError):
+        pass  # A slow or odd list shouldn't stop a chat: its first message will say what's wrong.
+    return None, spec
 
 
 def load(model):
@@ -162,9 +242,10 @@ def reply_openai(model, messages, show_reasoning):
                 break
             chunk = json.loads(data)
             if chunk.get("error"):
-                raise RuntimeError(chunk["error"].get("message") if isinstance(chunk["error"], dict) else chunk["error"])
+                raise RuntimeError(server_error(chunk) or "The server reported an error.")
             delta = ((chunk.get("choices") or [{}])[0].get("delta") or {})
-            thought = delta.get("reasoning_content") or delta.get("reasoning")
+            thought = clean(delta.get("reasoning_content") or delta.get("reasoning") or "")
+            content = clean(delta.get("content") or "")
             if thought:
                 reasoning.append(thought)
                 if show_reasoning:
@@ -175,12 +256,12 @@ def reply_openai(model, messages, show_reasoning):
                     last = time.time()
                     sys.stdout.write(f"\r{DIM}Thinking… {int(last - started)}s{RESET}\033[K")
                 in_thinking = True
-            if delta.get("content"):
+            if content:
                 if in_thinking:
                     sys.stdout.write(RESET + "\n\n" if show_reasoning else "\r\033[K")
                     in_thinking = False
-                text.append(delta["content"])
-                sys.stdout.write(delta["content"])
+                text.append(content)
+                sys.stdout.write(content)
             sys.stdout.flush()
     sys.stdout.write(RESET + "\n")
     record("thinking", "".join(reasoning).strip())
@@ -208,22 +289,23 @@ def reply_ollama(model, messages, show_reasoning, thinks):
             if chunk.get("error"):
                 raise RuntimeError(chunk["error"])
             message = chunk.get("message") or {}
-            if message.get("thinking"):
-                reasoning.append(message["thinking"])
+            thought, content = clean(message.get("thinking") or ""), clean(message.get("content") or "")
+            if thought:
+                reasoning.append(thought)
                 if show_reasoning:
                     if not in_thinking:
                         sys.stdout.write(DIM)
-                    sys.stdout.write(message["thinking"])
+                    sys.stdout.write(thought)
                 elif time.time() - last > 0.5:
                     last = time.time()
                     sys.stdout.write(f"\r{DIM}Thinking… {int(last - started)}s{RESET}\033[K")
                 in_thinking = True
-            if message.get("content"):
+            if content:
                 if in_thinking:
                     sys.stdout.write(RESET + "\n\n" if show_reasoning else "\r\033[K")
                     in_thinking = False
-                text.append(message["content"])
-                sys.stdout.write(message["content"])
+                text.append(content)
+                sys.stdout.write(content)
             sys.stdout.flush()
             if chunk.get("done"):
                 break
@@ -258,6 +340,8 @@ def free_on_exit(model):
     """Frees the model when this chat ends, however it ends: /exit, Ctrl-D, or its tab or
     pane closed (which can kill the chat while it waits for input). A small helper process,
     outside the terminal's session, waits for the chat to be gone and then unloads the model."""
+    if PROVIDER == "venice":
+        return  # Nothing on this Mac to free.
     helper = [sys.executable, os.path.abspath(__file__), "--unload-when-done", "--provider", PROVIDER, "--base", BASE, model]
     try:
         # The chat holds the helper's stdin open until it exits; the helper reads it to the end.
@@ -290,9 +374,9 @@ def main():
             base = args[1]
         args = args[2:]
     if len(args) != 1 or not args[0].strip() or provider not in PROVIDERS:
-        print("Usage: tellurion local [--provider ollama|lmstudio|openai|apple] [--base URL] <model>", file=sys.stderr)
+        print("Usage: tellurion local [--provider ollama|lmstudio|openai|apple|venice] [--base URL] <model>", file=sys.stderr)
         return 2
-    model = args[0].strip()
+    model = clean(args[0].strip())
     if helper:
         try:
             configure(provider, base)
@@ -303,15 +387,29 @@ def main():
     try:
         configure(provider, base)
     except (OSError, ValueError, KeyError):
-        print(f"{RED}Tellurion isn't serving Apple's model right now. Open it again from Local models.{RESET}", file=sys.stderr)
+        if provider == "venice":
+            print(f"{RED}{NOT_SERVING}{RESET}", file=sys.stderr)
+        else:
+            print(f"{RED}Tellurion isn't serving Apple's model right now. Open it again from Local models.{RESET}", file=sys.stderr)
         return 1
     sys.stdout.write(f"\033]2;{model}\a")  # The tab's title.
-    print(f"{DIM}Loading {model}…{RESET}", flush=True)
-    problem = load(model)
+    cloud = PROVIDER == "venice"
+    print(f"{DIM}{'Connecting to Venice' if cloud else 'Loading ' + model}…{RESET}", flush=True)
+    spec = {}
+    if cloud:
+        problem, spec = venice_check(model)
+    else:
+        problem = load(model)
     if problem:
         print(f"{RED}{problem}{RESET}", file=sys.stderr)
         return 1
-    print(f"{GOLD}{BOLD}{model}{RESET}{DIM} · on this Mac, through {PROVIDERS[PROVIDER] if PROVIDER != 'apple' else 'Apple Intelligence'} · /think shows reasoning · /clear · /exit · Ctrl-C stops a reply{RESET}\n")
+    where = "in the cloud, on Venice" if cloud else f"on this Mac, through {PROVIDERS[PROVIDER] if PROVIDER != 'apple' else 'Apple Intelligence'}"
+    print(f"{GOLD}{BOLD}{model}{RESET}{DIM} · {where} · /think shows reasoning · /clear · /exit · Ctrl-C stops a reply{RESET}")
+    if cloud and spec.get("privacy") == "anonymized":
+        print(f"{DIM}Anonymized: this model's own provider sees what you send, and may store it.{RESET}")
+    elif cloud:
+        print(f"{DIM}What you type goes to Venice's servers. Venice says it doesn't store it, which can't be verified from here.{RESET}")
+    print()
     free_on_exit(model)
     report(model, "session_start")
     # Where the code editor finds this chat's live feed.

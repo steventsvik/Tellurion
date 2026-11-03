@@ -39,6 +39,7 @@ enum HookInstaller {
             ("opencode-plugin.js", hooksFolder),
             ("amp-plugin.ts", hooksFolder),
             ("local-chat.py", hooksFolder),
+            ("venice-catalog.py", hooksFolder),
             ("localhost", binFolder),
             ("localhost-run", binFolder),
             ("tellurion", binFolder),
