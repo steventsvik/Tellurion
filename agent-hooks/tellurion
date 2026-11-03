@@ -365,7 +365,12 @@ venice_search() {
       esac
       ;;
     stop)
-      docker rm -f "$VENICE_SEARXNG_NAME" >/dev/null 2>&1 && printf 'SearXNG is stopped and removed.\n' || printf "SearXNG isn't running here.\n"
+      if type -P docker >/dev/null && docker inspect "$VENICE_SEARXNG_NAME" >/dev/null 2>&1; then
+        docker rm -f "$VENICE_SEARXNG_NAME" >/dev/null || venice_stop "Couldn't remove SearXNG"
+        printf 'SearXNG is stopped and removed.\n'
+      else
+        printf "SearXNG isn't set up here.\n"
+      fi
       ;;
     status)
       address=$(venice_search_address "$folder")

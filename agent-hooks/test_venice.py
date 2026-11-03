@@ -316,6 +316,12 @@ class TellurionVeniceTests(unittest.TestCase):
         for bad in ("file:///etc/passwd", "search.example", ""):
             self.assertNotEqual(self.search_cli("use", bad).returncode, 0, bad)
 
+    def test_search_stop_only_says_it_stopped_something(self):
+        self.assertIn("isn't set up", self.search_cli("stop").stdout)
+        self.search_env = {"FAKE_EXISTS": "1"}
+        self.assertIn("stopped and removed", self.search_cli("stop").stdout)
+        self.assertIn("rm -f tellurion-searxng", Path(str(self.log) + ".docker").read_text())
+
     def test_search_status_says_what_is_on(self):
         self.assertIn("Web search: off", self.search_cli("status").stdout)
         (self.root / "venice").mkdir(exist_ok=True)
