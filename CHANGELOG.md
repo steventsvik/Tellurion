@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Web search for Venice models in Codex.** Turn on **Search the web with Exa** in Local models. Sessions you start from then on can search, and what they search for goes to Exa, with no fee or account within Exa's rate limit. Results count as tokens on Venice. Left off, a session has no web access, and a model asked to go online may spend money trying before it gives up.
+
 ## 1.9.0
 
 Built on Ghostty 1.4, with abliterated models on Venice, in Codex, from your own account.

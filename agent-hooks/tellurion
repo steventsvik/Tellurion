@@ -396,6 +396,10 @@ venice_codex() {
   # What it reads goes to Venice, so secret files stay out of its reach unless that's switched on.
   # The sandbox enforces this for commands and edits; MCP servers and hooks run outside it, which is
   # why the proxy also takes known key formats out of what it sends.
+  # Commands have no network and Codex's own search runs on OpenAI's servers, so a session can only
+  # search through an MCP server.
+  [ -e "$folder/use-web-search" ] && options+=(-c 'mcp_servers.exa_search={url="https://mcp.exa.ai/mcp"}')
+
   # A --sandbox flag would replace that protection without saying so, so the flag becomes the profile's
   # base instead, and anything that would take the protection away is refused.
   if [ ! -e "$folder/allow-secret-files" ]; then

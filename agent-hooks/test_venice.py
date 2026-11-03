@@ -262,6 +262,17 @@ class TellurionVeniceTests(unittest.TestCase):
         self.assertNotIn('tellurion-venice', joined)
         self.assertIn('features.memories=false', joined, "each switch is its own")
 
+    def test_web_search_is_off_by_default(self):
+        self.run_cli(TELLURION_VENICE_MODEL="chosen-model")
+        self.assertNotIn("mcp.exa.ai", "\n".join(self.argv()))
+
+    def test_web_search_can_be_turned_on(self):
+        (self.root / "venice").mkdir(exist_ok=True)
+        (self.root / "venice" / "use-web-search").touch()
+        self.run_cli(TELLURION_VENICE_MODEL="chosen-model")
+        argv = self.argv()
+        self.assertIn('mcp_servers.exa_search={url="https://mcp.exa.ai/mcp"}', argv)
+
     def test_catalog_comes_from_the_live_list(self):
         Models.seen.clear()
         self.run_cli()
