@@ -3,6 +3,7 @@
 import http.server
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -85,6 +86,13 @@ class SearxHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
+def closed_address():
+    """An address nothing listens on, so no test reaches a real SearXNG on this Mac."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return f"http://127.0.0.1:{probe.getsockname()[1]}"
+
+
 class SearchTests(unittest.TestCase):
     def setUp(self):
         self.exa = Fake(ExaHandler)
@@ -95,6 +103,7 @@ class SearchTests(unittest.TestCase):
         self.addCleanup(folder.cleanup)
         self.folder = Path(folder.name)
         (self.folder / "searxng-url").write_text(self.searx.url + "/\n")
+        self.default_searxng = closed_address()
         self.server = None
         self.next_id = 0
 
@@ -106,7 +115,7 @@ class SearchTests(unittest.TestCase):
     def start(self):
         environment = {key: value for key, value in os.environ.items() if key not in ("http_proxy", "https_proxy")}
         self.server = subprocess.Popen([sys.executable, "-I", str(HERE / "venice-search.py"), "--folder", str(self.folder),
-                                        "--exa-url", self.exa.url], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                        "--exa-url", self.exa.url, "--searxng-url", self.default_searxng], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                        text=True, env=environment)
         self.addCleanup(self.stop)
 
@@ -254,12 +263,20 @@ class SearchTests(unittest.TestCase):
         self.assertTrue(result["isError"])
         self.assertEqual(target.calls, [], "this Mac's own services stay out of reach")
 
-    def test_default_searxng_when_nothing_is_set(self):
+    def test_no_searxng_running_says_how_to_set_it_up(self):
         (self.folder / "searxng-url").unlink()
         self.exa.mode = "limited"
         text, failed = self.search()
         self.assertTrue(failed)
         self.assertIn("tellurion venice search setup", text)
+
+    def test_default_searxng_is_used_when_nothing_is_set(self):
+        (self.folder / "searxng-url").unlink()
+        self.default_searxng = self.searx.url
+        self.exa.mode = "limited"
+        _, failed = self.search()
+        self.assertFalse(failed)
+        self.assertEqual(len(self.searx.calls), 1)
 
 
 if __name__ == "__main__":

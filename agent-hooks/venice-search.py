@@ -223,11 +223,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--folder", required=True)
     parser.add_argument("--exa-url", default=EXA_URL)
+    parser.add_argument("--searxng-url", default=SEARXNG_URL)
     arguments = parser.parse_args()
-    address = SEARXNG_URL
+    address = arguments.searxng_url
     try:
         with open(os.path.join(arguments.folder, "searxng-url"), encoding="utf-8") as file:
-            address = file.read().strip() or SEARXNG_URL
+            address = file.read().strip() or arguments.searxng_url
     except OSError:
         pass
     search = Search(arguments.exa_url, address)
