@@ -182,13 +182,13 @@ private struct OrchestratorPanel: View {
                 }
             }
             .frame(maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Extreme.raised.opacity(0.35)))
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Tellurion.raised.opacity(0.35)))
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .padding(.horizontal, 10)
             activity
             inputBar.padding(.horizontal, 10).padding(.bottom, 10).padding(.top, 8)
         }
-        .background(Extreme.panel)
+        .background(Tellurion.panel)
         // Start Over empties the log: back to the agents, since there's nothing to show.
         .onChange(of: brain.log.isEmpty) { empty in if empty { showLog = false } }
     }
@@ -198,7 +198,7 @@ private struct OrchestratorPanel: View {
     private var topRow: some View {
         HStack(spacing: 8) {
             BoardAssistantOrb(busy: brain.busy, listening: dictation.listening).frame(width: 20, height: 20)
-            Text(summary).font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text).lineLimit(1)
+            Text(summary).font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text).lineLimit(1)
             Spacer(minLength: 4)
             if snapshot.agents > 0 { OrchestratorRing(done: snapshot.done, total: snapshot.agents, color: accent) }
             spawnMenu
@@ -206,8 +206,8 @@ private struct OrchestratorPanel: View {
                 if snapshot.wiring { controller.endWiring() } else { controller.startWiring(id) }
             } label: {
                 Label(snapshot.wiring ? "Done" : "Connect", systemImage: snapshot.wiring ? "checkmark" : "cable.connector")
-                    .font(Extreme.font(11.5, weight: .semibold))
-                    .foregroundColor(snapshot.wiring ? Extreme.ink : accent)
+                    .font(Tellurion.font(11.5, weight: .semibold))
+                    .foregroundColor(snapshot.wiring ? Tellurion.ink : accent)
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(Capsule().fill(snapshot.wiring ? accent : accent.opacity(0.12)))
                     .overlay(Capsule().strokeBorder(accent.opacity(snapshot.wiring ? 0 : 0.5), lineWidth: 1))
@@ -234,9 +234,9 @@ private struct OrchestratorPanel: View {
             Divider()
             Button("Terminal") { spawn(nil) }
         } label: {
-            Image(systemName: "plus").font(.system(size: 11, weight: .bold)).foregroundColor(Extreme.muted)
+            Image(systemName: "plus").font(.system(size: 11, weight: .bold)).foregroundColor(Tellurion.muted)
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(Extreme.raised))
+                .background(Circle().fill(Tellurion.raised))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -254,9 +254,9 @@ private struct OrchestratorPanel: View {
         VStack(spacing: 10) {
             Spacer()
             BoardAssistantOrb(busy: false, listening: false).frame(width: 34, height: 34)
-            Text("No agents wired").font(Extreme.font(13, weight: .semibold)).foregroundColor(Extreme.text)
+            Text("No agents wired").font(Tellurion.font(13, weight: .semibold)).foregroundColor(Tellurion.text)
             Text("Start a fresh agent, or tap Connect and pick terminals or groups on the board.")
-                .font(Extreme.font(11.5)).foregroundColor(Extreme.muted).multilineTextAlignment(.center)
+                .font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted).multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 30)
             Menu {
@@ -266,7 +266,7 @@ private struct OrchestratorPanel: View {
                 Divider()
                 Button("Terminal") { spawn(nil) }
             } label: {
-                Label("Start agent", systemImage: "plus").font(Extreme.font(11.5, weight: .semibold)).foregroundColor(accent)
+                Label("Start agent", systemImage: "plus").font(Tellurion.font(11.5, weight: .semibold)).foregroundColor(accent)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -280,19 +280,19 @@ private struct OrchestratorPanel: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Click terminals or group labels on the board, or wire them here. Tap Done when finished.")
-                    .font(Extreme.font(11)).foregroundColor(Extreme.muted)
+                    .font(Tellurion.font(11)).foregroundColor(Tellurion.muted)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 4)
                 if !snapshot.groupChoices.isEmpty {
-                    ExtremeSectionLabel("Groups")
+                    TellurionSectionLabel("Groups")
                     ForEach(snapshot.groupChoices) { choice in choiceRow(choice, symbol: "square.grid.2x2.fill") }
                 }
                 if !snapshot.tileChoices.isEmpty {
-                    ExtremeSectionLabel("Terminals").padding(.top, 6)
+                    TellurionSectionLabel("Terminals").padding(.top, 6)
                     ForEach(snapshot.tileChoices) { choice in choiceRow(choice, symbol: nil) }
                 }
                 if snapshot.groupChoices.isEmpty && snapshot.tileChoices.isEmpty {
-                    Text("Nothing on the board yet.").font(Extreme.font(11.5)).foregroundColor(Extreme.dim)
+                    Text("Nothing on the board yet.").font(Tellurion.font(11.5)).foregroundColor(Tellurion.dim)
                 }
             }
             .padding(12)
@@ -306,17 +306,17 @@ private struct OrchestratorPanel: View {
         } label: {
             HStack(spacing: 8) {
                 if let symbol { Image(systemName: symbol).font(.system(size: 10)) }
-                Text(choice.title).font(Extreme.font(12, weight: .semibold)).lineLimit(1)
+                Text(choice.title).font(Tellurion.font(12, weight: .semibold)).lineLimit(1)
                 if let detail = choice.detail {
-                    Text(detail).font(Extreme.font(10.5)).opacity(0.7).lineLimit(1)
+                    Text(detail).font(Tellurion.font(10.5)).opacity(0.7).lineLimit(1)
                 }
                 Spacer(minLength: 4)
                 Image(systemName: choice.wired ? "checkmark.circle.fill" : "plus.circle").font(.system(size: 13))
             }
-            .foregroundColor(choice.wired ? Extreme.ink : Extreme.text)
+            .foregroundColor(choice.wired ? Tellurion.ink : Tellurion.text)
             .padding(.horizontal, 10)
             .frame(height: 30)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(choice.wired ? accent : Extreme.raised))
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(choice.wired ? accent : Tellurion.raised))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -330,9 +330,9 @@ private struct OrchestratorPanel: View {
                     if let title = section.title {
                         HStack(spacing: 6) {
                             Circle().fill(section.color.map(BoardProjects.color) ?? accent).frame(width: 6, height: 6)
-                            Text(title).font(Extreme.font(10.5, weight: .bold)).foregroundColor(Extreme.muted).tracking(0.6)
+                            Text(title).font(Tellurion.font(10.5, weight: .bold)).foregroundColor(Tellurion.muted).tracking(0.6)
                             Spacer()
-                            Text("\(section.done)/\(section.rows.count)").font(Extreme.mono(10.5)).foregroundColor(Extreme.dim)
+                            Text("\(section.done)/\(section.rows.count)").font(Tellurion.mono(10.5)).foregroundColor(Tellurion.dim)
                         }
                         .padding(.horizontal, 6).padding(.top, 10).padding(.bottom, 2)
                     }
@@ -377,28 +377,28 @@ private struct OrchestratorPanel: View {
                     HStack(spacing: 6) {
                         Text(brain.busy ? "Thinking · turn \(brain.turn) of \(brain.limit)"
                              : waitingLine)
-                            .font(Extreme.font(10.5, weight: .medium)).foregroundColor(accent)
+                            .font(Tellurion.font(10.5, weight: .medium)).foregroundColor(accent)
                         Spacer()
                         Button("Stop") { brain.stop() }
                             .buttonStyle(.plain)
-                            .font(Extreme.font(10.5, weight: .semibold)).foregroundColor(Extreme.muted)
+                            .font(Tellurion.font(10.5, weight: .semibold)).foregroundColor(Tellurion.muted)
                             .padding(.trailing, recent.isEmpty ? 20 : 0)
                     }
                 } else if showLog {
                     Text("\(brain.log.count) \(brain.log.count == 1 ? "entry" : "entries")")
-                        .font(Extreme.font(10.5, weight: .medium)).foregroundColor(Extreme.dim)
+                        .font(Tellurion.font(10.5, weight: .medium)).foregroundColor(Tellurion.dim)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Extreme.raised.opacity(0.5)))
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Tellurion.raised.opacity(0.5)))
             .overlay(alignment: .topTrailing) {
                 if !brain.log.isEmpty || showLog {
                     Button {
                         withAnimation(.easeInOut(duration: 0.15)) { showLog.toggle() }
                     } label: {
                         Image(systemName: showLog ? "chevron.down" : "chevron.up")
-                            .font(.system(size: 9, weight: .bold)).foregroundColor(Extreme.muted)
+                            .font(.system(size: 9, weight: .bold)).foregroundColor(Tellurion.muted)
                             .frame(width: 20, height: 20)
                             .contentShape(Rectangle())
                     }
@@ -432,13 +432,13 @@ private struct OrchestratorPanel: View {
     private func entryRow(_ entry: OrchestratorBrain.Entry) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: Self.symbol(entry.kind)).font(.system(size: 9, weight: .semibold))
-                .foregroundColor(entry.kind == .error ? .red : entry.kind == .say ? accent : Extreme.dim)
+                .foregroundColor(entry.kind == .error ? .red : entry.kind == .say ? accent : Tellurion.dim)
                 .frame(width: 12).padding(.top, 2)
-            Text(entry.text).font(Extreme.font(11)).foregroundColor(entry.kind == .say ? Extreme.text : Extreme.muted)
+            Text(entry.text).font(Tellurion.font(11)).foregroundColor(entry.kind == .say ? Tellurion.text : Tellurion.muted)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             if entry.images > 0 {
-                Label("\(entry.images)", systemImage: "photo").font(Extreme.font(10)).foregroundColor(Extreme.dim)
+                Label("\(entry.images)", systemImage: "photo").font(Tellurion.font(10)).foregroundColor(Tellurion.dim)
                     .padding(.top, 1)
                     .help("\(entry.images) image\(entry.images == 1 ? "" : "s") went with it")
             }
@@ -479,12 +479,12 @@ private struct OrchestratorPanel: View {
                         Image(nsImage: image.image).resizable().scaledToFill()
                             .frame(width: 44, height: 44)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Extreme.line, lineWidth: 1))
+                            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Tellurion.line, lineWidth: 1))
                             .accessibilityLabel("Attached image, \(Int(image.pixelSize.width)) by \(Int(image.pixelSize.height))")
                         Button { state.images.removeAll { $0.id == image.id } } label: {
                             Image(systemName: "xmark.circle.fill").font(.system(size: 13))
-                                .foregroundColor(Extreme.text)
-                                .background(Circle().fill(Extreme.panel).padding(2))
+                                .foregroundColor(Tellurion.text)
+                                .background(Circle().fill(Tellurion.panel).padding(2))
                         }
                         .buttonStyle(.plain)
                         .offset(x: 5, y: -5)
@@ -520,9 +520,9 @@ private struct OrchestratorPanel: View {
         }
         .padding(.leading, 10).padding(.trailing, 5)
         .frame(height: 38)
-        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Extreme.raised))
+        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Tellurion.raised))
         .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
-            .strokeBorder(dictation.listening ? accent.opacity(0.7) : Extreme.line, lineWidth: 1))
+            .strokeBorder(dictation.listening ? accent.opacity(0.7) : Tellurion.line, lineWidth: 1))
     }
 
     private var placeholder: String {
@@ -536,9 +536,9 @@ private struct OrchestratorPanel: View {
     private func button(_ symbol: String, _ help: String, filled: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 10.5, weight: .bold))
-                .foregroundColor(filled ? Extreme.ink : Extreme.muted)
+                .foregroundColor(filled ? Tellurion.ink : Tellurion.muted)
                 .frame(width: 26, height: 26)
-                .background(Circle().fill(filled ? accent : Extreme.panel))
+                .background(Circle().fill(filled ? accent : Tellurion.panel))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -583,15 +583,15 @@ private struct OrchestratorAgentRow: View {
         HStack(spacing: 9) {
             Group {
                 if let kind = row.kind {
-                    VerticalTabAgentLogo(kind: kind, tint: Extreme.text)
+                    VerticalTabAgentLogo(kind: kind, tint: Tellurion.text)
                 } else {
-                    Image(systemName: "terminal").font(.system(size: 11)).foregroundColor(Extreme.muted)
+                    Image(systemName: "terminal").font(.system(size: 11)).foregroundColor(Tellurion.muted)
                 }
             }
             .frame(width: 18, height: 18)
             VStack(alignment: .leading, spacing: 1) {
-                Text(row.name).font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text).lineLimit(1)
-                Text(row.detail).font(Extreme.font(10.5)).foregroundColor(Extreme.dim).lineLimit(1)
+                Text(row.name).font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text).lineLimit(1)
+                Text(row.detail).font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim).lineLimit(1)
             }
             Spacer(minLength: 4)
             if hovering {
@@ -607,7 +607,7 @@ private struct OrchestratorAgentRow: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 40)
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Extreme.raised : .clear))
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Tellurion.raised : .clear))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture { focus() }
@@ -630,7 +630,7 @@ private struct OrchestratorAgentRow: View {
 
     private func icon(_ symbol: String, _ help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 10, weight: .semibold)).foregroundColor(Extreme.muted)
+            Image(systemName: symbol).font(.system(size: 10, weight: .semibold)).foregroundColor(Tellurion.muted)
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
         }
@@ -649,11 +649,11 @@ struct OrchestratorWiringBanner: View {
         let color = BoardProjects.color(controller.orchestrator(id)?.color ?? BoardTeams.color)
         HStack(spacing: 10) {
             Image(systemName: "cable.connector").font(.system(size: 12, weight: .semibold)).foregroundColor(color)
-            Text("Wiring \(controller.orchestratorName(id))").font(Extreme.font(12.5, weight: .semibold)).foregroundColor(Extreme.text)
-            Text("Click terminals or group labels").font(Extreme.font(12)).foregroundColor(Extreme.muted)
+            Text("Wiring \(controller.orchestratorName(id))").font(Tellurion.font(12.5, weight: .semibold)).foregroundColor(Tellurion.text)
+            Text("Click terminals or group labels").font(Tellurion.font(12)).foregroundColor(Tellurion.muted)
             Button { controller.endWiring() } label: {
-                Label("Done", systemImage: "checkmark").font(Extreme.font(11.5, weight: .semibold))
-                    .foregroundColor(Extreme.ink)
+                Label("Done", systemImage: "checkmark").font(Tellurion.font(11.5, weight: .semibold))
+                    .foregroundColor(Tellurion.ink)
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(Capsule().fill(color))
             }
@@ -661,7 +661,7 @@ struct OrchestratorWiringBanner: View {
             .help("Done wiring (Escape)")
         }
         .padding(.leading, 14).padding(.trailing, 6).padding(.vertical, 6)
-        .background(Capsule().fill(Extreme.panel.opacity(0.97)))
+        .background(Capsule().fill(Tellurion.panel.opacity(0.97)))
         .overlay(Capsule().strokeBorder(color.opacity(0.6), lineWidth: 1))
         .shadow(color: .black.opacity(0.35), radius: 12, y: 5)
     }
@@ -676,13 +676,13 @@ private struct OrchestratorRing: View {
     var body: some View {
         HStack(spacing: 4) {
             ZStack {
-                Circle().stroke(Extreme.line, lineWidth: 2)
+                Circle().stroke(Tellurion.line, lineWidth: 2)
                 Circle().trim(from: 0, to: total == 0 ? 0 : CGFloat(done) / CGFloat(total))
                     .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     .rotationEffect(.degrees(-90))
             }
             .frame(width: 12, height: 12)
-            Text("\(done)/\(total)").font(Extreme.mono(10.5)).foregroundColor(Extreme.muted)
+            Text("\(done)/\(total)").font(Tellurion.mono(10.5)).foregroundColor(Tellurion.muted)
         }
         .help("\(done) of \(total) done")
     }

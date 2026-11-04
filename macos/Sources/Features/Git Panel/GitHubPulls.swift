@@ -88,7 +88,7 @@ final class GitHubPulls: ObservableObject {
 
     /// Fetches if the answer is missing or older than a minute (or `force`).
     func fetch(root: String, branch: String, force: Bool = false) {
-        guard ExtremeSettings.isOn(.git), available != false || force else { return }
+        guard TellurionSettings.isOn(.git), available != false || force else { return }
         let key = Self.key(root, branch)
         guard !inFlight.contains(key) else { return }
         if !force, let at = fetchedAt[key], Date().timeIntervalSince(at) < Self.maxAge { return }

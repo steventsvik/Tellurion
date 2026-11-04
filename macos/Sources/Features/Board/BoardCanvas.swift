@@ -240,7 +240,7 @@ final class BoardGridView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
-        Extreme.chrome.ink.nsColor.setFill()
+        Tellurion.chrome.ink.nsColor.setFill()
         dirtyRect.fill()
         guard let canvas else { return }
         let zoom = canvas.magnification
@@ -261,7 +261,7 @@ final class BoardGridView: NSView {
             }
             y += spacing
         }
-        context.setFillColor(Extreme.chrome.line.nsColor.cgColor)
+        context.setFillColor(Tellurion.chrome.line.nsColor.cgColor)
         context.fill(rects)
     }
 }

@@ -115,7 +115,7 @@ jobs:
         env:
           # The test host is the app itself; this keeps its boards, prompts and hooks out of
           # the runner's home and keeps its welcome window closed.
-          TEST_RUNNER_GHOSTTY_EXTREME_TEST_HOME: ${{ runner.temp }}/tellurion-home
+          TEST_RUNNER_TELLURION_TEST_HOME: ${{ runner.temp }}/tellurion-home
         run: |
           mkdir -p "${{ runner.temp }}/tellurion-home"
           xcodebuild -quiet -project Ghostty.xcodeproj -scheme Ghostty \

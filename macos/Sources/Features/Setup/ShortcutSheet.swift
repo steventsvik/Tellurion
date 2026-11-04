@@ -186,18 +186,18 @@ private struct ShortcutSheetView: View {
         VStack(alignment: .leading, spacing: 14) {
             ForEach(groups) { group in
                 VStack(alignment: .leading, spacing: 8) {
-                    ExtremeSectionLabel(group.id)
+                    TellurionSectionLabel(group.id)
                     LazyVGrid(columns: [GridItem(.fixed(250), alignment: .leading), GridItem(.fixed(250), alignment: .leading)],
                               alignment: .leading, spacing: 7) {
                         ForEach(group.shortcuts, id: \.self) { shortcut in
                             HStack(spacing: 10) {
                                 Text(shortcut.keys)
-                                    .font(Extreme.font(12, weight: .semibold))
-                                    .foregroundColor(Extreme.gold)
+                                    .font(Tellurion.font(12, weight: .semibold))
+                                    .foregroundColor(Tellurion.gold)
                                     .frame(width: 58, alignment: .trailing)
                                 Text(shortcut.title)
-                                    .font(Extreme.font(12, weight: .regular))
-                                    .foregroundColor(Extreme.text)
+                                    .font(Tellurion.font(12, weight: .regular))
+                                    .foregroundColor(Tellurion.text)
                                     .lineLimit(1)
                             }
                         }
@@ -205,15 +205,15 @@ private struct ShortcutSheetView: View {
                 }
             }
             Text(sticky ? "Escape or click to close" : "Let go of ⌃⌘ to close · ⌃⌘/ keeps it open")
-                .font(Extreme.font(10.5, weight: .regular))
-                .foregroundColor(Extreme.dim)
+                .font(Tellurion.font(10.5, weight: .regular))
+                .foregroundColor(Tellurion.dim)
         }
         .padding(20)
         .frame(width: 560)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Extreme.ink.opacity(0.97)))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Extreme.lineStrong, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Tellurion.ink.opacity(0.97)))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Tellurion.lineStrong, lineWidth: 1))
         .environment(\.colorScheme, .dark)
-        .onAppear { Extreme.registerFonts() }
+        .onAppear { Tellurion.registerFonts() }
     }
 }
 #endif

@@ -12,7 +12,7 @@ struct BoardWindowView: View {
     let controller: BoardController
     @ObservedObject var model: BoardModel
     @StateObject private var motion = WindowMotion()
-    @ObservedObject private var settings = ExtremeSettings.shared
+    @ObservedObject private var settings = TellurionSettings.shared
     @ObservedObject private var visualFix = VisualFixPanel.shared
     @ObservedObject private var history = CommandBlocksPanel.shared
     @AppStorage(AgentAurora.enabledKey) private var aurora = false
@@ -79,7 +79,7 @@ struct BoardWindowView: View {
                     HStack(spacing: 0) {
                         BoardSidebar(controller: controller, model: model)
                             .frame(width: Self.sidebarWidth)
-                        Rectangle().fill(Extreme.line).frame(width: 1)
+                        Rectangle().fill(Tellurion.line).frame(width: 1)
                     }
                     .frame(maxHeight: .infinity)
                 }
@@ -105,13 +105,13 @@ struct BoardWindowView: View {
             }
         }
         .ignoresSafeArea()
-        .background(Extreme.ink)
-        .environment(\.extremeMotion, motion.active && settings.motion == .full)
+        .background(Tellurion.ink)
+        .environment(\.tellurionMotion, motion.active && settings.motion == .full)
         .onAppear {
             motion.attach(controller.window)
             // What a classic window's sidebar starts: the ⌃⌘ shortcuts, setup, review and undo.
             VerticalTabsMenu.shared.installIfNeeded()
-            ExtremeLaunch.start()
+            TellurionLaunch.start()
             ReviewInbox.start()
             TurnCheckpoints.start()
         }
@@ -166,7 +166,7 @@ private struct BoardPaletteLayer: View {
 /// Bottom right: phone access, and update information, as in a classic window.
 private struct BoardCornerOverlay: View {
     @ObservedObject var controller: BoardController
-    @ObservedObject private var settings = ExtremeSettings.shared
+    @ObservedObject private var settings = TellurionSettings.shared
 
     var body: some View {
         let phone = settings.isOn(.phone)
@@ -218,7 +218,7 @@ private struct BoardToolbar: View {
                     Button { controller.addCard(.kanban) } label: { Label("Kanban", systemImage: "rectangle.split.3x1") }
                     Divider()
                     Button { controller.showAgentMap() } label: { Label("Agent Map", systemImage: "map") }
-                    if ExtremeSettings.isOn(.media) {
+                    if TellurionSettings.isOn(.media) {
                         Button { controller.chooseMedia() } label: { Label("Video or Music…", systemImage: "play.rectangle") }
                     }
                     Button { model.showOrchestratorComposer = true } label: {
@@ -226,7 +226,7 @@ private struct BoardToolbar: View {
                     }
                 } label: {
                     Image(systemName: "rectangle.stack.badge.plus").font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Extreme.text.opacity(0.85))
+                        .foregroundColor(Tellurion.text.opacity(0.85))
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
@@ -239,8 +239,8 @@ private struct BoardToolbar: View {
                     .keyboardShortcut("-", modifiers: [.command, .option])
                 Button { controller.zoomToActualSize() } label: {
                     Text("\(Int((model.zoom * 100).rounded()))%")
-                        .font(Extreme.font(11, weight: .semibold)).monospacedDigit()
-                        .foregroundColor(Extreme.muted).frame(width: 42)
+                        .font(Tellurion.font(11, weight: .semibold)).monospacedDigit()
+                        .foregroundColor(Tellurion.muted).frame(width: 42)
                 }
                 .buttonStyle(.plain)
                 .help("Actual size (⌥⌘0)")
@@ -251,20 +251,20 @@ private struct BoardToolbar: View {
                     .keyboardShortcut("9", modifiers: [.command, .option])
             }
             .padding(.horizontal, 6).padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Extreme.panel.opacity(0.94)))
-            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Extreme.line))
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Tellurion.panel.opacity(0.94)))
+            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Tellurion.line))
             .padding(.trailing, 10)
         }
     }
 
     private var divider: some View {
-        Rectangle().fill(Extreme.line).frame(width: 1, height: 16).padding(.horizontal, 3)
+        Rectangle().fill(Tellurion.line).frame(width: 1, height: 16).padding(.horizontal, 3)
     }
 
     private func button(_ symbol: String, _ help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 12, weight: .medium))
-                .foregroundColor(Extreme.text.opacity(0.85))
+                .foregroundColor(Tellurion.text.opacity(0.85))
                 .frame(width: 26, height: 22)
                 .contentShape(Rectangle())
         }
@@ -279,22 +279,22 @@ private struct BoardEmptyState: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Text("An empty board").font(Extreme.font(15, weight: .semibold)).foregroundColor(Extreme.text)
+            Text("An empty board").font(Tellurion.font(15, weight: .semibold)).foregroundColor(Tellurion.text)
             Text("Add terminals and agents as tiles. Drag a tile by its title bar (it snaps beside others; hold ⌘ not to), resize it from its corner, pinch to zoom, and drag empty space to move around. Tiles in the same project share a color.")
-                .font(Extreme.font(12)).foregroundColor(Extreme.muted)
+                .font(Tellurion.font(12)).foregroundColor(Tellurion.muted)
                 .multilineTextAlignment(.center).frame(maxWidth: 380)
             HStack(spacing: 8) {
                 Button("New terminal") { controller.addTile() }
-                    .buttonStyle(ExtremeButtonStyle())
+                    .buttonStyle(TellurionButtonStyle())
                 Button("New orchestrator…") { controller.model.showOrchestratorComposer = true }
-                    .buttonStyle(ExtremeButtonStyle())
+                    .buttonStyle(TellurionButtonStyle())
                 Button("Launch agents…") { controller.model.showComposer = true }
-                    .buttonStyle(ExtremeButtonStyle(prominent: true))
+                    .buttonStyle(TellurionButtonStyle(prominent: true))
             }
         }
         .padding(24)
-        .background(RoundedRectangle(cornerRadius: Extreme.radius, style: .continuous).fill(Extreme.panel))
-        .overlay(RoundedRectangle(cornerRadius: Extreme.radius, style: .continuous).strokeBorder(Extreme.line))
+        .background(RoundedRectangle(cornerRadius: Tellurion.radius, style: .continuous).fill(Tellurion.panel))
+        .overlay(RoundedRectangle(cornerRadius: Tellurion.radius, style: .continuous).strokeBorder(Tellurion.line))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -308,7 +308,7 @@ private struct BoardSidebar: View {
     @State private var name = ""
     @State private var boards: [BoardWorkspace] = []
     @State private var condensed = false
-    @ObservedObject private var settings = ExtremeSettings.shared
+    @ObservedObject private var settings = TellurionSettings.shared
     @ObservedObject private var localhost = LocalhostSessions.shared
 
     private struct Row: Identifiable {
@@ -328,7 +328,7 @@ private struct BoardSidebar: View {
             HStack {
                 Spacer()
                 Button { model.showSidebar = false } label: {
-                    Image(systemName: "sidebar.left").font(.system(size: 12)).foregroundColor(Extreme.muted)
+                    Image(systemName: "sidebar.left").font(.system(size: 12)).foregroundColor(Tellurion.muted)
                 }
                 .buttonStyle(.plain).help("Hide the list").accessibilityLabel("Hide the list")
             }
@@ -337,14 +337,14 @@ private struct BoardSidebar: View {
 
             TextField("Board name", text: $name, onCommit: { controller.rename(name) })
                 .textFieldStyle(.plain)
-                .font(Extreme.font(15, weight: .semibold))
-                .foregroundColor(Extreme.text)
+                .font(Tellurion.font(15, weight: .semibold))
+                .foregroundColor(Tellurion.text)
                 .padding(.horizontal, 14)
             summary(rows).padding(.horizontal, 14).padding(.top, 4).padding(.bottom, 10)
 
             HStack(spacing: 6) {
-                Button("New terminal") { controller.addTile() }.buttonStyle(ExtremeButtonStyle())
-                Button("Agents…") { model.showComposer = true }.buttonStyle(ExtremeButtonStyle(prominent: true))
+                Button("New terminal") { controller.addTile() }.buttonStyle(TellurionButtonStyle())
+                Button("Agents…") { model.showComposer = true }.buttonStyle(TellurionButtonStyle(prominent: true))
             }
             .padding(.horizontal, 14).padding(.bottom, 10)
             // The classic sidebar's tools: as many icons as fit, and all of them under Tools.
@@ -354,7 +354,7 @@ private struct BoardSidebar: View {
             }
             .padding(.horizontal, 12).padding(.bottom, 10)
 
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             if let updates = (NSApp.delegate as? AppDelegate)?.updateViewModel {
                 UpdateCard(model: updates)
             }
@@ -394,9 +394,9 @@ private struct BoardSidebar: View {
                         if let heading = row.heading {
                             HStack(spacing: 6) {
                                 Image(systemName: row.headingSymbol).font(.system(size: 9.5, weight: .semibold))
-                                Text(heading.uppercased()).font(Extreme.font(10, weight: .bold)).tracking(0.6).lineLimit(1)
+                                Text(heading.uppercased()).font(Tellurion.font(10, weight: .bold)).tracking(0.6).lineLimit(1)
                             }
-                            .foregroundColor(row.wireColor ?? Extreme.muted)
+                            .foregroundColor(row.wireColor ?? Tellurion.muted)
                             .padding(.horizontal, 8).padding(.top, 10).padding(.bottom, 2)
                         }
                         BoardSidebarRow(board: controller, surface: row.surface, info: row.info, name: model.titles[row.surface.id],
@@ -414,10 +414,10 @@ private struct BoardSidebar: View {
                 .padding(8)
             }
             sections
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             boardList.padding(10)
         }
-        .background(Extreme.panel)
+        .background(Tellurion.panel)
         .onAppear {
             name = model.name
             reloadBoards()
@@ -450,13 +450,13 @@ private struct BoardSidebar: View {
             localhost.surface(for: session).map { controller.surfaceTree.contains($0) } ?? false
         }
         if settings.isOn(.localhost), !servers.isEmpty {
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    ExtremeSectionLabel("Localhost")
+                    TellurionSectionLabel("Localhost")
                     Spacer()
                     Button("Manage") { LocalhostManager.show() }
-                        .buttonStyle(.plain).font(Extreme.font(10.5)).foregroundColor(.accentColor)
+                        .buttonStyle(.plain).font(Tellurion.font(10.5)).foregroundColor(.accentColor)
                         .help("Localhost manager (⌃⌘L)")
                 }
                 .padding(.horizontal, 6)
@@ -471,7 +471,7 @@ private struct BoardSidebar: View {
         SetupSidebarChip().padding(.horizontal, 8).padding(.bottom, 6)
         if settings.isOn(.background) { HousekeepingChip().padding(.horizontal, 8).padding(.bottom, 6) }
         if settings.isOn(.usage) {
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             UsagePanel(palette: palette)
         }
     }
@@ -529,7 +529,7 @@ private struct BoardSidebar: View {
         let working = rows.filter { $0.info?.activity == .working }.count
         let parts = [waiting > 0 ? "\(waiting) need you" : nil, working > 0 ? "\(working) working" : nil,
                      "\(rows.count) \(rows.count == 1 ? "terminal" : "terminals")"].compactMap { $0 }
-        return Text(parts.joined(separator: " · ")).font(Extreme.font(11)).foregroundColor(waiting > 0 ? Extreme.warn : Extreme.muted)
+        return Text(parts.joined(separator: " · ")).font(Tellurion.font(11)).foregroundColor(waiting > 0 ? Tellurion.warn : Tellurion.muted)
     }
 
     // MARK: Boards
@@ -537,10 +537,10 @@ private struct BoardSidebar: View {
     private var boardList: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                ExtremeSectionLabel("Boards")
+                TellurionSectionLabel("Boards")
                 Spacer()
                 Button { Board.newBoard(controller.ghostty) } label: {
-                    Image(systemName: "plus").font(.system(size: 10, weight: .bold)).foregroundColor(Extreme.muted)
+                    Image(systemName: "plus").font(.system(size: 10, weight: .bold)).foregroundColor(Tellurion.muted)
                 }
                 .buttonStyle(.plain).help("New board").accessibilityLabel("New board")
             }
@@ -548,13 +548,13 @@ private struct BoardSidebar: View {
                 let isOpen = BoardController.all.contains { $0.workspace.id == board.id }
                 Button { Board.reopen(controller.ghostty, board) } label: {
                     HStack(spacing: 6) {
-                        Circle().fill(isOpen ? Extreme.live : Extreme.dim).frame(width: 5, height: 5)
-                        Text(board.name).font(Extreme.font(11.5, weight: board.id == controller.workspace.id ? .semibold : .regular))
-                            .foregroundColor(board.id == controller.workspace.id ? Extreme.text : Extreme.muted)
+                        Circle().fill(isOpen ? Tellurion.live : Tellurion.dim).frame(width: 5, height: 5)
+                        Text(board.name).font(Tellurion.font(11.5, weight: board.id == controller.workspace.id ? .semibold : .regular))
+                            .foregroundColor(board.id == controller.workspace.id ? Tellurion.text : Tellurion.muted)
                             .lineLimit(1)
                         Spacer()
                         Text("\(board.id == controller.workspace.id ? model.surfaces.count : board.tiles.count)")
-                            .font(Extreme.font(10)).foregroundColor(Extreme.dim)
+                            .font(Tellurion.font(10)).foregroundColor(Tellurion.dim)
                     }
                     .contentShape(Rectangle())
                 }
@@ -585,17 +585,17 @@ private struct BoardSketchRow: View {
     var body: some View {
         HStack(spacing: 9) {
             Image(systemName: symbol).font(.system(size: 11, weight: .medium))
-                .foregroundColor(Extreme.muted).frame(width: 16, height: 16)
+                .foregroundColor(Tellurion.muted).frame(width: 16, height: 16)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text).lineLimit(1)
+                Text(title).font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text).lineLimit(1)
                 Text(count == 0 ? empty : count == 1 ? "1 item" : "\(count) items")
-                    .font(Extreme.font(10.5)).foregroundColor(Extreme.dim)
+                    .font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim)
             }
             Spacer(minLength: 0)
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .fill(hovering || focused ? Extreme.raised : .clear))
+            .fill(hovering || focused ? Tellurion.raised : .clear))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
     }
@@ -614,25 +614,25 @@ private struct BoardSidebarRow: View {
     @State private var trackedPwd: String?
     @ObservedObject private var inbox = ReviewInbox.shared
     @ObservedObject private var git = VerticalTabsGit.shared
-    @ObservedObject private var settings = ExtremeSettings.shared
+    @ObservedObject private var settings = TellurionSettings.shared
 
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
             Group {
                 if let info {
-                    VerticalTabAgentLogo(kind: info.kind, tint: Extreme.text)
+                    VerticalTabAgentLogo(kind: info.kind, tint: Tellurion.text)
                 } else {
-                    Image(systemName: "terminal").font(.system(size: 11)).foregroundColor(Extreme.muted)
+                    Image(systemName: "terminal").font(.system(size: 11)).foregroundColor(Tellurion.muted)
                 }
             }
             .frame(width: 16, height: 16)
             VStack(alignment: .leading, spacing: 3) {
                 Text(BoardTileTitle.title(surface, info, name: name))
-                    .font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text).lineLimit(1)
+                    .font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text).lineLimit(1)
                 if let task = info?.detail ?? info?.task, !task.isEmpty {
-                    Text(task).font(Extreme.font(10.5)).foregroundColor(Extreme.muted).lineLimit(2)
+                    Text(task).font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted).lineLimit(2)
                 } else if let pwd = surface.pwd, (pwd as NSString).abbreviatingWithTildeInPath != surface.title {
-                    Text((pwd as NSString).abbreviatingWithTildeInPath).font(Extreme.font(10.5)).foregroundColor(Extreme.dim).lineLimit(1)
+                    Text((pwd as NSString).abbreviatingWithTildeInPath).font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim).lineLimit(1)
                 }
                 HStack(spacing: 6) {
                     if let info { AgentStatusPill(activity: info.activity) }
@@ -651,7 +651,7 @@ private struct BoardSidebarRow: View {
         }
         .padding(8)
         .padding(.leading, color == nil ? 0 : 3)
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Extreme.raised : .clear))
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Tellurion.raised : .clear))
         .overlay(alignment: .leading) {
             if let color { RoundedRectangle(cornerRadius: 1.5).fill(color).frame(width: 3).padding(.vertical, 7) }
         }
@@ -671,7 +671,7 @@ private struct BoardSidebarRow: View {
                 Text(info.branch).lineLimit(1).truncationMode(.middle)
                 AheadBehindLabel(info: info)
             }
-            .font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+            .font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
             if settings.isOn(.git), let root = git.root(for: pwd) {
                 Button { showGit = true } label: { label.contentShape(Rectangle()) }
                     .buttonStyle(.plain)
@@ -711,60 +711,60 @@ private struct BoardComposer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Launch agents").font(Extreme.font(15, weight: .semibold)).foregroundColor(Extreme.text)
+            Text("Launch agents").font(Tellurion.font(15, weight: .semibold)).foregroundColor(Tellurion.text)
 
             VStack(alignment: .leading, spacing: 6) {
-                ExtremeSectionLabel("Folder")
+                TellurionSectionLabel("Folder")
                 HStack {
                     Text(folder.isEmpty ? "Home" : (folder as NSString).abbreviatingWithTildeInPath)
-                        .font(Extreme.mono(11.5)).foregroundColor(Extreme.text).lineLimit(1).truncationMode(.middle)
+                        .font(Tellurion.mono(11.5)).foregroundColor(Tellurion.text).lineLimit(1).truncationMode(.middle)
                     Spacer()
                     Button("Choose…", action: chooseFolder)
                 }
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                ExtremeSectionLabel("Agents")
+                TellurionSectionLabel("Agents")
                 if let installed {
                     if installed.isEmpty {
                         Text("No agent CLIs found on your PATH. Install Claude Code, Codex, Gemini or another, then try again.")
-                            .font(Extreme.font(11.5)).foregroundColor(Extreme.muted)
+                            .font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted)
                     }
                     ForEach(installed) { agent in
                         countRow(agent.kind.displayName, kind: agent.kind, value: binding(agent.binary))
                     }
                     countRow("Shell", kind: nil, value: $shells)
                 } else {
-                    Text("Looking for agents…").font(Extreme.font(11.5)).foregroundColor(Extreme.dim)
+                    Text("Looking for agents…").font(Tellurion.font(11.5)).foregroundColor(Tellurion.dim)
                 }
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                ExtremeSectionLabel("First task (optional)")
+                TellurionSectionLabel("First task (optional)")
                 TextEditor(text: $task)
-                    .font(Extreme.font(12))
+                    .font(Tellurion.font(12))
                     .frame(height: 70)
                     .scrollContentBackground(.hidden)
                     .padding(6)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(Extreme.raised))
+                    .background(RoundedRectangle(cornerRadius: 7).fill(Tellurion.raised))
                 Text("Sent as the first message to Claude Code, Codex, Gemini and Qwen Code. Other agents start without it.")
-                    .font(Extreme.font(10.5)).foregroundColor(Extreme.dim)
+                    .font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim)
             }
 
             HStack {
-                Text("\(total) of \(Self.limit)").font(Extreme.font(11)).foregroundColor(Extreme.muted)
+                Text("\(total) of \(Self.limit)").font(Tellurion.font(11)).foregroundColor(Tellurion.muted)
                 Spacer()
                 Button("Cancel") { isPresented = false }
                     .keyboardShortcut(.cancelAction)
                 Button(total <= 1 ? "Launch" : "Launch \(total)") { launch() }
-                    .buttonStyle(ExtremeButtonStyle(prominent: true))
+                    .buttonStyle(TellurionButtonStyle(prominent: true))
                     .keyboardShortcut(.defaultAction)
                     .disabled(total == 0)
             }
         }
         .padding(20)
         .frame(width: 440)
-        .background(Extreme.panel)
+        .background(Tellurion.panel)
         .onAppear {
             folder = controller.workspace.folder ?? controller.focusedSurface?.pwd ?? ""
             DispatchQueue.global(qos: .userInitiated).async {
@@ -785,16 +785,16 @@ private struct BoardComposer: View {
         HStack(spacing: 10) {
             Group {
                 if let kind {
-                    VerticalTabAgentLogo(kind: kind, tint: Extreme.text)
+                    VerticalTabAgentLogo(kind: kind, tint: Tellurion.text)
                 } else {
-                    Image(systemName: "terminal").font(.system(size: 11)).foregroundColor(Extreme.muted)
+                    Image(systemName: "terminal").font(.system(size: 11)).foregroundColor(Tellurion.muted)
                 }
             }
             .frame(width: 16, height: 16)
-            Text(title).font(Extreme.font(12)).foregroundColor(Extreme.text)
+            Text(title).font(Tellurion.font(12)).foregroundColor(Tellurion.text)
             Spacer()
-            Text("\(value.wrappedValue)").font(Extreme.font(12, weight: .semibold)).monospacedDigit()
-                .foregroundColor(value.wrappedValue > 0 ? Extreme.gold : Extreme.dim).frame(width: 22)
+            Text("\(value.wrappedValue)").font(Tellurion.font(12, weight: .semibold)).monospacedDigit()
+                .foregroundColor(value.wrappedValue > 0 ? Tellurion.gold : Tellurion.dim).frame(width: 22)
             Stepper("", value: value, in: 0...max(value.wrappedValue, value.wrappedValue + Self.limit - total))
                 .labelsHidden()
                 .accessibilityLabel(title)

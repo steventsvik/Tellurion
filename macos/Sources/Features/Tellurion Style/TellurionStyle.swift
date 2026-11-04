@@ -7,7 +7,7 @@ import SwiftUI
 /// pale cyan glow reserved for the AI itself. Everything is set in the terminal's own
 /// monospace, panels are square with small corner ticks, and motion is stepped, like pixel
 /// art, never smooth.
-enum Extreme {
+enum Tellurion {
     // MARK: Palette
 
     // The colors come from the design in use (Tools → Design); these are Tellurion's
@@ -102,11 +102,11 @@ struct PixelBitmap: View {
 // MARK: - The sigil
 
 /// The Tellurion sigil: a T with a glowing core on its stem, sealed in a hexagonal cell.
-struct ExtremeSigil: View {
+struct TellurionSigil: View {
     var size: CGFloat = 32
     /// The core glows, breathing in steps.
     var alive = true
-    @Environment(\.extremeMotion) private var motion
+    @Environment(\.tellurionMotion) private var motion
 
     /// The logo's pixels: Tellurion's T, or the one drawn in the Design window.
     static var rows: [String] { DesignStore.shared.logoRows }
@@ -121,7 +121,7 @@ struct ExtremeSigil: View {
                     let step = Int(context.date.timeIntervalSinceReferenceDate / 0.35) % 8
                     let level = Double(step < 4 ? step : 7 - step) / 3
                     Circle()
-                        .fill(Extreme.core.opacity(0.10 + level * 0.22))
+                        .fill(Tellurion.core.opacity(0.10 + level * 0.22))
                         .frame(width: size * 0.34, height: size * 0.34)
                         .blur(radius: size * 0.09)
                         .offset(y: size * 0.04)
@@ -163,10 +163,10 @@ struct AgentSprite: View {
                 "oooooooooooo",
                 "..oooooooo..",
                 "..o.o..o.o..",
-            ], colors: ["o": Extreme.claude, "k": Extreme.ink], pixel: pixel)
+            ], colors: ["o": Tellurion.claude, "k": Tellurion.ink], pixel: pixel)
         case .codex:
             // Preserve the pixel frame/status badges, with a legible vector mark inside.
-            VerticalTabAgentLogo(kind: .codex, tint: Extreme.text)
+            VerticalTabAgentLogo(kind: .codex, tint: Tellurion.text)
                 .frame(width: pixel * 8, height: pixel * 8)
         case .hermes:
             PixelBitmap(rows: [
@@ -177,7 +177,7 @@ struct AgentSprite: View {
                 ".gggggg...",
                 "g.gggg.g..",
                 "..g..g....",
-            ], colors: ["g": Color(rgb: 0x9B7BEA), "y": Extreme.gold], pixel: pixel * 0.8)
+            ], colors: ["g": Color(rgb: 0x9B7BEA), "y": Tellurion.gold], pixel: pixel * 0.8)
         case .none:
             // A terminal: a prompt and a cursor.
             PixelBitmap(rows: [
@@ -186,7 +186,7 @@ struct AgentSprite: View {
                 "..o.....",
                 ".o......",
                 "o...oooo",
-            ], colors: ["o": Extreme.muted], pixel: pixel * 0.9)
+            ], colors: ["o": Tellurion.muted], pixel: pixel * 0.9)
         default:
             // Any other agent: a small construct with the AI's eye.
             PixelBitmap(rows: [
@@ -196,7 +196,7 @@ struct AgentSprite: View {
                 ".o......o.",
                 "..oooooo..",
                 "..o....o..",
-            ], colors: ["o": kind?.brandColor ?? Extreme.muted, "c": Extreme.core], pixel: pixel * 0.8)
+            ], colors: ["o": kind?.brandColor ?? Tellurion.muted, "c": Tellurion.core], pixel: pixel * 0.8)
         }
     }
 }
@@ -214,7 +214,7 @@ struct LocalModelSprite: View {
             ".occccco.",
             "ooooooooo",
             ".o.o.o.o.",
-        ], colors: ["o": Extreme.live, "c": Extreme.core], pixel: pixel * 0.8)
+        ], colors: ["o": Tellurion.live, "c": Tellurion.core], pixel: pixel * 0.8)
     }
 }
 
@@ -226,8 +226,8 @@ struct AgentBadge: View {
     var body: some View {
         AgentSprite(kind: kind, pixel: size >= 24 ? 2 : 1.5)
             .frame(width: size, height: size)
-            .background(Extreme.ink)
-            .overlay(Rectangle().strokeBorder(Extreme.line, lineWidth: 1))
+            .background(Tellurion.ink)
+            .overlay(Rectangle().strokeBorder(Tellurion.line, lineWidth: 1))
     }
 }
 
@@ -312,7 +312,7 @@ extension PixelIcon {
 /// the icon being nine "pixels" square.)
 struct PixelIconView: View {
     let icon: PixelIcon
-    var color: Color = Extreme.text.opacity(0.8)
+    var color: Color = Tellurion.text.opacity(0.8)
     var pixel: CGFloat = 1.5
 
     var body: some View {
@@ -326,12 +326,12 @@ struct PixelIconView: View {
 // MARK: - Panels and labels
 
 /// A panel: rounded, with a soft top light and a hairline border that glows gold when active.
-struct ExtremePanel: ViewModifier {
+struct TellurionPanel: ViewModifier {
     var active = false
-    var fill: Color = Extreme.panel
+    var fill: Color = Tellurion.panel
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Extreme.radius, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Tellurion.radius, style: .continuous)
         // The shadow comes from the card's shape, not its contents: cast from the contents, it
         // had to be redrawn every frame anything inside moved (a sprite, a spinner, a bar).
         content
@@ -339,19 +339,19 @@ struct ExtremePanel: ViewModifier {
                 shape.fill(fill)
                     .overlay(shape.fill(LinearGradient(colors: [Color.white.opacity(0.035), .clear],
                                                        startPoint: .top, endPoint: .center)))
-                    .shadow(color: active ? Extreme.gold.opacity(0.14) : .black.opacity(0.25), radius: active ? 10 : 3, y: active ? 0 : 1))
-            .overlay(shape.strokeBorder(active ? Extreme.gold.opacity(0.55) : Extreme.line.opacity(0.9), lineWidth: 1))
+                    .shadow(color: active ? Tellurion.gold.opacity(0.14) : .black.opacity(0.25), radius: active ? 10 : 3, y: active ? 0 : 1))
+            .overlay(shape.strokeBorder(active ? Tellurion.gold.opacity(0.55) : Tellurion.line.opacity(0.9), lineWidth: 1))
     }
 }
 
 extension View {
-    func extremePanel(active: Bool = false, fill: Color = Extreme.panel) -> some View {
-        modifier(ExtremePanel(active: active, fill: fill))
+    func tellurionPanel(active: Bool = false, fill: Color = Tellurion.panel) -> some View {
+        modifier(TellurionPanel(active: active, fill: fill))
     }
 }
 
 /// `LOCALHOST ─────` : an uppercase, letter-spaced section label with a trailing rule.
-struct ExtremeSectionLabel<Trailing: View>: View {
+struct TellurionSectionLabel<Trailing: View>: View {
     let title: String
     @ViewBuilder var trailing: () -> Trailing
 
@@ -363,18 +363,18 @@ struct ExtremeSectionLabel<Trailing: View>: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(title.uppercased())
-                .font(Extreme.font(10.5, weight: .semibold))
+                .font(Tellurion.font(10.5, weight: .semibold))
                 .kerning(1.1)
-                .foregroundColor(Extreme.muted)
+                .foregroundColor(Tellurion.muted)
                 .fixedSize()
-            Rectangle().fill(Extreme.line.opacity(0.7)).frame(height: 1)
+            Rectangle().fill(Tellurion.line.opacity(0.7)).frame(height: 1)
             trailing()
         }
     }
 }
 
 /// A glowing status light that pulses softly when `blinking`. Drawn and animated by Core
-/// Animation (see ExtremeMotion.swift), so a pulsing dot never wakes the app.
+/// Animation (see TellurionMotion.swift), so a pulsing dot never wakes the app.
 struct PixelDot: View {
     let color: Color
     var blinking = false
@@ -390,7 +390,7 @@ struct PixelDot: View {
 
 /// A smooth spinner: a glowing arc turning, for "working". Core Animation.
 struct PixelSpinner: View {
-    var color: Color = Extreme.core
+    var color: Color = Tellurion.core
     /// Size, as in the pixel spinner it replaced (three "pixels" across).
     var pixel: CGFloat = 2.5
 
@@ -402,7 +402,7 @@ struct PixelSpinner: View {
 
 /// A thin track with a light sweeping along it: an agent at work. Core Animation.
 struct PixelActivityBar: View {
-    var color: Color = Extreme.core
+    var color: Color = Tellurion.core
     var pixel: CGFloat = 2
 
     var body: some View {
@@ -413,15 +413,15 @@ struct PixelActivityBar: View {
 
 /// Buttons for the tool windows: rounded, a hairline border that lights on hover, gold
 /// when prominent, and a small press-down.
-struct ExtremeButtonStyle: ButtonStyle {
+struct TellurionButtonStyle: ButtonStyle {
     var prominent = false
 
     func makeBody(configuration: Configuration) -> some View {
-        ExtremeButtonBody(configuration: configuration, prominent: prominent)
+        TellurionButtonBody(configuration: configuration, prominent: prominent)
     }
 }
 
-private struct ExtremeButtonBody: View {
+private struct TellurionButtonBody: View {
     let configuration: ButtonStyleConfiguration
     let prominent: Bool
     @Environment(\.isEnabled) private var enabled
@@ -430,14 +430,14 @@ private struct ExtremeButtonBody: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
         configuration.label
-            .font(Extreme.font(11.5, weight: .semibold))
+            .font(Tellurion.font(11.5, weight: .semibold))
             .lineLimit(1)
-            .foregroundColor(prominent ? Extreme.ink : (hovering ? Extreme.gold : Extreme.text.opacity(0.9)))
+            .foregroundColor(prominent ? Tellurion.ink : (hovering ? Tellurion.gold : Tellurion.text.opacity(0.9)))
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
-            .background(shape.fill(prominent ? (hovering ? Extreme.gold : Extreme.gold.opacity(0.9)) : (hovering ? Extreme.raised : Extreme.panel)))
-            .overlay(shape.strokeBorder(prominent ? Extreme.gold : (hovering ? Extreme.gold.opacity(0.45) : Extreme.line), lineWidth: 1))
-            .shadow(color: prominent && hovering ? Extreme.gold.opacity(0.35) : .clear, radius: 6)
+            .background(shape.fill(prominent ? (hovering ? Tellurion.gold : Tellurion.gold.opacity(0.9)) : (hovering ? Tellurion.raised : Tellurion.panel)))
+            .overlay(shape.strokeBorder(prominent ? Tellurion.gold : (hovering ? Tellurion.gold.opacity(0.45) : Tellurion.line), lineWidth: 1))
+            .shadow(color: prominent && hovering ? Tellurion.gold.opacity(0.35) : .clear, radius: 6)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .opacity(enabled ? 1 : 0.4)
             .contentShape(shape)
@@ -449,18 +449,18 @@ private struct ExtremeButtonBody: View {
 
 extension View {
     /// The tool-window look: ink background, dark controls, pixel buttons.
-    func extremeWindow() -> some View {
+    func tellurionWindow() -> some View {
         self
-            .background(Extreme.ink)
-            .buttonStyle(ExtremeButtonStyle())
-            .tint(Extreme.gold)
-            .environment(\.colorScheme, Extreme.chrome.isLight ? .light : .dark)
-            .onAppear { Extreme.registerFonts() }
+            .background(Tellurion.ink)
+            .buttonStyle(TellurionButtonStyle())
+            .tint(Tellurion.gold)
+            .environment(\.colorScheme, Tellurion.chrome.isLight ? .light : .dark)
+            .onAppear { Tellurion.registerFonts() }
     }
 }
 
 /// A tool window's title block: pixel icon, uppercase title and a subtitle.
-struct ExtremeWindowTitle: View {
+struct TellurionWindowTitle: View {
     let icon: PixelIcon?
     let title: String
     var subtitle: String = ""
@@ -469,17 +469,17 @@ struct ExtremeWindowTitle: View {
     var body: some View {
         HStack(spacing: 12) {
             if sigil {
-                ExtremeSigil(size: 30)
+                TellurionSigil(size: 30)
             } else if let icon {
-                PixelIconView(icon: icon, color: Extreme.gold, pixel: 2)
+                PixelIconView(icon: icon, color: Tellurion.gold, pixel: 2)
                     .frame(width: 32, height: 32)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Extreme.raised))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Extreme.line, lineWidth: 1))
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Tellurion.raised))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Tellurion.line, lineWidth: 1))
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(Extreme.font(16, weight: .semibold)).foregroundColor(Extreme.text)
+                Text(title).font(Tellurion.font(16, weight: .semibold)).foregroundColor(Tellurion.text)
                 if !subtitle.isEmpty {
-                    Text(subtitle).font(Extreme.font(11.5, weight: .regular)).foregroundColor(Extreme.muted)
+                    Text(subtitle).font(Tellurion.font(11.5, weight: .regular)).foregroundColor(Tellurion.muted)
                 }
             }
         }
@@ -487,41 +487,41 @@ struct ExtremeWindowTitle: View {
 }
 
 /// A flat square button: pixel icon (and optional label), hairline border on hover.
-struct ExtremeIconButton: View {
+struct TellurionIconButton: View {
     let icon: PixelIcon
     var label: String?
     var help: String = ""
-    var tint: Color = Extreme.gold
+    var tint: Color = Tellurion.gold
     var badge: Int = 0
-    var badgeColor: Color = Extreme.live
+    var badgeColor: Color = Tellurion.live
     /// Lit up while the thing it opens is showing.
     var active: Bool = false
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
-        let foreground = active ? Extreme.ink : hovering ? tint : Extreme.text.opacity(0.85)
+        let foreground = active ? Tellurion.ink : hovering ? tint : Tellurion.text.opacity(0.85)
         let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
         Button(action: action) {
             HStack(spacing: 6) {
                 PixelIconView(icon: icon, color: foreground, pixel: 1.5)
                 if let label {
-                    Text(label).font(Extreme.font(11.5, weight: .semibold))
+                    Text(label).font(Tellurion.font(11.5, weight: .semibold))
                         .foregroundColor(foreground)
                         .fixedSize()
                 }
             }
             .padding(.horizontal, label == nil ? 0 : 10)
             .frame(minWidth: 30, minHeight: 28)
-            .background(shape.fill(active ? tint.opacity(hovering ? 0.85 : 1) : hovering ? Extreme.raised : Extreme.panel))
-            .overlay(shape.strokeBorder(active ? tint : hovering ? tint.opacity(0.55) : Extreme.line, lineWidth: 1))
+            .background(shape.fill(active ? tint.opacity(hovering ? 0.85 : 1) : hovering ? Tellurion.raised : Tellurion.panel))
+            .overlay(shape.strokeBorder(active ? tint : hovering ? tint.opacity(0.55) : Tellurion.line, lineWidth: 1))
             .shadow(color: active || hovering ? tint.opacity(active ? 0.35 : 0.2) : .clear, radius: 6)
             .scaleEffect(hovering && !active ? 1.04 : 1)
             .overlay(alignment: .topTrailing) {
                 if badge > 0 {
                     Text("\(badge)")
-                        .font(Extreme.font(9, weight: .bold))
-                        .foregroundColor(Extreme.ink)
+                        .font(Tellurion.font(9, weight: .bold))
+                        .foregroundColor(Tellurion.ink)
                         .padding(.horizontal, 4)
                         .frame(minWidth: 15, minHeight: 15)
                         .background(Capsule().fill(badgeColor))

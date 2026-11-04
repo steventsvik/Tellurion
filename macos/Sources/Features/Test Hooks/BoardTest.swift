@@ -4,7 +4,7 @@ import WebKit
 import GhosttyKit
 
 #if TELLURION_TEST_HOOKS
-/// Test-only: `GHOSTTY_EXTREME_TEST_BOARD=<file>` plays a timed script against the boards, like
+/// Test-only: `TELLURION_TEST_BOARD=<file>` plays a timed script against the boards, like
 /// `DemoDirector` does for tabs. Each line is `<seconds since launch> <action> [args]`; `#`
 /// starts a comment. Actions go to the key board (or the first one). Tiles are 1-based, in
 /// the order they were added. Mouse and key actions are real events sent to the window, so
@@ -26,7 +26,7 @@ import GhosttyKit
 ///     composer | sidebar | rename <name> | newboard | closeboard | undo
 ///     edition classic|board | newwindow | settings | welcome
 ///     snapwindow <title prefix> <file.png>   draw any window into a PNG
-///     state                      log the boards, tiles and windows to GHOSTTY_EXTREME_TEST_LOG
+///     state                      log the boards, tiles and windows to TELLURION_TEST_LOG
 ///     tool <name> [n]            open a tool for tile n (editor, visualfix, history, palette,
 ///                                mission, race, handoff, loop, localhost, review, activity, memory)
 ///     tilemenu <n>               log tile n's menu
@@ -47,7 +47,7 @@ enum BoardTest {
     private static var started = false
 
     static func startIfRequested(_ controller: BoardController) {
-        guard !started, let path = TestHooks.value("GHOSTTY_EXTREME_TEST_BOARD"),
+        guard !started, let path = TestHooks.value("TELLURION_TEST_BOARD"),
               let script = try? String(contentsOfFile: path, encoding: .utf8) else { return }
         started = true
         for raw in script.split(separator: "\n") {
@@ -90,7 +90,7 @@ enum BoardTest {
         // Actions that don't need a board.
         switch action {
         case "edition":
-            ExtremeEdition.set(args.first == "board" ? .board : .classic)
+            TellurionEdition.set(args.first == "board" ? .board : .classic)
             return
         case "newwindow":
             (NSApp.delegate as? AppDelegate)?.newWindow(nil)
@@ -136,7 +136,7 @@ enum BoardTest {
             keys(args.first ?? "")
             return
         case "settings":
-            ExtremeSettingsWindow.show()
+            TellurionSettingsWindow.show()
             return
         case "welcome":
             WelcomeWindow.show()
@@ -962,7 +962,7 @@ enum BoardTest {
             "waiting=\(PaletteExtras.waitingOptions().count)",
             "hermes=\(hermes)",
             "localhost=\(LocalhostSessions.shared.sessions.count)",
-            "busy=\(ExtremeUpdates.workingAgents())",
+            "busy=\(TellurionUpdates.workingAgents())",
         ]
         DemoDirector.note("tools " + (panels + reach).joined(separator: " "))
         DemoDirector.note("tools titles=\(titles) windows=\(windows)")
@@ -981,7 +981,7 @@ enum BoardTest {
             let grids = controller.surfaceTree.map { $0.surfaceSize.map { "\($0.columns)x\($0.rows)" } ?? "-" }
             lines.append("classic \"\(controller.window?.title ?? "")\" frame=\(controller.window?.frame ?? .zero) grids=\(grids)")
         }
-        lines.append("edition \(ExtremeEdition.current.rawValue) boards=\(BoardController.all.count) "
+        lines.append("edition \(TellurionEdition.current.rawValue) boards=\(BoardController.all.count) "
                      + "classic=\(TerminalController.all.count) saved=\(BoardStore.all().count)")
         for controller in BoardController.all {
             lines.append("board \"\(controller.workspace.name)\" zoom=\(String(format: "%.3f", zoom(controller))) "

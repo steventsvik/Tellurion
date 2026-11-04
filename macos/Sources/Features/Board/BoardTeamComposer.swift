@@ -49,15 +49,15 @@ struct BoardOrchestratorComposer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("New orchestrator").font(Extreme.font(15, weight: .semibold)).foregroundColor(Extreme.text)
+            Text("New orchestrator").font(Tellurion.font(15, weight: .semibold)).foregroundColor(Tellurion.text)
             Text("An orchestrator card runs the agents wired to it: give it a command and it splits the work, hands it out, reads what each agent answers, and follows up until it's done.")
-                .font(Extreme.font(11.5)).foregroundColor(Extreme.muted).fixedSize(horizontal: false, vertical: true)
+                .font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted).fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 6) {
-                ExtremeSectionLabel("Folder")
+                TellurionSectionLabel("Folder")
                 HStack {
                     Text(folder.isEmpty ? "Home" : (folder as NSString).abbreviatingWithTildeInPath)
-                        .font(Extreme.mono(11.5)).foregroundColor(Extreme.text).lineLimit(1).truncationMode(.middle)
+                        .font(Tellurion.mono(11.5)).foregroundColor(Tellurion.text).lineLimit(1).truncationMode(.middle)
                     Spacer()
                     Button("Choose…", action: chooseFolder)
                 }
@@ -66,16 +66,16 @@ struct BoardOrchestratorComposer: View {
             if let installed {
                 if installed.isEmpty {
                     Text("No agent CLIs found on your PATH. Install Claude Code or Codex, then try again.")
-                        .font(Extreme.font(11.5)).foregroundColor(Extreme.muted)
+                        .font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted)
                 } else {
                     VStack(alignment: .leading, spacing: 6) {
-                        ExtremeSectionLabel("Agents")
+                        TellurionSectionLabel("Agents")
                         ForEach($members) { $row in
                             HStack(spacing: 8) {
                                 agentPicker($row.agent, shell: true).frame(width: 150)
                                 TextField("Role", text: $row.role).textFieldStyle(.roundedBorder)
                                 Button { members.removeAll { $0.id == row.id } } label: {
-                                    Image(systemName: "minus.circle").foregroundColor(Extreme.muted)
+                                    Image(systemName: "minus.circle").foregroundColor(Tellurion.muted)
                                 }
                                 .buttonStyle(.plain)
                                 .help("Remove")
@@ -92,35 +92,35 @@ struct BoardOrchestratorComposer: View {
                     }
                 }
             } else {
-                Text("Looking for agents…").font(Extreme.font(11.5)).foregroundColor(Extreme.dim)
+                Text("Looking for agents…").font(Tellurion.font(11.5)).foregroundColor(Tellurion.dim)
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                ExtremeSectionLabel("First command (optional)")
+                TellurionSectionLabel("First command (optional)")
                 TextEditor(text: $goal)
-                    .font(Extreme.font(12))
+                    .font(Tellurion.font(12))
                     .frame(height: 64)
                     .scrollContentBackground(.hidden)
                     .padding(6)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(Extreme.raised))
+                    .background(RoundedRectangle(cornerRadius: 7).fill(Tellurion.raised))
                 Text("It starts on this once the agents are up. Or give it commands on its card later.")
-                    .font(Extreme.font(10.5)).foregroundColor(Extreme.dim)
+                    .font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim)
             }
 
             HStack {
-                Text("\(members.count) of \(Self.limit) agents").font(Extreme.font(11)).foregroundColor(Extreme.muted)
+                Text("\(members.count) of \(Self.limit) agents").font(Tellurion.font(11)).foregroundColor(Tellurion.muted)
                 Spacer()
                 Button("Cancel") { isPresented = false }
                     .keyboardShortcut(.cancelAction)
                 Button("Start") { start() }
-                    .buttonStyle(ExtremeButtonStyle(prominent: true))
+                    .buttonStyle(TellurionButtonStyle(prominent: true))
                     .keyboardShortcut(.defaultAction)
                     .disabled(installed == nil)
             }
         }
         .padding(20)
         .frame(width: 480)
-        .background(Extreme.panel)
+        .background(Tellurion.panel)
         .onAppear {
             folder = controller.workspace.folder ?? controller.focusedSurface?.pwd ?? ""
             DispatchQueue.global(qos: .userInitiated).async {

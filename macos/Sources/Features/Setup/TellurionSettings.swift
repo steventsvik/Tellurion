@@ -5,7 +5,7 @@ import Combine
 /// One of Tellurion's optional features. Everything is on in a fresh install; Settings
 /// and the welcome window turn them off. A feature that's off has no menu item, shortcut,
 /// button or palette entry, and does no background work.
-enum ExtremeFeature: String, CaseIterable, Identifiable {
+enum TellurionFeature: String, CaseIterable, Identifiable {
     case editor
     case visualFix
     case missionControl
@@ -124,7 +124,7 @@ enum ExtremeFeature: String, CaseIterable, Identifiable {
 }
 
 /// A starting set of features, offered by the welcome window and Settings.
-enum ExtremePreset: String, CaseIterable, Identifiable {
+enum TellurionPreset: String, CaseIterable, Identifiable {
     case everything, essentials, sidebar
 
     var id: String { rawValue }
@@ -145,9 +145,9 @@ enum ExtremePreset: String, CaseIterable, Identifiable {
         }
     }
 
-    var features: Set<ExtremeFeature> {
+    var features: Set<TellurionFeature> {
         switch self {
-        case .everything: return Set(ExtremeFeature.allCases)
+        case .everything: return Set(TellurionFeature.allCases)
         case .essentials: return [.editor, .missionControl, .localhost, .review, .undo, .usage, .ports, .git, .memory, .sharedMemory, .skills, .environment, .phone, .localModels, .menuBar]
         case .sidebar: return []
         }
@@ -155,7 +155,7 @@ enum ExtremePreset: String, CaseIterable, Identifiable {
 }
 
 /// How much the chrome moves.
-enum ExtremeMotionLevel: String, CaseIterable, Identifiable {
+enum TellurionMotionLevel: String, CaseIterable, Identifiable {
     /// The sigil, sprites, glints and the terminal frame's breathing, plus status.
     case full
     /// Only what tells you something: spinners and pulsing status dots.
@@ -172,8 +172,8 @@ enum ExtremeMotionLevel: String, CaseIterable, Identifiable {
 }
 
 /// Tellurion's own settings (Ghostty's are in its config file).
-final class ExtremeSettings: ObservableObject {
-    static let shared = ExtremeSettings()
+final class TellurionSettings: ObservableObject {
+    static let shared = TellurionSettings()
 
     /// Posted on the main thread whenever a feature is turned on or off.
     static let featuresDidChange = Notification.Name("com.steventsvik.ghostty-extreme.featuresDidChange")
@@ -188,13 +188,13 @@ final class ExtremeSettings: ObservableObject {
     private init() {}
 
     /// Whether `feature` is on. Safe from any thread.
-    static func isOn(_ feature: ExtremeFeature) -> Bool {
+    static func isOn(_ feature: TellurionFeature) -> Bool {
         UserDefaults.standard.object(forKey: feature.key) as? Bool ?? true
     }
 
-    func isOn(_ feature: ExtremeFeature) -> Bool { Self.isOn(feature) }
+    func isOn(_ feature: TellurionFeature) -> Bool { Self.isOn(feature) }
 
-    func set(_ feature: ExtremeFeature, on: Bool) {
+    func set(_ feature: TellurionFeature, on: Bool) {
         guard Self.isOn(feature) != on else { return }
         objectWillChange.send()
         // Closed while still on: a feature that's off can close but never open.
@@ -204,21 +204,21 @@ final class ExtremeSettings: ObservableObject {
         NotificationCenter.default.post(name: Self.featuresDidChange, object: feature)
     }
 
-    func apply(_ preset: ExtremePreset) {
-        for feature in ExtremeFeature.allCases { set(feature, on: preset.features.contains(feature)) }
+    func apply(_ preset: TellurionPreset) {
+        for feature in TellurionFeature.allCases { set(feature, on: preset.features.contains(feature)) }
     }
 
     /// The preset matching the current switches, if any.
-    var preset: ExtremePreset? {
-        let on = Set(ExtremeFeature.allCases.filter(Self.isOn))
-        return ExtremePreset.allCases.first { $0.features == on }
+    var preset: TellurionPreset? {
+        let on = Set(TellurionFeature.allCases.filter(Self.isOn))
+        return TellurionPreset.allCases.first { $0.features == on }
     }
 
-    static var motion: ExtremeMotionLevel {
-        ExtremeMotionLevel(rawValue: UserDefaults.standard.string(forKey: motionKey) ?? "") ?? .full
+    static var motion: TellurionMotionLevel {
+        TellurionMotionLevel(rawValue: UserDefaults.standard.string(forKey: motionKey) ?? "") ?? .full
     }
 
-    var motion: ExtremeMotionLevel {
+    var motion: TellurionMotionLevel {
         get { Self.motion }
         set {
             objectWillChange.send()
@@ -228,7 +228,7 @@ final class ExtremeSettings: ObservableObject {
 
     /// Mirrors the switches the hooks need into files. Called at launch and on every change.
     static func writeFlags() {
-        for (feature, name) in [(ExtremeFeature.localhost, "localhost-off"), (.sharedMemory, "shared-memory-off")] {
+        for (feature, name) in [(TellurionFeature.localhost, "localhost-off"), (.sharedMemory, "shared-memory-off")] {
             setFlag(name, on: !isOn(feature))
         }
     }
@@ -247,7 +247,7 @@ final class ExtremeSettings: ObservableObject {
     }
 
     /// Closes whatever a feature has open when it's turned off.
-    private static func close(_ feature: ExtremeFeature) {
+    private static func close(_ feature: TellurionFeature) {
         switch feature {
         case .editor:
             for controller in TerminalWindows.all where EditorPanel.shared.isVisible(controller) {

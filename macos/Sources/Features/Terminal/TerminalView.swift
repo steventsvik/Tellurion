@@ -127,7 +127,7 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
 
 private struct CornerOverlay: View {
     let showUpdate: Bool
-    @ObservedObject private var settings = ExtremeSettings.shared
+    @ObservedObject private var settings = TellurionSettings.shared
 
     var body: some View {
         let phone = settings.isOn(.phone)

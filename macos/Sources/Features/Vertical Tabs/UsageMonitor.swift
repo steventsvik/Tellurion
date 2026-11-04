@@ -193,14 +193,14 @@ struct UsagePanel: View {
     var body: some View {
         if !monitor.entries.isEmpty {
             VStack(alignment: .leading, spacing: 9) {
-                ExtremeSectionLabel("Usage") {
+                TellurionSectionLabel("Usage") {
                     Button(action: ActivityDashboard.toggle) {
                         HStack(spacing: 5) {
-                            PixelIconView(icon: .chart, color: Extreme.gold, pixel: 1.1)
+                            PixelIconView(icon: .chart, color: Tellurion.gold, pixel: 1.1)
                             Text("Graphs")
                         }
                     }
-                    .buttonStyle(ExtremeButtonStyle())
+                    .buttonStyle(TellurionButtonStyle())
                     .help("Agent activity, usage graphs and API value (⌃⌘A)")
                 }
                 ForEach(monitor.entries) { entry in
@@ -229,11 +229,11 @@ private struct UsageRow: View {
                 AgentSprite(kind: entry.agent == .codex ? .codex : entry.agent, pixel: 1.5)
                     .frame(width: 20, height: 14)
                 Text(entry.name)
-                    .font(Extreme.font(11.5, weight: .semibold))
-                    .foregroundColor(Extreme.text)
+                    .font(Tellurion.font(11.5, weight: .semibold))
+                    .foregroundColor(Tellurion.text)
                 Text(entry.windows.isEmpty ? "no usage yet" : entry.shortDetail)
-                    .font(Extreme.font(10.5))
-                    .foregroundColor(Extreme.dim)
+                    .font(Tellurion.font(10.5))
+                    .foregroundColor(Tellurion.dim)
                     .lineLimit(1)
             }
             ForEach(entry.windows, id: \.label) { window in
@@ -270,18 +270,18 @@ private struct UsageBar: View {
     }
 
     private var color: Color {
-        used >= 90 ? Extreme.danger : used >= 70 ? Extreme.warn : Extreme.gold
+        used >= 90 ? Tellurion.danger : used >= 70 ? Tellurion.warn : Tellurion.gold
     }
 
     var body: some View {
         HStack(spacing: 8) {
             Text(window.label)
-                .font(Extreme.font(10.5))
-                .foregroundColor(Extreme.muted)
+                .font(Tellurion.font(10.5))
+                .foregroundColor(Tellurion.muted)
                 .frame(width: 38, alignment: .leading)
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Extreme.line.opacity(0.8))
+                    Capsule().fill(Tellurion.line.opacity(0.8))
                     Capsule()
                         .fill(LinearGradient(colors: [color.opacity(0.75), color], startPoint: .leading, endPoint: .trailing))
                         .frame(width: max(used > 0 ? 6 : 0, geometry.size.width * used / 100))
@@ -290,9 +290,9 @@ private struct UsageBar: View {
             }
             .frame(height: hovering ? 8 : 6)
             Text(hovering ? "resets \(resetText)" : showsPercent ? "\(Int(used.rounded()))%" : resetText)
-                .font(Extreme.font(10.5, weight: .semibold))
+                .font(Tellurion.font(10.5, weight: .semibold))
                 .monospacedDigit()
-                .foregroundColor(used >= 70 ? color : hovering ? Extreme.text : Extreme.muted)
+                .foregroundColor(used >= 70 ? color : hovering ? Tellurion.text : Tellurion.muted)
                 .frame(width: hovering ? 70 : 38, alignment: .trailing)
         }
         .contentShape(Rectangle())

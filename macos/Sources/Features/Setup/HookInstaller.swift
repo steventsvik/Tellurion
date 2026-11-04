@@ -13,7 +13,7 @@ enum HookInstaller {
 
     private static let log = StoredFile.logger("Setup")
 
-    /// The home folder. Test-only: `GHOSTTY_EXTREME_TEST_HOME` points the installer and the
+    /// The home folder. Test-only: `TELLURION_TEST_HOME` points the installer and the
     /// setup check at a scratch folder instead of the user's real configs.
     static let home = TestHooks.home ?? NSHomeDirectory()
     static var hooksFolder: URL { URL(fileURLWithPath: HookConfig.hooksFolder(home: home), isDirectory: true) }

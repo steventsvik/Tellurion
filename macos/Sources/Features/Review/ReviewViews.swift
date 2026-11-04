@@ -12,7 +12,7 @@ extension ReviewInbox {
     }
 
     static func show(selecting item: ReviewItem? = nil) {
-        guard ExtremeSettings.isOn(.review) else { return }
+        guard TellurionSettings.isOn(.review) else { return }
         if let item { ReviewSelection.shared.itemID = item.id }
         AgentToolWindows.show(id: windowID, title: "Review Changes", size: NSSize(width: 1240, height: 780)) {
             ReviewInboxView()
@@ -29,9 +29,9 @@ final class ReviewSelection: ObservableObject {
 }
 
 private enum ReviewColors {
-    static let added = Extreme.live
-    static let removed = Extreme.danger
-    static let accent = Extreme.gold
+    static let added = Tellurion.live
+    static let removed = Tellurion.danger
+    static let accent = Tellurion.gold
 
     static func status(_ status: ReviewFile.Status) -> Color {
         switch status {
@@ -74,7 +74,7 @@ private struct ReviewInboxView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            ExtremeWindowTitle(icon: .inbox, title: "Review Changes",
+            TellurionWindowTitle(icon: .inbox, title: "Review Changes",
                                subtitle: inbox.items.isEmpty ? "Nothing waiting" :
                                    "\(inbox.items.count) agent\(inbox.items.count == 1 ? "" : "s") with changes · \(inbox.unseenCount) new")
             Spacer()
@@ -86,10 +86,10 @@ private struct ReviewInboxView: View {
 
     private var emptyState: some View {
         VStack(spacing: 10) {
-            ExtremeSigil(size: 56)
-            Text("All caught up").font(Extreme.font(16))
+            TellurionSigil(size: 56)
+            Text("All caught up").font(Tellurion.font(16))
             Text("When Claude Code or Codex finishes working, its changes show up here to review: comment on lines and send them back, or undo files. In a git repository you can also commit or open a pull request.")
-                .font(Extreme.font(12)).foregroundColor(Extreme.muted).multilineTextAlignment(.center).frame(maxWidth: 440)
+                .font(Tellurion.font(12)).foregroundColor(Tellurion.muted).multilineTextAlignment(.center).frame(maxWidth: 440)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -107,7 +107,7 @@ private struct ReviewInboxView: View {
             }
             .padding(10)
         }
-        .background(Extreme.text.opacity(0.025))
+        .background(Tellurion.text.opacity(0.025))
     }
 }
 
@@ -119,29 +119,29 @@ private struct ReviewItemRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 7) {
                 AgentBadge(kind: item.agent, size: 22)
-                Text(item.repoName).font(Extreme.font(13)).lineLimit(1)
+                Text(item.repoName).font(Tellurion.font(13)).lineLimit(1)
                 Spacer(minLength: 4)
                 if item.unseen && item.stage == .ready {
                     PixelDot(color: ReviewColors.accent, blinking: true, size: 6)
                 }
             }
             if let task = item.task {
-                Text(task).font(Extreme.font(11.5)).foregroundColor(Extreme.text.opacity(0.8)).lineLimit(2)
+                Text(task).font(Tellurion.font(11.5)).foregroundColor(Tellurion.text.opacity(0.8)).lineLimit(2)
             }
             HStack(spacing: 6) {
                 stageChip
-                Text("\(item.files.count) file\(item.files.count == 1 ? "" : "s")").foregroundColor(Extreme.muted)
+                Text("\(item.files.count) file\(item.files.count == 1 ? "" : "s")").foregroundColor(Tellurion.muted)
                 Text("+\(item.added)").foregroundColor(ReviewColors.added)
                 Text("−\(item.removed)").foregroundColor(ReviewColors.removed)
                 Spacer(minLength: 0)
                 Text(RelativeDateTimeFormatter().localizedString(for: item.updated, relativeTo: Date()))
-                    .foregroundColor(Extreme.muted)
+                    .foregroundColor(Tellurion.muted)
             }
-            .font(Extreme.font(10.5).monospacedDigit())
+            .font(Tellurion.font(10.5).monospacedDigit())
         }
         .padding(10)
-        .background(Rectangle().fill(selected ? ReviewColors.accent.opacity(0.16) : Extreme.text.opacity(0.04)))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(selected ? ReviewColors.accent.opacity(0.7) : Extreme.text.opacity(0.08)))
+        .background(Rectangle().fill(selected ? ReviewColors.accent.opacity(0.16) : Tellurion.text.opacity(0.04)))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(selected ? ReviewColors.accent.opacity(0.7) : Tellurion.text.opacity(0.08)))
         .contentShape(Rectangle())
     }
 
@@ -155,7 +155,7 @@ private struct ReviewItemRow: View {
             }
         }()
         Text(label)
-            .font(Extreme.font(9.5))
+            .font(Tellurion.font(9.5))
             .foregroundColor(color)
             .padding(.horizontal, 6).padding(.vertical, 1.5)
             .background(Rectangle().fill(color.opacity(0.16)))
@@ -195,10 +195,10 @@ private struct ReviewItemView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 3) {
                 if let task = item.task {
-                    Text(task).font(Extreme.font(12)).lineLimit(3)
+                    Text(task).font(Tellurion.font(12)).lineLimit(3)
                 }
                 Text((item.repoRoot as NSString).abbreviatingWithTildeInPath)
-                    .font(Extreme.font(10.5)).foregroundColor(Extreme.muted).lineLimit(1).truncationMode(.head)
+                    .font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted).lineLimit(1).truncationMode(.head)
             }
             .padding(12)
             Divider()
@@ -212,17 +212,17 @@ private struct ReviewItemView: View {
                 .padding(6)
             }
         }
-        .background(Extreme.text.opacity(0.02))
+        .background(Tellurion.text.opacity(0.02))
     }
 
     private var actionBar: some View {
         HStack(spacing: 10) {
             if let message {
-                Text(message).font(Extreme.font(11.5)).foregroundColor(.orange).lineLimit(2).textSelection(.enabled)
+                Text(message).font(Tellurion.font(11.5)).foregroundColor(.orange).lineLimit(2).textSelection(.enabled)
             } else {
                 let reviewed = item.files.filter { item.decision($0) == .accepted }.count
                 Text("\(reviewed)/\(item.files.count) files approved · \(item.comments.count) comment\(item.comments.count == 1 ? "" : "s")")
-                    .font(Extreme.font(11.5)).foregroundColor(Extreme.muted)
+                    .font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted)
             }
             Spacer()
             if ReviewInbox.shared.surface(for: item) != nil {
@@ -241,7 +241,7 @@ private struct ReviewItemView: View {
         .controlSize(.regular)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Extreme.text.opacity(0.03))
+        .background(Tellurion.text.opacity(0.03))
     }
 
     private var sendButton: some View {
@@ -258,12 +258,12 @@ private struct ReviewItemView: View {
             HStack(spacing: 7) {
                 AgentSprite(kind: item.agent, pixel: 1.2)
                 Text(count == 0 ? "Send feedback" : "Send \(count) comment\(count == 1 ? "" : "s") to \(item.agent.displayName)")
-                    .font(Extreme.font(11.5, weight: .semibold))
+                    .font(Tellurion.font(11.5, weight: .semibold))
             }
-            .foregroundColor(canSend ? Extreme.ink : Extreme.dim)
+            .foregroundColor(canSend ? Tellurion.ink : Tellurion.dim)
             .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(canSend ? Extreme.gold : Extreme.panel)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(canSend ? Extreme.gold : Extreme.line, lineWidth: 1))
+            .background(canSend ? Tellurion.gold : Tellurion.panel)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(canSend ? Tellurion.gold : Tellurion.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .disabled(!canSend)
@@ -272,11 +272,11 @@ private struct ReviewItemView: View {
 
     private var commitPopover: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Commit \(item.files.count) file\(item.files.count == 1 ? "" : "s")").font(Extreme.font(13))
+            Text("Commit \(item.files.count) file\(item.files.count == 1 ? "" : "s")").font(Tellurion.font(13))
             TextEditor(text: $commitMessage)
-                .font(Extreme.font(12))
+                .font(Tellurion.font(12))
                 .frame(width: 340, height: 90)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Extreme.text.opacity(0.15)))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Tellurion.text.opacity(0.15)))
             HStack {
                 Spacer()
                 Button("Cancel") { showCommit = false }
@@ -303,14 +303,14 @@ private struct ReviewFileRow: View {
     var body: some View {
         HStack(spacing: 7) {
             Text(file.status.rawValue)
-                .font(Extreme.font(9.5))
+                .font(Tellurion.font(9.5))
                 .foregroundColor(.black.opacity(0.75))
                 .frame(width: 15, height: 15)
                 .background(Rectangle().fill(ReviewColors.status(file.status)))
             VStack(alignment: .leading, spacing: 0) {
-                Text(file.name).font(Extreme.font(12)).lineLimit(1)
+                Text(file.name).font(Tellurion.font(12)).lineLimit(1)
                 if !file.folder.isEmpty {
-                    Text(file.folder).font(Extreme.font(10)).foregroundColor(Extreme.muted).lineLimit(1).truncationMode(.head)
+                    Text(file.folder).font(Tellurion.font(10)).foregroundColor(Tellurion.muted).lineLimit(1).truncationMode(.head)
                 }
             }
             Spacer(minLength: 4)
@@ -320,17 +320,17 @@ private struct ReviewFileRow: View {
                     Image(systemName: "text.bubble.fill")
                     Text("\(comments)")
                 }
-                .font(Extreme.font(9.5))
+                .font(Tellurion.font(9.5))
                 .foregroundColor(ReviewColors.accent)
             }
             VStack(alignment: .trailing, spacing: 0) {
                 Text("+\(file.added)").foregroundColor(ReviewColors.added)
                 Text("−\(file.removed)").foregroundColor(ReviewColors.removed)
             }
-            .font(Extreme.font(9.5).monospacedDigit())
+            .font(Tellurion.font(9.5).monospacedDigit())
             Image(systemName: item.decision(file) == .accepted ? "checkmark.circle.fill" : "circle")
-                .font(Extreme.font(12))
-                .foregroundColor(item.decision(file) == .accepted ? ReviewColors.added : Extreme.muted.opacity(0.5))
+                .font(Tellurion.font(12))
+                .foregroundColor(item.decision(file) == .accepted ? ReviewColors.added : Tellurion.muted.opacity(0.5))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -351,13 +351,13 @@ private struct ReviewDiffView: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text(file.status.rawValue)
-                    .font(Extreme.font(10))
+                    .font(Tellurion.font(10))
                     .foregroundColor(.black.opacity(0.75))
                     .frame(width: 17, height: 17)
                     .background(Rectangle().fill(ReviewColors.status(file.status)))
-                Text(file.path).font(Extreme.font(12.5)).lineLimit(1).truncationMode(.middle)
+                Text(file.path).font(Tellurion.font(12.5)).lineLimit(1).truncationMode(.middle)
                 if let old = file.oldPath {
-                    Text("← \(old)").font(Extreme.font(11)).foregroundColor(Extreme.muted).lineLimit(1)
+                    Text("← \(old)").font(Tellurion.font(11)).foregroundColor(Tellurion.muted).lineLimit(1)
                 }
                 Spacer()
                 Button {
@@ -372,7 +372,7 @@ private struct ReviewDiffView: View {
                     Label(accepted ? "Approved" : "Approve", systemImage: accepted ? "checkmark.circle.fill" : "checkmark.circle")
                 }
                 .tint(ReviewColors.added)
-                .buttonStyle(ExtremeButtonStyle(prominent: true))
+                .buttonStyle(TellurionButtonStyle(prominent: true))
                 .opacity(accepted ? 1 : 0.9)
             }
             .controlSize(.small)
@@ -380,13 +380,13 @@ private struct ReviewDiffView: View {
             .padding(.vertical, 8)
             Divider()
             if file.isBinary {
-                Text("Binary file changed.").foregroundColor(Extreme.muted).frame(maxWidth: .infinity, maxHeight: .infinity)
+                Text("Binary file changed.").foregroundColor(Tellurion.muted).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView([.vertical]) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(file.hunks) { hunk in
                             Text(hunk.header)
-                                .font(Extreme.mono(10.5))
+                                .font(Tellurion.mono(10.5))
                                 .foregroundColor(ReviewColors.accent)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 10).padding(.vertical, 4)
@@ -414,15 +414,15 @@ private struct ReviewDiffView: View {
     private func commentBubble(_ comment: ReviewComment) -> some View {
         HStack(alignment: .top, spacing: 8) {
             ZStack {
-                Rectangle().fill(Extreme.raised)
-                Text("YOU").font(Extreme.font(7)).foregroundColor(Extreme.gold)
+                Rectangle().fill(Tellurion.raised)
+                Text("YOU").font(Tellurion.font(7)).foregroundColor(Tellurion.gold)
             }
             .frame(width: 20, height: 20)
-            Text(comment.text).font(Extreme.font(12)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            Text(comment.text).font(Tellurion.font(12)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             Spacer()
             Button { ReviewInbox.shared.removeComment(comment, in: item) } label: { Image(systemName: "trash") }
                 .buttonStyle(.borderless)
-                .foregroundColor(Extreme.muted)
+                .foregroundColor(Tellurion.muted)
         }
         .padding(10)
         .background(Rectangle().fill(ReviewColors.accent.opacity(0.12)))
@@ -433,14 +433,14 @@ private struct ReviewDiffView: View {
     private func composer(for line: ReviewLine) -> some View {
         VStack(alignment: .trailing, spacing: 6) {
             TextEditor(text: $draft)
-                .font(Extreme.font(12))
+                .font(Tellurion.font(12))
                 .frame(height: 64)
                 .padding(4)
-                .background(Rectangle().fill(Extreme.ink))
+                .background(Rectangle().fill(Tellurion.ink))
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(ReviewColors.accent.opacity(0.7), lineWidth: 1.2))
             HStack {
                 Text("Line \(line.anchor.line) · sent to \(item.agent.displayName) with your other comments")
-                    .font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+                    .font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
                 Spacer()
                 Button("Cancel") { composing = nil }
                 Button("Add comment") {
@@ -448,14 +448,14 @@ private struct ReviewDiffView: View {
                     composing = nil
                 }
                 .keyboardShortcut(.return, modifiers: .command)
-                .buttonStyle(ExtremeButtonStyle(prominent: true))
+                .buttonStyle(TellurionButtonStyle(prominent: true))
                 .tint(ReviewColors.accent)
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .controlSize(.small)
         }
         .padding(10)
-        .background(Rectangle().fill(Extreme.text.opacity(0.05)))
+        .background(Rectangle().fill(Tellurion.text.opacity(0.05)))
         .padding(.leading, 96).padding(.trailing, 14).padding(.vertical, 4)
     }
 
@@ -495,7 +495,7 @@ private struct ReviewLineRow: View {
                 if hovering {
                     Button(action: onComment) {
                         Image(systemName: "plus")
-                            .font(Extreme.font(9))
+                            .font(Tellurion.font(9))
                             .foregroundColor(.white)
                             .frame(width: 17, height: 17)
                             .background(Rectangle().fill(ReviewColors.accent))
@@ -511,12 +511,12 @@ private struct ReviewLineRow: View {
                 .foregroundColor(color ?? .secondary)
                 .frame(width: 16)
             Text(line.text.isEmpty ? " " : line.text)
-                .foregroundColor(Extreme.text.opacity(line.kind == .context ? 0.72 : 0.95))
+                .foregroundColor(Tellurion.text.opacity(line.kind == .context ? 0.72 : 0.95))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .font(Extreme.mono(11.5))
-        .foregroundColor(Extreme.muted)
+        .font(Tellurion.mono(11.5))
+        .foregroundColor(Tellurion.muted)
         .padding(.vertical, 1)
         .background((color ?? .clear).opacity(hovering ? 0.2 : 0.11))
         .overlay(alignment: .leading) {
@@ -534,8 +534,8 @@ struct ReviewHeaderButton: View {
     @ObservedObject private var inbox = ReviewInbox.shared
 
     var body: some View {
-        ExtremeIconButton(icon: .inbox, help: "Review changes (⌃⌘I)", tint: Extreme.gold,
-                          badge: inbox.unseenCount, badgeColor: Extreme.gold, action: ReviewInbox.toggle)
+        TellurionIconButton(icon: .inbox, help: "Review changes (⌃⌘I)", tint: Tellurion.gold,
+                          badge: inbox.unseenCount, badgeColor: Tellurion.gold, action: ReviewInbox.toggle)
     }
 }
 
@@ -550,13 +550,13 @@ struct ReviewPaneChip: View {
                 ReviewInbox.show(selecting: item)
             } label: {
                 HStack(spacing: 4) {
-                    PixelIconView(icon: .inbox, color: Extreme.ink, pixel: 0.8)
+                    PixelIconView(icon: .inbox, color: Tellurion.ink, pixel: 0.8)
                     Text("Review \(item.files.count)")
                 }
-                .font(Extreme.font(9.5))
-                .foregroundColor(Extreme.ink)
+                .font(Tellurion.font(9.5))
+                .foregroundColor(Tellurion.ink)
                 .padding(.horizontal, 5).padding(.vertical, 1.5)
-                .background(Extreme.gold)
+                .background(Tellurion.gold)
                 .fixedSize()
             }
             .buttonStyle(.plain)

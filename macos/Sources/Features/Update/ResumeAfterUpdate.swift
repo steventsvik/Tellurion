@@ -38,7 +38,7 @@ enum ResumeAfterUpdate {
     static func entries() -> [Entry] {
         var result: [Entry] = []
         for controller in TerminalController.all {
-            if ExtremeSettings.isOn(.localhost), let session = LocalhostSessions.shared.session(for: controller),
+            if TellurionSettings.isOn(.localhost), let session = LocalhostSessions.shared.session(for: controller),
                let surface = controller.surfaceTree.first {
                 result.append(Entry(kind: .localhost, surface: surface.id.uuidString, cwd: session.cwd, value: session.command))
                 continue

@@ -118,14 +118,14 @@ struct AgentPermissionButtons: View {
                 Button { AgentPermissions.answer(.allow, on: surface) } label: {
                     Label("Allow", systemImage: "checkmark").labelStyle(.titleAndIcon)
                 }
-                .buttonStyle(ExtremeButtonStyle(prominent: true))
+                .buttonStyle(TellurionButtonStyle(prominent: true))
                 .help("Choose \"Yes\" in the agent's prompt (Enter)")
             }
             if prompt.canDeny {
                 Button { AgentPermissions.answer(.deny, on: surface) } label: {
                     Label("Deny", systemImage: "xmark").labelStyle(.titleAndIcon)
                 }
-                .buttonStyle(ExtremeButtonStyle())
+                .buttonStyle(TellurionButtonStyle())
                 .help("Choose \"No, and tell it what to do differently\" (Esc)")
             }
         }

@@ -29,7 +29,7 @@ enum WelcomeWindow {
         store.refresh {
             let needsSetup = store.checks.contains { $0.section == .agentStatus && $0.status == .problem }
             // A fresh install also picks between classic windows and boards.
-            if needsSetup || forced || !ExtremeEdition.chosen {
+            if needsSetup || forced || !TellurionEdition.chosen {
                 show()
             } else {
                 UserDefaults.standard.set(true, forKey: doneKey)
@@ -38,7 +38,7 @@ enum WelcomeWindow {
     }
 
     static func finish() {
-        if !ExtremeEdition.chosen { ExtremeEdition.set(ExtremeEdition.current) }
+        if !TellurionEdition.chosen { TellurionEdition.set(TellurionEdition.current) }
         UserDefaults.standard.set(true, forKey: doneKey)
         AgentToolWindows.close(id: windowID)
     }
@@ -58,7 +58,7 @@ private struct WelcomeView: View {
         VStack(spacing: 0) {
             steps
                 .padding(.horizontal, 20).padding(.top, 34).padding(.bottom, 14)
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             ScrollView {
                 Group {
                     switch page {
@@ -71,10 +71,10 @@ private struct WelcomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)
             }
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             navigation.padding(.horizontal, 20).padding(.vertical, 12)
         }
-        .extremeWindow()
+        .tellurionWindow()
         .onAppear { store.refreshIfStale(30) }
     }
 
@@ -85,14 +85,14 @@ private struct WelcomeView: View {
             ForEach(Array(pages.enumerated()), id: \.offset) { index, title in
                 HStack(spacing: 6) {
                     Text("\(index + 1)")
-                        .font(Extreme.font(10, weight: .bold))
-                        .foregroundColor(index <= page ? Extreme.ink : Extreme.muted)
+                        .font(Tellurion.font(10, weight: .bold))
+                        .foregroundColor(index <= page ? Tellurion.ink : Tellurion.muted)
                         .frame(width: 18, height: 18)
-                        .background(Circle().fill(index <= page ? Extreme.gold : Extreme.raised))
-                    Text(title).font(Extreme.font(11.5, weight: index == page ? .semibold : .regular))
-                        .foregroundColor(index == page ? Extreme.text : Extreme.muted)
+                        .background(Circle().fill(index <= page ? Tellurion.gold : Tellurion.raised))
+                    Text(title).font(Tellurion.font(11.5, weight: index == page ? .semibold : .regular))
+                        .foregroundColor(index == page ? Tellurion.text : Tellurion.muted)
                 }
-                if index < pages.count - 1 { Rectangle().fill(Extreme.line).frame(height: 1).frame(maxWidth: 30) }
+                if index < pages.count - 1 { Rectangle().fill(Tellurion.line).frame(height: 1).frame(maxWidth: 30) }
             }
             Spacer(minLength: 0)
         }
@@ -108,10 +108,10 @@ private struct WelcomeView: View {
                 Button("Skip setup") { WelcomeWindow.finish() }
                     .help("You can come back from Tellurion > Welcome… or Check Setup…")
                 Button(page == 1 && setUpResult == nil && needsSetUp ? "Next without setting up" : "Next") { page += 1 }
-                    .buttonStyle(ExtremeButtonStyle(prominent: !(page == 1 && needsSetUp && setUpResult == nil)))
+                    .buttonStyle(TellurionButtonStyle(prominent: !(page == 1 && needsSetUp && setUpResult == nil)))
             } else {
                 Button("Done") { WelcomeWindow.finish() }
-                    .buttonStyle(ExtremeButtonStyle(prominent: true))
+                    .buttonStyle(TellurionButtonStyle(prominent: true))
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -122,26 +122,26 @@ private struct WelcomeView: View {
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 14) {
-                ExtremeSigil(size: 44)
+                TellurionSigil(size: 44)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("TELLURION").font(Extreme.font(18, weight: .semibold)).kerning(4.2).foregroundColor(Extreme.gold)
+                    Text("TELLURION").font(Tellurion.font(18, weight: .semibold)).kerning(4.2).foregroundColor(Tellurion.gold)
                     Text("A terminal built for watching coding agents work")
-                        .font(Extreme.font(12.5, weight: .regular)).foregroundColor(Extreme.muted)
+                        .font(Tellurion.font(12.5, weight: .regular)).foregroundColor(Tellurion.muted)
                 }
             }
             Text("""
             Everything Ghostty does, plus a sidebar that shows what each agent is doing, an editor that \
             follows them, review and undo for their changes, and more. A minute of setup connects your agents.
             """)
-            .font(Extreme.font(12.5, weight: .regular)).foregroundColor(Extreme.text)
+            .font(Tellurion.font(12.5, weight: .regular)).foregroundColor(Tellurion.text)
             .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 8) {
-                ExtremeSectionLabel("How you see your terminals")
+                TellurionSectionLabel("How you see your terminals")
                 EditionPicker()
-                Text("You can switch any time in Settings.").font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                Text("You can switch any time in Settings.").font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
             }
             VStack(alignment: .leading, spacing: 8) {
-                ExtremeSectionLabel("Found on this Mac")
+                TellurionSectionLabel("Found on this Mac")
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
                     tool("claude", "Claude Code")
                     tool("codex", "Codex")
@@ -150,7 +150,7 @@ private struct WelcomeView: View {
                     tool("gh", "GitHub CLI")
                     tool("docker", "Docker or Colima")
                 }
-                if store.checks.isEmpty { Text("Looking…").font(Extreme.font(11)).foregroundColor(Extreme.dim) }
+                if store.checks.isEmpty { Text("Looking…").font(Tellurion.font(11)).foregroundColor(Tellurion.dim) }
             }
         }
     }
@@ -159,8 +159,8 @@ private struct WelcomeView: View {
         let found = store.tools[name] != nil
         return HStack(spacing: 8) {
             Image(systemName: found ? "checkmark.circle.fill" : "circle.dashed")
-                .foregroundColor(found ? Extreme.live : Extreme.dim)
-            Text(title).font(Extreme.font(12)).foregroundColor(found ? Extreme.text : Extreme.muted)
+                .foregroundColor(found ? Tellurion.live : Tellurion.dim)
+            Text(title).font(Tellurion.font(12)).foregroundColor(found ? Tellurion.text : Tellurion.muted)
         }
     }
 
@@ -173,7 +173,7 @@ private struct WelcomeView: View {
     private var agentStatus: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Agents tell Tellurion what they're doing through small hook scripts. Setting up:")
-                .font(Extreme.font(12.5, weight: .regular)).foregroundColor(Extreme.text)
+                .font(Tellurion.font(12.5, weight: .regular)).foregroundColor(Tellurion.text)
             VStack(alignment: .leading, spacing: 8) {
                 plan(true, "Install the hooks", "Into ~/.ghostty-extreme, outside folders macOS protects", locked: true)
                 if usesClaude {
@@ -189,33 +189,33 @@ private struct WelcomeView: View {
                 }
             }
             Text("Each file is backed up beside itself first. Settings > Remove… takes everything back out.")
-                .font(Extreme.font(11, weight: .regular)).foregroundColor(Extreme.muted)
+                .font(Tellurion.font(11, weight: .regular)).foregroundColor(Tellurion.muted)
             if store.tools["jq"] == nil && !store.checks.isEmpty {
                 HStack(spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(Extreme.warn)
-                    Text("The hooks need jq, which isn't installed.").font(Extreme.font(12)).foregroundColor(Extreme.text)
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(Tellurion.warn)
+                    Text("The hooks need jq, which isn't installed.").font(Tellurion.font(12)).foregroundColor(Tellurion.text)
                     Spacer()
                     Button(store.tools["brew"] != nil ? "Install with Homebrew" : "Get jq") { store.apply(.installJq) }
                 }
-                .padding(10).extremePanel(fill: Extreme.raised)
+                .padding(10).tellurionPanel(fill: Tellurion.raised)
             }
             HStack {
                 Button(setUpResult == nil ? "Set up" : "Set up again") { setUp() }
-                    .buttonStyle(ExtremeButtonStyle(prominent: setUpResult == nil))
+                    .buttonStyle(TellurionButtonStyle(prominent: setUpResult == nil))
                 if let setUpResult {
                     Label(setUpResult.isEmpty ? "Already set up" : "Done: \(setUpResult.joined(separator: ", "))",
                           systemImage: "checkmark.circle.fill")
-                        .font(Extreme.font(11.5)).foregroundColor(Extreme.live)
+                        .font(Tellurion.font(11.5)).foregroundColor(Tellurion.live)
                         .lineLimit(2)
                 }
             }
             if let error = store.fixError {
-                Label(error, systemImage: "exclamationmark.triangle.fill").font(Extreme.font(11.5)).foregroundColor(Extreme.danger)
+                Label(error, systemImage: "exclamationmark.triangle.fill").font(Tellurion.font(11.5)).foregroundColor(Tellurion.danger)
             }
             let remaining = store.checks.filter { $0.section == .agentStatus && $0.status >= .warning && $0.id != "events" }
             if setUpResult != nil && !remaining.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    ExtremeSectionLabel("Still to do")
+                    TellurionSectionLabel("Still to do")
                     ForEach(remaining) { SetupCheckRow(check: $0, compact: true) }
                 }
             }
@@ -226,13 +226,13 @@ private struct WelcomeView: View {
         HStack(alignment: .top, spacing: 10) {
             Toggle("", isOn: on).toggleStyle(.checkbox).labelsHidden().accessibilityLabel(title)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(Extreme.font(12.5, weight: .semibold)).foregroundColor(Extreme.text)
-                Text(detail).font(Extreme.font(11, weight: .regular)).foregroundColor(Extreme.muted)
+                Text(title).font(Tellurion.font(12.5, weight: .semibold)).foregroundColor(Tellurion.text)
+                Text(detail).font(Tellurion.font(11, weight: .regular)).foregroundColor(Tellurion.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
-        .padding(10).extremePanel()
+        .padding(10).tellurionPanel()
     }
 
     private func plan(_ on: Bool, _ title: String, _ detail: String, locked: Bool) -> some View {
@@ -261,7 +261,7 @@ private struct WelcomeView: View {
     private var features: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Everything is on. Turn off what you don't want; a feature that's off has no shortcut, button or background work. You can change this any time in Settings.")
-                .font(Extreme.font(12.5, weight: .regular)).foregroundColor(Extreme.text)
+                .font(Tellurion.font(12.5, weight: .regular)).foregroundColor(Tellurion.text)
                 .fixedSize(horizontal: false, vertical: true)
             FeaturePresetPicker()
             FeatureToggleList()
@@ -273,21 +273,21 @@ private struct WelcomeView: View {
     private var tryIt: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Send a test event through the real hooks. A new tab runs tellurion doctor, which checks everything and reports to the sidebar.")
-                .font(Extreme.font(12.5, weight: .regular)).foregroundColor(Extreme.text)
+                .font(Tellurion.font(12.5, weight: .regular)).foregroundColor(Tellurion.text)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
                 Button("Run live test") { store.apply(.liveTest) }
-                    .buttonStyle(ExtremeButtonStyle(prominent: store.liveCheckAt == nil))
+                    .buttonStyle(TellurionButtonStyle(prominent: store.liveCheckAt == nil))
                 if store.liveCheckAt != nil {
                     Label("It works: the test event arrived", systemImage: "checkmark.circle.fill")
-                        .font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.live)
+                        .font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.live)
                 }
             }
             if let notifications = store.checks.first(where: { $0.id == "notifications" }), notifications.status != .ok {
                 SetupCheckRow(check: notifications, compact: true)
             }
             VStack(alignment: .leading, spacing: 6) {
-                ExtremeSectionLabel("Good to know")
+                TellurionSectionLabel("Good to know")
                 hint("⌃⌘ held for a moment", "shows every shortcut")
                 hint("⌘P", "jumps to any tab, agent or command")
                 hint("+ New in the sidebar", "starts Claude Code, Codex and other sessions")
@@ -299,8 +299,8 @@ private struct WelcomeView: View {
 
     private func hint(_ key: String, _ text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(key).font(Extreme.font(11.5, weight: .semibold)).foregroundColor(Extreme.gold)
-            Text(text).font(Extreme.font(11.5, weight: .regular)).foregroundColor(Extreme.muted)
+            Text(key).font(Tellurion.font(11.5, weight: .semibold)).foregroundColor(Tellurion.gold)
+            Text(text).font(Tellurion.font(11.5, weight: .regular)).foregroundColor(Tellurion.muted)
         }
     }
 }

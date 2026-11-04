@@ -20,7 +20,7 @@ LIMIT = 6000
 
 
 def home():
-    return Path(os.environ.get("GHOSTTY_EXTREME_TEST_HOME") or Path.home())
+    return Path(os.environ.get("TELLURION_TEST_HOME") or Path.home())
 
 
 def repo_root(folder):

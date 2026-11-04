@@ -113,7 +113,7 @@ enum BoardWeb {
 extension BoardController {
     /// A web tile around a board point (from the radial menu).
     func addWebTile(at point: CGPoint, url: String? = nil) {
-        guard ExtremeSettings.isOn(.webTiles) else { return }
+        guard TellurionSettings.isOn(.webTiles) else { return }
         let id = addCard(.web, at: point, edit: false)
         updateCard(id) { card in
             card.tabs = [url ?? ""]
@@ -123,7 +123,7 @@ extension BoardController {
 
     /// A web tile of a box dragged out with the web tool.
     func finishWebBox(from start: CGPoint, to end: CGPoint) {
-        guard ExtremeSettings.isOn(.webTiles) else { return }
+        guard TellurionSettings.isOn(.webTiles) else { return }
         hideWebBox()
         model.tool = .select
         var rect = CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
@@ -455,22 +455,22 @@ private struct WebTileChrome: View {
             HStack(spacing: 4) {
                 ForEach(state.tabs.indices, id: \.self) { index in
                     HStack(spacing: 5) {
-                        Text(state.tabs[index]).font(Extreme.font(11, weight: index == state.tab ? .semibold : .regular))
-                            .foregroundColor(index == state.tab ? Extreme.text : Extreme.muted).lineLimit(1)
+                        Text(state.tabs[index]).font(Tellurion.font(11, weight: index == state.tab ? .semibold : .regular))
+                            .foregroundColor(index == state.tab ? Tellurion.text : Tellurion.muted).lineLimit(1)
                         if state.tabs.count > 1 {
                             Button { actions.closeTab(index) } label: {
-                                Image(systemName: "xmark").font(.system(size: 7.5, weight: .bold)).foregroundColor(Extreme.dim)
+                                Image(systemName: "xmark").font(.system(size: 7.5, weight: .bold)).foregroundColor(Tellurion.dim)
                             }
                             .buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, 9).frame(maxWidth: 180).frame(height: 22)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(index == state.tab ? Extreme.raised : .clear))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(index == state.tab ? Tellurion.raised : .clear))
                     .contentShape(Rectangle())
                     .onTapGesture { actions.select(index) }
                 }
                 Button(action: actions.newTab) {
-                    Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundColor(Extreme.muted)
+                    Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundColor(Tellurion.muted)
                         .frame(width: 22, height: 22)
                 }
                 .buttonStyle(.plain)
@@ -489,15 +489,15 @@ private struct WebTileChrome: View {
                     actions.go(typed)
                 })
                 .textFieldStyle(.plain)
-                .font(Extreme.font(12))
-                .foregroundColor(Extreme.text)
+                .font(Tellurion.font(12))
+                .foregroundColor(Tellurion.text)
                 .padding(.horizontal, 10).frame(height: 24)
-                .background(RoundedRectangle(cornerRadius: 7).fill(Extreme.ink))
+                .background(RoundedRectangle(cornerRadius: 7).fill(Tellurion.ink))
                 .onChange(of: state.address) { address in if !state.editing { typed = address } }
                 if let viewport = state.viewport {
-                    Text(viewport).font(Extreme.font(10.5, weight: .semibold)).foregroundColor(Extreme.core)
+                    Text(viewport).font(Tellurion.font(10.5, weight: .semibold)).foregroundColor(Tellurion.core)
                         .padding(.horizontal, 7).padding(.vertical, 2)
-                        .background(Capsule().fill(Extreme.core.opacity(0.14)))
+                        .background(Capsule().fill(Tellurion.core.opacity(0.14)))
                         .lineLimit(1).fixedSize()
                 }
                 Menu {
@@ -511,7 +511,7 @@ private struct WebTileChrome: View {
                         }
                     }
                 } label: {
-                    Image(systemName: "display").font(.system(size: 11)).foregroundColor(Extreme.muted)
+                    Image(systemName: "display").font(.system(size: 11)).foregroundColor(Tellurion.muted)
                 }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                 .help("Viewport")
@@ -520,19 +520,19 @@ private struct WebTileChrome: View {
             .padding(.horizontal, 8).frame(height: 34)
             // The load bar.
             GeometryReader { geo in
-                Rectangle().fill(Extreme.core).frame(width: geo.size.width * state.progress, height: 2)
+                Rectangle().fill(Tellurion.core).frame(width: geo.size.width * state.progress, height: 2)
                     .opacity(state.loading ? 1 : 0)
                     .animation(.easeOut(duration: 0.2), value: state.progress)
             }
             .frame(height: 0)
         }
-        .background(Extreme.panel)
+        .background(Tellurion.panel)
     }
 
     private func navButton(_ symbol: String, _ help: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
-                .foregroundColor(enabled ? Extreme.text.opacity(0.85) : Extreme.dim)
+                .foregroundColor(enabled ? Tellurion.text.opacity(0.85) : Tellurion.dim)
                 .frame(width: 22, height: 22).contentShape(Rectangle())
         }
         .buttonStyle(.plain)

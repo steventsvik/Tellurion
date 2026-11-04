@@ -4,18 +4,18 @@ import SwiftUI
 
 /// Tellurion's own settings: which features are on, how much the chrome moves, the
 /// sidebar, and agent setup. Ghostty's settings stay in its config file (⌘,).
-enum ExtremeSettingsWindow {
+enum TellurionSettingsWindow {
     static let windowID = "extreme-settings"
 
     static func show() {
         AgentToolWindows.show(id: windowID, title: "Tellurion Settings", size: NSSize(width: 620, height: 720)) {
-            ExtremeSettingsView()
+            TellurionSettingsView()
         }
     }
 }
 
-private struct ExtremeSettingsView: View {
-    @ObservedObject private var settings = ExtremeSettings.shared
+private struct TellurionSettingsView: View {
+    @ObservedObject private var settings = TellurionSettings.shared
     @ObservedObject private var setup = SetupChecks.shared
     @AppStorage(AgentAurora.enabledKey) private var aurora = false
     @AppStorage(VerticalTabs.widthKey) private var sidebarWidth: Double = VerticalTabs.defaultWidth
@@ -24,32 +24,32 @@ private struct ExtremeSettingsView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                ExtremeWindowTitle(icon: nil, title: "Settings", subtitle: "Tellurion's features and look", sigil: true)
+                TellurionWindowTitle(icon: nil, title: "Settings", subtitle: "Tellurion's features and look", sigil: true)
                 Spacer()
             }
             .padding(.horizontal, 16).padding(.top, 30).padding(.bottom, 12)
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     VStack(alignment: .leading, spacing: 10) {
-                        ExtremeSectionLabel("Edition")
+                        TellurionSectionLabel("Edition")
                         EditionPicker()
                         Text("Decides what a new window is. Switching to Board opens a board; your open windows stay.")
-                            .font(Extreme.font(11)).foregroundColor(Extreme.muted)
+                            .font(Tellurion.font(11)).foregroundColor(Tellurion.muted)
                     }
                     VStack(alignment: .leading, spacing: 10) {
-                        ExtremeSectionLabel("Features")
+                        TellurionSectionLabel("Features")
                         FeaturePresetPicker()
                         FeatureToggleList()
                     }
                     VStack(alignment: .leading, spacing: 10) {
-                        ExtremeSectionLabel("Look")
+                        TellurionSectionLabel("Look")
                         settingRow("Design", designDetail) {
                             Button("Open Design…") { DesignWindow.show() }
                         }
                         settingRow("Animation", "Status only keeps spinners and status lights, and stops the decoration") {
                             Picker("", selection: Binding(get: { settings.motion }, set: { settings.motion = $0 })) {
-                                ForEach(ExtremeMotionLevel.allCases) { Text($0.title).tag($0) }
+                                ForEach(TellurionMotionLevel.allCases) { Text($0.title).tag($0) }
                             }
                             .pickerStyle(.segmented)
                             .frame(width: 200)
@@ -67,7 +67,7 @@ private struct ExtremeSettingsView: View {
                         }
                     }
                     VStack(alignment: .leading, spacing: 10) {
-                        ExtremeSectionLabel("Agents")
+                        TellurionSectionLabel("Agents")
                         settingRow(agentTitle, "Hooks that let Claude Code and Codex report their status") {
                             HStack(spacing: 8) {
                                 Button("Check Setup…") { SetupCheckWindow.show() }
@@ -76,7 +76,7 @@ private struct ExtremeSettingsView: View {
                         }
                     }
                     VStack(alignment: .leading, spacing: 10) {
-                        ExtremeSectionLabel("Shortcuts")
+                        TellurionSectionLabel("Shortcuts")
                         settingRow("Every shortcut", "Hold ⌃⌘ for a moment, or press ⌃⌘/") {
                             Button("Show") { ShortcutSheet.shared.show(sticky: true) }
                         }
@@ -85,7 +85,7 @@ private struct ExtremeSettingsView: View {
                 .padding(16)
             }
         }
-        .extremeWindow()
+        .tellurionWindow()
         .onAppear { setup.refreshIfStale(60) }
     }
 
@@ -106,37 +106,37 @@ private struct ExtremeSettingsView: View {
     private func settingRow<Control: View>(_ title: String, _ detail: String, @ViewBuilder control: () -> Control) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(Extreme.font(12.5, weight: .semibold)).foregroundColor(Extreme.text)
-                Text(detail).font(Extreme.font(11, weight: .regular)).foregroundColor(Extreme.muted)
+                Text(title).font(Tellurion.font(12.5, weight: .semibold)).foregroundColor(Tellurion.text)
+                Text(detail).font(Tellurion.font(11, weight: .regular)).foregroundColor(Tellurion.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 12)
             control()
         }
         .padding(10)
-        .extremePanel()
+        .tellurionPanel()
     }
 }
 
 /// Everything / Agent essentials / Just the sidebar.
 struct FeaturePresetPicker: View {
-    @ObservedObject private var settings = ExtremeSettings.shared
+    @ObservedObject private var settings = TellurionSettings.shared
 
     var body: some View {
         HStack(spacing: 8) {
-            ForEach(ExtremePreset.allCases) { preset in
+            ForEach(TellurionPreset.allCases) { preset in
                 let selected = settings.preset == preset
                 Button { settings.apply(preset) } label: {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(preset.title).font(Extreme.font(12, weight: .semibold))
-                            .foregroundColor(selected ? Extreme.gold : Extreme.text)
-                        Text(preset.detail).font(Extreme.font(10.5, weight: .regular)).foregroundColor(Extreme.muted)
+                        Text(preset.title).font(Tellurion.font(12, weight: .semibold))
+                            .foregroundColor(selected ? Tellurion.gold : Tellurion.text)
+                        Text(preset.detail).font(Tellurion.font(10.5, weight: .regular)).foregroundColor(Tellurion.muted)
                             .fixedSize(horizontal: false, vertical: true)
                             .multilineTextAlignment(.leading)
                     }
                     .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
                     .padding(10)
-                    .extremePanel(active: selected)
+                    .tellurionPanel(active: selected)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -147,21 +147,21 @@ struct FeaturePresetPicker: View {
 
 /// A switch per feature, with what it does and its shortcut.
 struct FeatureToggleList: View {
-    @ObservedObject private var settings = ExtremeSettings.shared
+    @ObservedObject private var settings = TellurionSettings.shared
 
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(Array(ExtremeFeature.allCases.enumerated()), id: \.element) { index, feature in
-                if index > 0 { Rectangle().fill(Extreme.line.opacity(0.6)).frame(height: 1) }
+            ForEach(Array(TellurionFeature.allCases.enumerated()), id: \.element) { index, feature in
+                if index > 0 { Rectangle().fill(Tellurion.line.opacity(0.6)).frame(height: 1) }
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 8) {
-                            Text(feature.title).font(Extreme.font(12.5, weight: .semibold)).foregroundColor(Extreme.text)
+                            Text(feature.title).font(Tellurion.font(12.5, weight: .semibold)).foregroundColor(Tellurion.text)
                             if let key = feature.shortcut {
-                                Text("⌃⌘\(key)").font(Extreme.mono(10.5)).foregroundColor(Extreme.dim)
+                                Text("⌃⌘\(key)").font(Tellurion.mono(10.5)).foregroundColor(Tellurion.dim)
                             }
                         }
-                        Text(feature.detail).font(Extreme.font(11, weight: .regular)).foregroundColor(Extreme.muted)
+                        Text(feature.detail).font(Tellurion.font(11, weight: .regular)).foregroundColor(Tellurion.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 12)
@@ -174,7 +174,7 @@ struct FeatureToggleList: View {
                 .padding(.vertical, 8)
             }
         }
-        .extremePanel()
+        .tellurionPanel()
     }
 }
 

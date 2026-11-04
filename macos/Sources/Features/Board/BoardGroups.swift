@@ -245,9 +245,9 @@ final class BoardGroupsView: NSView {
 
             // The header: ● NAME  count · running ⌄
             let bold = NSFont.systemFont(ofSize: 12, weight: .bold), plain = NSFont.systemFont(ofSize: 11.5, weight: .medium)
-            let muted = Extreme.chrome.muted.nsColor
+            let muted = Tellurion.chrome.muted.nsColor
             let text = NSMutableAttributedString(string: "● ", attributes: [.font: plain, .foregroundColor: group.color])
-            text.append(NSAttributedString(string: group.name.uppercased(), attributes: [.font: bold, .foregroundColor: Extreme.chrome.text.nsColor, .kern: 0.6]))
+            text.append(NSAttributedString(string: group.name.uppercased(), attributes: [.font: bold, .foregroundColor: Tellurion.chrome.text.nsColor, .kern: 0.6]))
             let counts = "  \(group.count)" + (group.running > 0 ? " · \(group.running) running" : " · idle") + "  "
             text.append(NSAttributedString(string: counts, attributes: [.font: plain, .foregroundColor: muted]))
             text.append(NSAttributedString(string: group.collapsed ? "›" : "⌄", attributes: [.font: bold, .foregroundColor: muted]))
@@ -269,7 +269,7 @@ final class BoardGroupsView: NSView {
                     if index > 0 { lines.append(NSAttributedString(string: "\n")) }
                     lines.append(NSAttributedString(string: "●  ", attributes: [.font: plain, .foregroundColor: row.color]))
                     lines.append(NSAttributedString(string: row.name, attributes: [.font: NSFont.systemFont(ofSize: 12.5, weight: .semibold),
-                                                                                     .foregroundColor: Extreme.chrome.text.nsColor]))
+                                                                                     .foregroundColor: Tellurion.chrome.text.nsColor]))
                     lines.append(NSAttributedString(string: "   " + row.status, attributes: [.font: plain, .foregroundColor: muted]))
                 }
                 let paragraph = NSMutableParagraphStyle()
@@ -291,10 +291,10 @@ final class BoardGroupsView: NSView {
                 let font = NSFont.systemFont(ofSize: 12, weight: .semibold)
                 let size = (title as NSString).size(withAttributes: [.font: font])
                 layers.pill.string = NSAttributedString(string: title, attributes: [
-                    .font: font, .foregroundColor: on ? Extreme.chrome.ink.nsColor : wiring.color,
+                    .font: font, .foregroundColor: on ? Tellurion.chrome.ink.nsColor : wiring.color,
                 ])
                 layers.pill.bounds = CGRect(x: 0, y: 0, width: size.width + 22, height: 22)
-                layers.pill.backgroundColor = (on ? wiring.color : Extreme.chrome.panel.nsColor).cgColor
+                layers.pill.backgroundColor = (on ? wiring.color : Tellurion.chrome.panel.nsColor).cgColor
                 layers.pill.borderColor = wiring.color.withAlphaComponent(0.8).cgColor
                 layers.pill.borderWidth = 1
                 layers.pill.cornerRadius = 11
@@ -362,7 +362,7 @@ final class BoardGroupsView: NSView {
             let bounds = CGRect(x: 0, y: 0, width: size.width + 22, height: 24)
             pill.bounds = bounds
             pill.cornerRadius = 12
-            pill.backgroundColor = (wired ? wiring.color : Extreme.chrome.panel.nsColor).cgColor
+            pill.backgroundColor = (wired ? wiring.color : Tellurion.chrome.panel.nsColor).cgColor
             pill.borderColor = wiring.color.withAlphaComponent(0.8).cgColor
             pill.borderWidth = 1
             pill.transform = CATransform3DMakeScale(scale, scale, 1)
@@ -370,7 +370,7 @@ final class BoardGroupsView: NSView {
             pill.position = CGPoint(x: rect.midX, y: rect.minY - labelHeight)
             if let text = pill.sublayers?.first as? CATextLayer {
                 text.string = NSAttributedString(string: title, attributes: [
-                    .font: font, .foregroundColor: wired ? Extreme.chrome.ink.nsColor : wiring.color,
+                    .font: font, .foregroundColor: wired ? Tellurion.chrome.ink.nsColor : wiring.color,
                 ])
                 text.frame = bounds.insetBy(dx: 0, dy: (bounds.height - 16) / 2)
                 text.contentsScale = (window?.backingScaleFactor ?? 2) * max(scale * zoom, 1)
@@ -494,13 +494,13 @@ final class BoardGroupsView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if boxLayer.superlayer == nil {
-            boxLayer.fillColor = Extreme.chrome.core.nsColor.withAlphaComponent(0.05).cgColor
+            boxLayer.fillColor = Tellurion.chrome.core.nsColor.withAlphaComponent(0.05).cgColor
             boxLayer.zPosition = 11
             layer?.addSublayer(boxLayer)
         }
         let zoom = max(self.zoom, 0.08)
         boxLayer.path = rect.map { CGPath(roundedRect: $0, cornerWidth: 12, cornerHeight: 12, transform: nil) }
-        boxLayer.strokeColor = Extreme.chrome.core.nsColor.cgColor
+        boxLayer.strokeColor = Tellurion.chrome.core.nsColor.cgColor
         boxLayer.lineWidth = 1.5 / zoom
         boxLayer.lineDashPattern = [NSNumber(value: 7 / zoom), NSNumber(value: 5 / zoom)]
         CATransaction.commit()
@@ -515,7 +515,7 @@ final class BoardGroupsView: NSView {
             path.addLine(to: b)
         }
         guideLayer.path = lines.isEmpty ? nil : path
-        guideLayer.strokeColor = Extreme.chrome.gold.nsColor.withAlphaComponent(0.9).cgColor
+        guideLayer.strokeColor = Tellurion.chrome.gold.nsColor.withAlphaComponent(0.9).cgColor
         guideLayer.lineWidth = 1.2 / max(zoom, 0.08)
         guideLayer.lineDashPattern = [NSNumber(value: 6 / max(zoom, 0.08)), NSNumber(value: 4 / max(zoom, 0.08))]
         CATransaction.commit()

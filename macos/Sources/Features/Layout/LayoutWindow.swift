@@ -20,21 +20,21 @@ struct LayoutWindowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center) {
-                ExtremeWindowTitle(icon: .layout, title: "Layout",
+                TellurionWindowTitle(icon: .layout, title: "Layout",
                                    subtitle: "Drag a box to a new spot. Every window follows.")
                 Spacer()
                 Button("Reset") { layout.set(WindowLayout.standard) }
-                    .buttonStyle(ExtremeButtonStyle())
+                    .buttonStyle(TellurionButtonStyle())
                     .disabled(layout.order == WindowLayout.standard)
             }
             .padding(.horizontal, 20)
             .padding(.top, 34)
             .padding(.bottom, 14)
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             VStack(alignment: .leading, spacing: 16) {
                 LayoutMap()
                     .frame(height: 230)
-                ExtremeSectionLabel("Templates")
+                TellurionSectionLabel("Templates")
                 HStack(spacing: 10) {
                     ForEach(WindowLayout.templates) { template in
                         LayoutTemplateCard(template: template, selected: layout.order == template.order) {
@@ -53,7 +53,7 @@ struct LayoutWindowView: View {
 /// go applies the order.
 private struct LayoutMap: View {
     @ObservedObject private var layout = WindowLayout.shared
-    @ObservedObject private var settings = ExtremeSettings.shared
+    @ObservedObject private var settings = TellurionSettings.shared
     @State private var draft: [LayoutBox] = WindowLayout.shared.order
     @State private var dragging: LayoutBox?
     /// The dragged box's center, following the pointer.
@@ -111,8 +111,8 @@ private struct LayoutMap: View {
     private var windowChrome: some View {
         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
         return ZStack(alignment: .topLeading) {
-            shape.fill(Extreme.ink)
-            shape.strokeBorder(Extreme.lineStrong, lineWidth: 1)
+            shape.fill(Tellurion.ink)
+            shape.strokeBorder(Tellurion.lineStrong, lineWidth: 1)
             HStack(spacing: 6) {
                 ForEach([Color(rgb: 0xFF5F57), Color(rgb: 0xFEBC2E), Color(rgb: 0x28C840)], id: \.self) {
                     Circle().fill($0.opacity(0.75)).frame(width: 9, height: 9)
@@ -185,21 +185,21 @@ private struct LayoutBoxCard: View {
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundColor(box.tint)
             Text(box.title)
-                .font(Extreme.font(11.5, weight: .semibold))
-                .foregroundColor(Extreme.text)
+                .font(Tellurion.font(11.5, weight: .semibold))
+                .foregroundColor(Tellurion.text)
                 .multilineTextAlignment(.center)
             Text(on ? box.detail : "Off in Settings")
-                .font(Extreme.font(9.5))
-                .foregroundColor(Extreme.muted)
+                .font(Tellurion.font(9.5))
+                .foregroundColor(Tellurion.muted)
                 .multilineTextAlignment(.center)
         }
         .padding(6)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(shape.fill(lifted ? Extreme.raised : Extreme.panel))
+        .background(shape.fill(lifted ? Tellurion.raised : Tellurion.panel))
         .overlay(alignment: .top) {
             Capsule().fill(box.tint.opacity(0.8)).frame(height: 3).padding(.horizontal, 14).padding(.top, 6)
         }
-        .overlay(shape.strokeBorder(lifted || hovering ? box.tint.opacity(0.7) : Extreme.line, lineWidth: 1))
+        .overlay(shape.strokeBorder(lifted || hovering ? box.tint.opacity(0.7) : Tellurion.line, lineWidth: 1))
         .opacity(on ? 1 : 0.5)
         .scaleEffect(lifted ? 1.05 : 1)
         .shadow(color: .black.opacity(lifted ? 0.55 : 0), radius: lifted ? 14 : 0, y: lifted ? 8 : 0)
@@ -251,19 +251,19 @@ private struct LayoutTemplateCard: View {
                 }
                 .frame(height: 34)
                 Text(template.name)
-                    .font(Extreme.font(11.5, weight: .semibold))
-                    .foregroundColor(selected ? Extreme.gold : Extreme.text)
+                    .font(Tellurion.font(11.5, weight: .semibold))
+                    .foregroundColor(selected ? Tellurion.gold : Tellurion.text)
                 Text(template.detail)
-                    .font(Extreme.font(9.5))
-                    .foregroundColor(Extreme.muted)
+                    .font(Tellurion.font(9.5))
+                    .foregroundColor(Tellurion.muted)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .frame(height: 112, alignment: .top)
-            .background(shape.fill(hovering ? Extreme.raised : Extreme.panel))
-            .overlay(shape.strokeBorder(selected ? Extreme.gold.opacity(0.7) : (hovering ? Extreme.lineStrong : Extreme.line),
+            .background(shape.fill(hovering ? Tellurion.raised : Tellurion.panel))
+            .overlay(shape.strokeBorder(selected ? Tellurion.gold.opacity(0.7) : (hovering ? Tellurion.lineStrong : Tellurion.line),
                                         lineWidth: 1))
             .contentShape(shape)
         }

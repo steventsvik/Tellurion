@@ -29,7 +29,7 @@ struct DesignPreview: View {
         let chrome = chrome
         let terminal = terminal
         let pad = (CGFloat(design.window?.padding ?? 8) * 0.6 + 4) * scale
-        let font = design.font.family ?? Extreme.fontFamily
+        let font = design.font.family ?? Tellurion.fontFamily
         HStack(spacing: 0) {
             sidebar(chrome)
                 .frame(width: 96 * scale)

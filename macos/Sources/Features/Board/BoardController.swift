@@ -309,8 +309,8 @@ final class BoardController: BaseTerminalController {
         window.tabbingMode = .disallowed
         window.collectionBehavior.insert(.fullScreenPrimary)
         window.minSize = NSSize(width: 640, height: 420)
-        window.appearance = NSAppearance(named: Extreme.chrome.isLight ? .aqua : .darkAqua)
-        window.backgroundColor = Extreme.chrome.ink.nsColor
+        window.appearance = NSAppearance(named: Tellurion.chrome.isLight ? .aqua : .darkAqua)
+        window.backgroundColor = Tellurion.chrome.ink.nsColor
         window.setFrame(frame, display: false)
         window.delegate = self
         self.window = window

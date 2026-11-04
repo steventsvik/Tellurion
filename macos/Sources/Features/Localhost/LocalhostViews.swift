@@ -126,12 +126,12 @@ struct LocalhostSidebarSection: View {
                 Button { withAnimation(.easeOut(duration: 0.18)) { collapsed.toggle() } } label: {
                     HStack(spacing: 6) {
                         Image(systemName: collapsed ? "chevron.right" : "chevron.down")
-                            .font(.system(size: 8, weight: .bold)).foregroundColor(Extreme.dim).frame(width: 8)
+                            .font(.system(size: 8, weight: .bold)).foregroundColor(Tellurion.dim).frame(width: 8)
                         Image(systemName: "globe").font(.system(size: 10, weight: .bold))
                             .foregroundStyle(LinearGradient(colors: [.cyan, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
                         Text("LOCALHOST").font(.system(size: 10.5, weight: .semibold)).kerning(0.4)
                         if collapsed {
-                            Text("\(entries.count)").font(Extreme.font(10)).foregroundColor(Extreme.dim)
+                            Text("\(entries.count)").font(Tellurion.font(10)).foregroundColor(Tellurion.dim)
                         }
                     }
                     .contentShape(Rectangle())
@@ -193,7 +193,7 @@ struct LocalhostTabCard: View {
     let owner: BaseTerminalController
     let isSelected: Bool
     @State private var hovering = false
-    @Environment(\.extremeMotion) private var motion
+    @Environment(\.tellurionMotion) private var motion
 
     var body: some View {
         let accent = session.project.color

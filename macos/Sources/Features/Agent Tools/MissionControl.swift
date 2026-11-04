@@ -22,7 +22,7 @@ enum MissionControl {
     }
 
     static func show() {
-        guard ExtremeSettings.isOn(.missionControl) else { return }
+        guard TellurionSettings.isOn(.missionControl) else { return }
         AgentToolWindows.show(id: windowID, title: "Mission Control", size: NSSize(width: 1120, height: 720)) {
             MissionControlView()
         }
@@ -93,7 +93,7 @@ private struct MissionControlView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            ExtremeWindowTitle(icon: .grid, title: "Mission Control")
+            TellurionWindowTitle(icon: .grid, title: "Mission Control")
             summary
             Spacer()
             Picker("", selection: $showAllPanes) {
@@ -102,7 +102,7 @@ private struct MissionControlView: View {
             }
             .pickerStyle(.segmented)
             .frame(width: 170)
-            if ExtremeSettings.isOn(.races), let owner = TerminalWindows.front ?? TerminalWindows.all.first(where: { $0.window?.isVisible == true }) {
+            if TellurionSettings.isOn(.races), let owner = TerminalWindows.front ?? TerminalWindows.all.first(where: { $0.window?.isVisible == true }) {
                 Button {
                     AgentRaces.showSetup(from: owner)
                 } label: { Label("Race agents…", systemImage: "flag.checkered.2.crossed") }
@@ -124,7 +124,7 @@ private struct MissionControlView: View {
             ForEach(counts.filter { $0.1 > 0 }, id: \.0) { label, count, color in
                 HStack(spacing: 4) {
                     PixelDot(color: color, size: 6)
-                    Text("\(count) \(label)").font(Extreme.font(12)).foregroundColor(Extreme.muted)
+                    Text("\(count) \(label)").font(Tellurion.font(12)).foregroundColor(Tellurion.muted)
                 }
             }
         }
@@ -132,11 +132,11 @@ private struct MissionControlView: View {
 
     private var emptyState: some View {
         VStack(spacing: 10) {
-            ExtremeSigil(size: 56)
+            TellurionSigil(size: 56)
             Text(showAllPanes ? "No panes open" : "No agents running")
-                .font(Extreme.font(15))
+                .font(Tellurion.font(15))
             Text("Start Claude Code or Codex in a tab (or race several at once) and they'll show up here live.")
-                .font(Extreme.font(12)).foregroundColor(Extreme.muted).multilineTextAlignment(.center)
+                .font(Tellurion.font(12)).foregroundColor(Tellurion.muted).multilineTextAlignment(.center)
         }
         .frame(maxWidth: 380)
         .padding(.vertical, 90)
@@ -145,7 +145,7 @@ private struct MissionControlView: View {
 
     private var racesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("RACES").font(Extreme.font(10.5)).kerning(0.4).foregroundColor(Extreme.muted)
+            Text("RACES").font(Tellurion.font(10.5)).kerning(0.4).foregroundColor(Tellurion.muted)
             ForEach(races.races) { race in
                 Button {
                     AgentRaces.show(race, from: TerminalWindows.front)
@@ -154,11 +154,11 @@ private struct MissionControlView: View {
                         Image(systemName: "flag.checkered.2.crossed").foregroundColor(.purple)
                         Text(race.task).lineLimit(1)
                         Spacer()
-                        Text("\(race.contestants.count) agents · \(race.repoName)").foregroundColor(Extreme.muted)
+                        Text("\(race.contestants.count) agents · \(race.repoName)").foregroundColor(Tellurion.muted)
                     }
-                    .font(Extreme.font(12))
+                    .font(Tellurion.font(12))
                     .padding(10)
-                    .background(Rectangle().fill(Extreme.text.opacity(0.05)))
+                    .background(Rectangle().fill(Tellurion.text.opacity(0.05)))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -217,9 +217,9 @@ private struct MissionCardView: View {
             HStack(spacing: 9) {
                 avatar
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(card.agent?.name ?? "Terminal").font(Extreme.font(13))
+                    Text(card.agent?.name ?? "Terminal").font(Tellurion.font(13))
                     Text([card.tabTitle, card.folder].compactMap { $0 }.joined(separator: " · "))
-                        .font(Extreme.font(11)).foregroundColor(Extreme.muted).lineLimit(1).truncationMode(.middle)
+                        .font(Tellurion.font(11)).foregroundColor(Tellurion.muted).lineLimit(1).truncationMode(.middle)
                 }
                 Spacer(minLength: 6)
                 if let agent = card.agent, agent.kind != .hermes {
@@ -227,22 +227,22 @@ private struct MissionCardView: View {
                 }
             }
             if let task = card.agent?.task, !task.isEmpty {
-                Text(task).font(Extreme.font(12.5)).lineLimit(2)
+                Text(task).font(Tellurion.font(12.5)).lineLimit(2)
             }
             if let agent = card.agent, agent.kind != .hermes {
                 HStack(spacing: 5) {
                     Image(systemName: AgentAlerts.isWaiting(agent.activity) ? "hand.raised.fill" : "bolt.fill")
-                        .font(Extreme.font(9)).foregroundColor(AgentStatusPill.color(agent.activity))
+                        .font(Tellurion.font(9)).foregroundColor(AgentStatusPill.color(agent.activity))
                     Text(actionLine(agent)).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 4)
                     Text(elapsed(since: agent.since)).monospacedDigit()
                 }
-                .font(Extreme.font(11)).foregroundColor(Extreme.muted)
+                .font(Tellurion.font(11)).foregroundColor(Tellurion.muted)
             }
             if !card.preview.isEmpty {
                 Text(card.preview)
-                    .font(Extreme.mono(9.5))
-                    .foregroundColor(Extreme.text.opacity(0.75))
+                    .font(Tellurion.mono(9.5))
+                    .foregroundColor(Tellurion.text.opacity(0.75))
                     .lineLimit(9)
                     .frame(maxWidth: .infinity, minHeight: 118, alignment: .bottomLeading)
                     .padding(8)
@@ -259,7 +259,7 @@ private struct MissionCardView: View {
         .padding(12)
         .background(
             Rectangle()
-                .fill(Extreme.text.opacity(hovering ? 0.08 : 0.045)))
+                .fill(Tellurion.text.opacity(hovering ? 0.08 : 0.045)))
         .overlay(
             Rectangle()
                 .stroke(borderColor, lineWidth: card.rank == 0 ? 1.5 : 1))
@@ -270,7 +270,7 @@ private struct MissionCardView: View {
 
     private var borderColor: Color {
         if card.rank == 0 { return AgentStatusPill.color(card.agent?.activity).opacity(0.8) }
-        return card.tabColor?.opacity(0.6) ?? Extreme.text.opacity(0.12)
+        return card.tabColor?.opacity(0.6) ?? Tellurion.text.opacity(0.12)
     }
 
     private var avatar: some View {

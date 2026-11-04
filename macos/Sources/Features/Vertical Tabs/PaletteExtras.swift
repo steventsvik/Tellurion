@@ -81,7 +81,7 @@ enum PaletteExtras {
                         })
                     }
                 }
-                if ExtremeSettings.isOn(.races) { options.append(CommandOption(
+                if TellurionSettings.isOn(.races) { options.append(CommandOption(
                     title: "Race Agents…",
                     description: "Give the same task to several agents in separate copies and keep the best",
                     symbols: ["⌃", "⌘", "R"],
@@ -90,7 +90,7 @@ enum PaletteExtras {
                     AgentRaces.showSetup(from: owner)
                 }) }
             }
-            if ExtremeSettings.isOn(.memory), let pwd = surfaceView.pwd {
+            if TellurionSettings.isOn(.memory), let pwd = surfaceView.pwd {
                 options.append(CommandOption(
                     title: "Project Memory",
                     description: "What Claude Code and Codex remember about this project, to read, edit or delete",
@@ -100,7 +100,7 @@ enum PaletteExtras {
                     MemoryWindow.show(folder: pwd)
                 })
             }
-            if ExtremeSettings.isOn(.skills) {
+            if TellurionSettings.isOn(.skills) {
                 options.append(CommandOption(
                     title: "Skills",
                     description: "Every skill your agents have installed, updates, and what's trending on skills.sh",
@@ -110,7 +110,7 @@ enum PaletteExtras {
                     SkillsWindow.show(folder: surfaceView.pwd)
                 })
             }
-            if ExtremeSettings.isOn(.environment) {
+            if TellurionSettings.isOn(.environment) {
                 options.append(CommandOption(
                     title: "Environment",
                     description: "This folder's tool versions and variables, your containers, and local models",
@@ -120,7 +120,7 @@ enum PaletteExtras {
                     EnvironmentWindow.show(folder: surfaceView.pwd)
                 })
             }
-            if !HermesSessions.shared.isHermes(owner), !(owner is BoardController), ExtremeSettings.isOn(.editor) {
+            if !HermesSessions.shared.isHermes(owner), !(owner is BoardController), TellurionSettings.isOn(.editor) {
                 options.append(CommandOption(
                     title: "Toggle Code Editor",
                     description: "Show or hide this tab's code editor",
@@ -130,7 +130,7 @@ enum PaletteExtras {
                     EditorPanel.shared.toggle(from: owner)
                 })
             }
-            if !HermesSessions.shared.isHermes(owner), ExtremeSettings.isOn(.visualFix) {
+            if !HermesSessions.shared.isHermes(owner), TellurionSettings.isOn(.visualFix) {
                 options.append(CommandOption(
                     title: "Visual Fix",
                     description: "Point at anything in your running app and have the agent change it",
@@ -149,7 +149,7 @@ enum PaletteExtras {
             let defaults = UserDefaults.standard
             defaults.set(!(defaults.object(forKey: AgentAurora.enabledKey) as? Bool ?? false), forKey: AgentAurora.enabledKey)
         })
-        if ExtremeSettings.isOn(.background) { options.append(CommandOption(
+        if TellurionSettings.isOn(.background) { options.append(CommandOption(
             title: "Background Processes",
             description: "Dev servers, VMs, agents and more left running; close what's stale",
             symbols: ["⌃", "⌘", "K"],
@@ -166,7 +166,7 @@ enum PaletteExtras {
             ) { [weak board] in
                 board?.showAgentMap()
             })
-        } else if ExtremeSettings.isOn(.missionControl) { options.append(CommandOption(
+        } else if TellurionSettings.isOn(.missionControl) { options.append(CommandOption(
             title: "Mission Control",
             description: "Every agent at a glance",
             symbols: ["⌃", "⌘", "M"],
@@ -202,7 +202,7 @@ enum PaletteExtras {
             symbols: ["⌃", "⌘", ","],
             leadingIcon: "gearshape"
         ) {
-            ExtremeSettingsWindow.show()
+            TellurionSettingsWindow.show()
         })
         options.append(CommandOption(
             title: "Check Setup",
@@ -220,7 +220,7 @@ enum PaletteExtras {
             ShortcutSheet.shared.show(sticky: true)
         })
         let showsPercent = UserDefaults.standard.bool(forKey: UsagePanel.showsPercentKey)
-        if ExtremeSettings.isOn(.usage) { options.append(CommandOption(
+        if TellurionSettings.isOn(.usage) { options.append(CommandOption(
             title: showsPercent ? "Usage: Hide Percentages" : "Usage: Show Percentages",
             description: "Switch the sidebar's usage rings between graph and numbers",
             leadingIcon: "chart.pie"

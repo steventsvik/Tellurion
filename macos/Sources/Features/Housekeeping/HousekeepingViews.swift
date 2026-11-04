@@ -10,7 +10,7 @@ enum HousekeepingWindow {
     }
 
     static func show() {
-        guard ExtremeSettings.isOn(.background) else { return }
+        guard TellurionSettings.isOn(.background) else { return }
         AgentToolWindows.show(id: Housekeeping.windowID, title: "Background", size: NSSize(width: 1040, height: 720)) {
             HousekeepingView()
         }
@@ -20,10 +20,10 @@ enum HousekeepingWindow {
 extension Housekeeping.Rating {
     var color: Color {
         switch self {
-        case .active: return Extreme.live
-        case .idle: return Extreme.core
-        case .stale: return Extreme.warn
-        case .close: return Extreme.danger
+        case .active: return Tellurion.live
+        case .idle: return Tellurion.core
+        case .stale: return Tellurion.warn
+        case .close: return Tellurion.danger
         }
     }
 }
@@ -44,7 +44,7 @@ private struct HousekeepingView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     if store.items.isEmpty {
@@ -63,7 +63,7 @@ private struct HousekeepingView: View {
                 .padding(16)
             }
         }
-        .extremeWindow()
+        .tellurionWindow()
         .onAppear { store.watch(true) }
         .onDisappear { store.watch(false) }
     }
@@ -80,7 +80,7 @@ private struct HousekeepingView: View {
         let ready = store.items.filter { $0.rating == .close && $0.close != .none }
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 14) {
-                ExtremeWindowTitle(icon: .chart, title: "Background",
+                TellurionWindowTitle(icon: .chart, title: "Background",
                                    subtitle: "Everything left running, when it was last used, and what's ready to close")
                 Spacer()
                 Picker("", selection: $filter) {
@@ -94,12 +94,12 @@ private struct HousekeepingView: View {
                 .disabled(store.scanning)
             }
             HStack(spacing: 8) {
-                chip("\(store.items.count) running", Extreme.muted)
+                chip("\(store.items.count) running", Tellurion.muted)
                 let stale = store.staleCount
-                if stale > 0 { chip("\(stale) stale", Extreme.warn) }
-                if store.reclaimable > 0 { chip("\(Housekeeping.bytes(store.reclaimable)) you could free", Extreme.warn) }
+                if stale > 0 { chip("\(stale) stale", Tellurion.warn) }
+                if store.reclaimable > 0 { chip("\(Housekeeping.bytes(store.reclaimable)) you could free", Tellurion.warn) }
                 chip("Tellurion: \(Int(store.selfUsage.cpu))% CPU · \(Housekeeping.bytes(store.selfUsage.memory))",
-                     store.selfUsage.cpu > 25 ? Extreme.danger : Extreme.muted)
+                     store.selfUsage.cpu > 25 ? Tellurion.danger : Tellurion.muted)
                 Spacer()
                 if !ready.isEmpty {
                     Button {
@@ -107,7 +107,7 @@ private struct HousekeepingView: View {
                     } label: {
                         Label("Close \(ready.count) ready to close", systemImage: "xmark.circle")
                     }
-                    .buttonStyle(ExtremeButtonStyle(prominent: true))
+                    .buttonStyle(TellurionButtonStyle(prominent: true))
                 }
             }
         }
@@ -118,7 +118,7 @@ private struct HousekeepingView: View {
 
     private func chip(_ text: String, _ color: Color) -> some View {
         Text(text)
-            .font(Extreme.font(11.5, weight: .medium))
+            .font(Tellurion.font(11.5, weight: .medium))
             .foregroundColor(color)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(Capsule().fill(color.opacity(0.12)))
@@ -127,8 +127,8 @@ private struct HousekeepingView: View {
 
     private func empty(_ text: String) -> some View {
         VStack(spacing: 10) {
-            ExtremeSigil(size: 52)
-            Text(text).font(Extreme.font(13)).foregroundColor(Extreme.muted)
+            TellurionSigil(size: 52)
+            Text(text).font(Tellurion.font(13)).foregroundColor(Tellurion.muted)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 90)
@@ -139,10 +139,10 @@ private struct HousekeepingView: View {
     private func section(_ title: String, symbol: String, items: [Housekeeping.Item]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 7) {
-                Image(systemName: symbol).font(.system(size: 11, weight: .semibold)).foregroundColor(Extreme.muted)
-                Text(title.uppercased()).font(Extreme.font(10.5, weight: .bold)).kerning(1.2).foregroundColor(Extreme.muted)
-                Text("\(items.count)").font(Extreme.font(10.5)).foregroundColor(Extreme.dim)
-                Rectangle().fill(Extreme.line).frame(height: 1)
+                Image(systemName: symbol).font(.system(size: 11, weight: .semibold)).foregroundColor(Tellurion.muted)
+                Text(title.uppercased()).font(Tellurion.font(10.5, weight: .bold)).kerning(1.2).foregroundColor(Tellurion.muted)
+                Text("\(items.count)").font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim)
+                Rectangle().fill(Tellurion.line).frame(height: 1)
             }
             ForEach(items) { item in row(item) }
         }
@@ -159,13 +159,13 @@ private struct HousekeepingView: View {
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(rating.color.opacity(0.12)))
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    Text(item.title).font(Extreme.font(13, weight: .semibold)).foregroundColor(Extreme.text)
+                    Text(item.title).font(Tellurion.font(13, weight: .semibold)).foregroundColor(Tellurion.text)
                     if !item.detail.isEmpty {
-                        Text(item.detail).font(Extreme.font(11.5)).foregroundColor(Extreme.muted).lineLimit(1)
+                        Text(item.detail).font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted).lineLimit(1)
                     }
                 }
                 Text(item.command)
-                    .font(Extreme.mono(10.5)).foregroundColor(Extreme.dim)
+                    .font(Tellurion.mono(10.5)).foregroundColor(Tellurion.dim)
                     .lineLimit(1).truncationMode(.middle)
                     .help(item.command)
                 if rating >= .idle || item.kind == .vm, !item.reasons.isEmpty {
@@ -173,7 +173,7 @@ private struct HousekeepingView: View {
                         ForEach(item.reasons, id: \.self) { reason in
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
                                 Circle().fill(rating.color.opacity(0.8)).frame(width: 4, height: 4)
-                                Text(reason).font(Extreme.font(11.5)).foregroundColor(Extreme.text.opacity(0.8))
+                                Text(reason).font(Tellurion.font(11.5)).foregroundColor(Tellurion.text.opacity(0.8))
                             }
                         }
                     }
@@ -183,23 +183,23 @@ private struct HousekeepingView: View {
             Spacer(minLength: 12)
             VStack(alignment: .trailing, spacing: 3) {
                 ratingPill(item)
-                Text(usedText(item)).font(Extreme.font(11)).foregroundColor(Extreme.muted)
-                Text(sizeText(item)).font(Extreme.mono(10.5)).foregroundColor(Extreme.dim)
+                Text(usedText(item)).font(Tellurion.font(11)).foregroundColor(Tellurion.muted)
+                Text(sizeText(item)).font(Tellurion.mono(10.5)).foregroundColor(Tellurion.dim)
             }
             .frame(width: 210, alignment: .trailing)
             actions(item, busy: busy)
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Extreme.panel))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Tellurion.panel))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .strokeBorder(rating >= .stale ? rating.color.opacity(0.35) : Extreme.line, lineWidth: 1))
+            .strokeBorder(rating >= .stale ? rating.color.opacity(0.35) : Tellurion.line, lineWidth: 1))
         .opacity(busy ? 0.5 : 1)
     }
 
     private func ratingPill(_ item: Housekeeping.Item) -> some View {
         let color = item.rating.color
         return HStack(spacing: 6) {
-            Text(item.rating.label).font(Extreme.font(11, weight: .semibold)).foregroundColor(color)
+            Text(item.rating.label).font(Tellurion.font(11, weight: .semibold)).foregroundColor(color)
             // How stale, as a short bar.
             ZStack(alignment: .leading) {
                 Capsule().fill(color.opacity(0.15))
@@ -313,18 +313,18 @@ struct HousekeepingChip: View {
         if stale > 0 {
             Button(action: HousekeepingWindow.show) {
                 HStack(spacing: 6) {
-                    PixelDot(color: Extreme.warn, size: 5)
+                    PixelDot(color: Tellurion.warn, size: 5)
                     Text("\(stale) stale in the background")
-                        .font(Extreme.font(11, weight: .medium))
+                        .font(Tellurion.font(11, weight: .medium))
                     if store.reclaimable > 0 {
-                        Text("· \(Housekeeping.bytes(store.reclaimable))").font(Extreme.font(11)).foregroundColor(Extreme.muted)
+                        Text("· \(Housekeeping.bytes(store.reclaimable))").font(Tellurion.font(11)).foregroundColor(Tellurion.muted)
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
                 }
-                .foregroundColor(hovering ? Extreme.gold : Extreme.warn)
+                .foregroundColor(hovering ? Tellurion.gold : Tellurion.warn)
                 .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Extreme.warn.opacity(hovering ? 0.16 : 0.1)))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Tellurion.warn.opacity(hovering ? 0.16 : 0.1)))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

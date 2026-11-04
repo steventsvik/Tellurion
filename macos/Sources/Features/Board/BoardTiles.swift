@@ -42,7 +42,7 @@ final class BoardTiles {
                    model.$tool.map { _ in () })
             .sink { [weak self] in self?.needsSync() }
             .store(in: &cancellables)
-        NotificationCenter.default.publisher(for: ExtremeSettings.featuresDidChange)
+        NotificationCenter.default.publisher(for: TellurionSettings.featuresDidChange)
             .merge(with: NotificationCenter.default.publisher(for: NSWindow.didChangeOcclusionStateNotification)
                 .filter { [weak controller] note in (note.object as? NSWindow) === controller?.window })
             .sink { [weak self] _ in self?.needsSync() }
@@ -80,7 +80,7 @@ final class BoardTiles {
             view.removeFromSuperview()
             cardViews[id] = nil
         }
-        let motion = ExtremeSettings.motion == .full && (controller.window?.occlusionState.contains(.visible) ?? false)
+        let motion = TellurionSettings.motion == .full && (controller.window?.occlusionState.contains(.visible) ?? false)
         // Arranging slides the tiles; everything else (dragging, restoring) puts them straight there.
         let animate = model.animateNextLayout && motion
         model.animateNextLayout = false
@@ -315,7 +315,7 @@ final class BoardTileView: BoardNodeView {
         clip.layer?.cornerCurve = .continuous
         clip.layer?.masksToBounds = true
         clip.layer?.borderWidth = 1
-        clip.layer?.backgroundColor = Extreme.chrome.ink.nsColor.cgColor
+        clip.layer?.backgroundColor = Tellurion.chrome.ink.nsColor.cgColor
         addSubview(clip)
 
         let header = PassiveHostingView(rootView: BoardTileHeader(surface: surface, state: state))
@@ -372,7 +372,7 @@ final class BoardTileView: BoardNodeView {
         } else if let color {
             border = color.withAlphaComponent(focused ? 0.95 : 0.5)
         } else {
-            border = focused ? Extreme.chrome.gold.nsColor.withAlphaComponent(0.8) : Extreme.chrome.lineStrong.nsColor
+            border = focused ? Tellurion.chrome.gold.nsColor.withAlphaComponent(0.8) : Tellurion.chrome.lineStrong.nsColor
         }
         clip.layer?.borderColor = border.cgColor
         clip.layer?.borderWidth = focused ? 2 : 1.25
@@ -382,7 +382,7 @@ final class BoardTileView: BoardNodeView {
         let working = info?.activity == .working
         lights.isHidden = !waiting && !working
         guard waiting || working else { return }
-        let color = waiting ? Extreme.chrome.warn.nsColor.cgColor : Extreme.chrome.core.nsColor.withAlphaComponent(0.85).cgColor
+        let color = waiting ? Tellurion.chrome.warn.nsColor.cgColor : Tellurion.chrome.core.nsColor.withAlphaComponent(0.85).cgColor
         let length: CGFloat = waiting ? 22 : 18
         let pulse = waiting && motion, breathe = working && motion
         let next = FrameLights.View.Config(color: color, length: length, pulse: pulse, breathe: breathe)
@@ -478,7 +478,7 @@ final class BoardTileState: ObservableObject {
 struct BoardSkipPill: View {
     var body: some View {
         Label("NO PROMPTS", systemImage: "exclamationmark.shield.fill")
-            .font(Extreme.font(9.5, weight: .bold))
+            .font(Tellurion.font(9.5, weight: .bold))
             .foregroundColor(.red)
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Capsule().fill(Color.red.opacity(0.14)))
@@ -495,15 +495,15 @@ private struct BoardTileHeader: View {
     var body: some View {
         HStack(spacing: 8) {
             if let info = state.info {
-                VerticalTabAgentLogo(kind: info.kind, tint: Extreme.text).frame(width: 14, height: 14)
+                VerticalTabAgentLogo(kind: info.kind, tint: Tellurion.text).frame(width: 14, height: 14)
             } else {
-                Image(systemName: "terminal").font(.system(size: 11, weight: .medium)).foregroundColor(Extreme.muted)
+                Image(systemName: "terminal").font(.system(size: 11, weight: .medium)).foregroundColor(Tellurion.muted)
             }
-            Text(BoardTileTitle.title(surface, state.info, name: state.name)).font(Extreme.font(12, weight: .semibold))
-                .foregroundColor(Extreme.text).lineLimit(1)
+            Text(BoardTileTitle.title(surface, state.info, name: state.name)).font(Tellurion.font(12, weight: .semibold))
+                .foregroundColor(Tellurion.text).lineLimit(1)
             if let folder = BoardTileTitle.folder(surface) {
-                Text(folder).font(Extreme.font(11, weight: state.color == nil ? .medium : .semibold))
-                    .foregroundColor(state.color.map(Color.init(nsColor:)) ?? Extreme.dim).lineLimit(1)
+                Text(folder).font(Tellurion.font(11, weight: state.color == nil ? .medium : .semibold))
+                    .foregroundColor(state.color.map(Color.init(nsColor:)) ?? Tellurion.dim).lineLimit(1)
             }
             Spacer(minLength: 4)
             if state.paused {
@@ -512,9 +512,9 @@ private struct BoardTileHeader: View {
                 AgentStatusPill(activity: info.activity, caps: true)
             }
             if let account = state.account {
-                Text(account).font(Extreme.font(9.5, weight: .bold)).foregroundColor(Extreme.ink)
+                Text(account).font(Tellurion.font(9.5, weight: .bold)).foregroundColor(Tellurion.ink)
                     .padding(.horizontal, 5).frame(height: 16)
-                    .background(RoundedRectangle(cornerRadius: 4).fill(Extreme.core))
+                    .background(RoundedRectangle(cornerRadius: 4).fill(Tellurion.core))
                     .help("Signed in with another account")
             }
             if state.skipsPermissions { BoardSkipPill() }
@@ -527,16 +527,16 @@ private struct BoardTileHeader: View {
         .padding(.leading, 10).padding(.trailing, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(ZStack {
-            state.focused ? Extreme.raised : Extreme.panel
+            state.focused ? Tellurion.raised : Tellurion.panel
             if let color = state.color { Color(nsColor: color).opacity(state.focused ? 0.16 : 0.09) }
         })
         .overlay(Rectangle().fill(state.color.map { Color(nsColor: $0) } ?? .clear).frame(height: 3), alignment: .top)
-        .overlay(Rectangle().fill(Extreme.line).frame(height: 1), alignment: .bottom)
+        .overlay(Rectangle().fill(Tellurion.line).frame(height: 1), alignment: .bottom)
     }
 
     private func glyph(_ symbol: String) -> some View {
         Image(systemName: symbol).font(.system(size: 9.5, weight: .bold))
-            .foregroundColor(Extreme.muted)
+            .foregroundColor(Tellurion.muted)
             .frame(width: 18, height: 18)
     }
 }
@@ -568,25 +568,25 @@ private struct BoardTileOverview: View {
         GeometryReader { geo in
             VStack(spacing: 6) {
                 if let info = state.info {
-                    VerticalTabAgentLogo(kind: info.kind, tint: Extreme.text).frame(width: 22, height: 22)
+                    VerticalTabAgentLogo(kind: info.kind, tint: Tellurion.text).frame(width: 22, height: 22)
                 }
-                Text(BoardTileTitle.title(surface, state.info, name: state.name)).font(Extreme.font(13, weight: .semibold))
-                    .foregroundColor(Extreme.text).lineLimit(1).truncationMode(.head)
+                Text(BoardTileTitle.title(surface, state.info, name: state.name)).font(Tellurion.font(13, weight: .semibold))
+                    .foregroundColor(Tellurion.text).lineLimit(1).truncationMode(.head)
                 if let folder = BoardTileTitle.folder(surface) {
-                    Text(folder).font(Extreme.font(11, weight: .semibold))
-                        .foregroundColor(state.color.map(Color.init(nsColor:)) ?? Extreme.dim).lineLimit(1)
+                    Text(folder).font(Tellurion.font(11, weight: .semibold))
+                        .foregroundColor(state.color.map(Color.init(nsColor:)) ?? Tellurion.dim).lineLimit(1)
                 }
                 if state.paused {
                     BoardPausedPill()
                 } else if let info = state.info {
-                    Text(info.activity.label).font(Extreme.font(11, weight: .semibold))
+                    Text(info.activity.label).font(Tellurion.font(11, weight: .semibold))
                         .foregroundColor(AgentStatusPill.color(info.activity))
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .frame(maxWidth: 200)
             .fixedSize(horizontal: false, vertical: true)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Extreme.panel.opacity(0.92)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Tellurion.panel.opacity(0.92)))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(state.color.map { Color(nsColor: $0) } ?? .clear, lineWidth: 2))
             .scaleEffect(min(1 / max(state.zoom, 0.08), geo.size.width / 220))
@@ -599,10 +599,10 @@ private struct BoardTileOverview: View {
 struct BoardPausedPill: View {
     var body: some View {
         Label("Paused", systemImage: "pause.fill")
-            .font(Extreme.font(10.5, weight: .semibold))
-            .foregroundColor(Extreme.warn)
+            .font(Tellurion.font(10.5, weight: .semibold))
+            .foregroundColor(Tellurion.warn)
             .padding(.horizontal, 7).padding(.vertical, 2)
-            .background(Capsule().fill(Extreme.warn.opacity(0.14)))
+            .background(Capsule().fill(Tellurion.warn.opacity(0.14)))
     }
 }
 

@@ -14,7 +14,7 @@ enum LocalhostManager {
     }
 
     static func show() {
-        guard ExtremeSettings.isOn(.localhost) else { return }
+        guard TellurionSettings.isOn(.localhost) else { return }
         AgentToolWindows.show(id: LocalhostSessions.windowID, title: "Localhost", size: NSSize(width: 980, height: 680)) {
             LocalhostManagerView()
         }
@@ -22,7 +22,7 @@ enum LocalhostManager {
 
     /// The "New server" sheet, as its own small window.
     static func showNewServer(folder: String?, from owner: BaseTerminalController?) {
-        guard ExtremeSettings.isOn(.localhost) else { return }
+        guard TellurionSettings.isOn(.localhost) else { return }
         AgentToolWindows.show(id: "localhost-new", title: "New Localhost Server", size: NSSize(width: 520, height: 420)) {
             LocalhostNewServerView(folder: folder ?? NSHomeDirectory(), owner: owner)
         }

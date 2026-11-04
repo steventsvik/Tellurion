@@ -355,7 +355,7 @@ venice_search_setup() {
 }
 
 venice_search() {
-  local folder="${GHOSTTY_EXTREME_TEST_HOME:-$HOME}/.ghostty-extreme/venice" address
+  local folder="${TELLURION_TEST_HOME:-$HOME}/.ghostty-extreme/venice" address
   case "${1:-status}" in
     setup) venice_search_setup "$folder" ;;
     use)
@@ -407,7 +407,7 @@ venice_denied_reads() {
 }
 
 venice_codex() {
-  local root="${GHOSTTY_EXTREME_TEST_HOME:-$HOME}/.ghostty-extreme"
+  local root="${TELLURION_TEST_HOME:-$HOME}/.ghostty-extreme"
   local info="$root/venice-proxy.json" folder="$root/venice" here port token codex model="" chosen=0 argument
   [ -r "$info" ] || venice_stop "Tellurion isn't connected to Venice. Connect your account in Tools → Local models."
   # What the proxy wrote, and nothing else: a number, and letters and dashes.

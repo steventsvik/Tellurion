@@ -6,7 +6,7 @@ extension UpdateDriver: SPUUpdaterDelegate {
         // Tellurion: its own feed, published with every release and signed with its own
         // key (SUPublicEDKey). Ghostty's feeds would offer official Ghostty, which would replace
         // this app. There's one channel; the `auto-update-channel` setting doesn't apply.
-        // Test-only: `GHOSTTY_EXTREME_TEST_FEED=<url>` points a test copy at a local feed.
+        // Test-only: `TELLURION_TEST_FEED=<url>` points a test copy at a local feed.
         TestHooks.updateFeed
             ?? "https://github.com/steventsvik/Tellurion/releases/latest/download/appcast.xml"
     }

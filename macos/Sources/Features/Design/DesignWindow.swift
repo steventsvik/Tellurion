@@ -27,7 +27,7 @@ struct DesignWindowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 16) {
-                ExtremeWindowTitle(icon: nil, title: "Design", subtitle: subtitle, sigil: true)
+                TellurionWindowTitle(icon: nil, title: "Design", subtitle: subtitle, sigil: true)
                     .id(store.revision)  // the sigil and colors follow the design
                 Spacer()
                 Picker("", selection: $mode) {
@@ -40,7 +40,7 @@ struct DesignWindowView: View {
                     .help("Back to Tellurion as shipped, with your own terminal colors")
             }
             .padding(.horizontal, 20).padding(.top, 34).padding(.bottom, 14)
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             switch mode {
             case .templates: DesignGallery(customize: { mode = .customize })
             case .customize: DesignEditor()
@@ -66,7 +66,7 @@ private struct DesignGallery: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 if !store.mine.isEmpty {
-                    ExtremeSectionLabel("Yours")
+                    TellurionSectionLabel("Yours")
                     LazyVGrid(columns: columns, spacing: 14) {
                         ForEach(store.mine) { design in
                             DesignCard(design: design, inUse: store.design.id == design.id, customize: customize,
@@ -74,14 +74,14 @@ private struct DesignGallery: View {
                         }
                     }
                 }
-                ExtremeSectionLabel("Templates")
+                TellurionSectionLabel("Templates")
                 LazyVGrid(columns: columns, spacing: 14) {
                     ForEach(DesignTemplates.all) { design in
                         DesignCard(design: design, inUse: store.design.id == design.id, customize: customize, delete: nil)
                     }
                 }
                 Text("A template sets the terminal's colors, the chrome around it, the window and the cursor. Your Ghostty config keeps everything else; the design is written to tellurion-design.ghostty beside it.")
-                    .font(Extreme.font(11, weight: .regular)).foregroundColor(Extreme.dim)
+                    .font(Tellurion.font(11, weight: .regular)).foregroundColor(Tellurion.dim)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(20)
@@ -105,32 +105,32 @@ private struct DesignCard: View {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 8) {
-                            Text(design.name).font(Extreme.font(13, weight: .semibold)).foregroundColor(inUse ? Extreme.gold : Extreme.text)
+                            Text(design.name).font(Tellurion.font(13, weight: .semibold)).foregroundColor(inUse ? Tellurion.gold : Tellurion.text)
                             if inUse {
-                                Text("IN USE").font(Extreme.font(9, weight: .bold)).kerning(1).foregroundColor(Extreme.ink)
+                                Text("IN USE").font(Tellurion.font(9, weight: .bold)).kerning(1).foregroundColor(Tellurion.ink)
                                     .padding(.horizontal, 6).padding(.vertical, 2)
-                                    .background(Capsule().fill(Extreme.gold))
+                                    .background(Capsule().fill(Tellurion.gold))
                             }
                         }
                         Text(design.tagline.isEmpty ? "Your design" : design.tagline)
-                            .font(Extreme.font(11, weight: .regular)).foregroundColor(Extreme.muted)
+                            .font(Tellurion.font(11, weight: .regular)).foregroundColor(Tellurion.muted)
                             .lineLimit(2, reservesSpace: true)
                             .multilineTextAlignment(.leading)
                     }
                     Spacer(minLength: 0)
                     if inUse {
-                        Button("Customize", action: customize).buttonStyle(ExtremeButtonStyle())
+                        Button("Customize", action: customize).buttonStyle(TellurionButtonStyle())
                     } else if let delete, hovering {
                         Button(action: delete) {
                             Image(systemName: "trash").font(.system(size: 11))
                         }
-                        .buttonStyle(ExtremeButtonStyle()).help("Delete this design")
+                        .buttonStyle(TellurionButtonStyle()).help("Delete this design")
                     }
                 }
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .extremePanel(active: inUse)
+            .tellurionPanel(active: inUse)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -168,26 +168,26 @@ private struct DesignEditor: View {
                         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(chrome.ink.color))
                         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(chrome.line.color, lineWidth: 1))
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Logo").font(Extreme.font(12.5, weight: .semibold)).foregroundColor(Extreme.text)
+                        Text("Logo").font(Tellurion.font(12.5, weight: .semibold)).foregroundColor(Tellurion.text)
                         Text("Drawn in pixels with the design's colors: the new-tab splash, the tool windows and, if you like, the Dock.")
-                            .font(Extreme.font(11, weight: .regular)).foregroundColor(Extreme.muted)
+                            .font(Tellurion.font(11, weight: .regular)).foregroundColor(Tellurion.muted)
                             .fixedSize(horizontal: false, vertical: true)
                         HStack(spacing: 10) {
                             Button("Draw…") { drawing = true }
-                            Toggle("Dock icon", isOn: $draft.logo.dockIcon).toggleStyle(.switch).font(Extreme.font(11.5))
-                                .foregroundColor(Extreme.text)
+                            Toggle("Dock icon", isOn: $draft.logo.dockIcon).toggleStyle(.switch).font(Tellurion.font(11.5))
+                                .foregroundColor(Tellurion.text)
                         }
                     }
                     Spacer(minLength: 0)
                 }
                 .padding(12)
-                .extremePanel()
+                .tellurionPanel()
                 Spacer(minLength: 0)
                 footer
             }
             .padding(20)
             .frame(maxWidth: .infinity)
-            Rectangle().fill(Extreme.line).frame(width: 1)
+            Rectangle().fill(Tellurion.line).frame(width: 1)
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     terminalSection
@@ -217,7 +217,7 @@ private struct DesignEditor: View {
                 .textFieldStyle(.roundedBorder).frame(width: 220)
                 .accessibilityLabel("Design name")
             Button("Save to Yours") { store.saveToMine(draft) }
-                .buttonStyle(ExtremeButtonStyle(prominent: true))
+                .buttonStyle(TellurionButtonStyle(prominent: true))
                 .help("Keeps this design under Templates → Yours")
             Spacer()
             Button("Revert") { draft = original; store.apply(original) }
@@ -260,7 +260,7 @@ private struct DesignEditor: View {
 
     private var terminalSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ExtremeSectionLabel("Terminal colors")
+            TellurionSectionLabel("Terminal colors")
             Picker("", selection: Binding(get: { terminalKind }, set: { setTerminalKind($0) })) {
                 ForEach(TerminalKind.allCases) { Text($0.title).tag($0) }
             }
@@ -280,8 +280,8 @@ private struct DesignEditor: View {
                         }
                     }
                     .frame(height: 200)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Extreme.panel))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Extreme.line, lineWidth: 1))
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Tellurion.panel))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Tellurion.line, lineWidth: 1))
                     .onAppear { if let themeName { proxy.scrollTo(themeName, anchor: .center) } }
                 }
             case .custom:
@@ -305,12 +305,12 @@ private struct DesignEditor: View {
                     .background(colors.background.color)
                     .clipShape(RoundedRectangle(cornerRadius: 3))
                 }
-                Text(name).font(Extreme.font(11.5)).foregroundColor(selected ? Extreme.gold : Extreme.text).lineLimit(1)
+                Text(name).font(Tellurion.font(11.5)).foregroundColor(selected ? Tellurion.gold : Tellurion.text).lineLimit(1)
                 Spacer(minLength: 0)
-                if selected { Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundColor(Extreme.gold) }
+                if selected { Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundColor(Tellurion.gold) }
             }
             .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 5).fill(selected ? Extreme.raised : .clear))
+            .background(RoundedRectangle(cornerRadius: 5).fill(selected ? Tellurion.raised : .clear))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -326,7 +326,7 @@ private struct DesignEditor: View {
                 colorWell("Cursor", colors.cursor ?? colors.foreground) { c in setCustom { $0.cursor = c } }
                 colorWell("Selection", colors.selectionBackground ?? colors.ansi(8)) { c in setCustom { $0.selectionBackground = c } }
             }
-            Text("ANSI colors").font(Extreme.font(11, weight: .regular)).foregroundColor(Extreme.muted)
+            Text("ANSI colors").font(Tellurion.font(11, weight: .regular)).foregroundColor(Tellurion.muted)
             ForEach([0, 8], id: \.self) { base in
                 HStack(spacing: 6) {
                     ForEach(0..<8, id: \.self) { i in
@@ -378,13 +378,13 @@ private struct DesignEditor: View {
 
     private var chromeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ExtremeSectionLabel("Chrome")
+            TellurionSectionLabel("Chrome")
             Toggle(isOn: Binding(get: { if case .auto = draft.chrome { return true } else { return false } },
                                  set: { on in draft.chrome = on ? .auto(accent: chrome.gold, ai: chrome.core) : .fixed(chrome) })) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Follow the terminal's colors").font(Extreme.font(12.5, weight: .semibold)).foregroundColor(Extreme.text)
+                    Text("Follow the terminal's colors").font(Tellurion.font(12.5, weight: .semibold)).foregroundColor(Tellurion.text)
                     Text("The sidebar, panels and tool windows take their ink, text and hairlines from the terminal")
-                        .font(Extreme.font(11, weight: .regular)).foregroundColor(Extreme.muted).fixedSize(horizontal: false, vertical: true)
+                        .font(Tellurion.font(11, weight: .regular)).foregroundColor(Tellurion.muted).fixedSize(horizontal: false, vertical: true)
                 }
             }
             .toggleStyle(.switch)
@@ -424,7 +424,7 @@ private struct DesignEditor: View {
 
     private var fontSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ExtremeSectionLabel("Font")
+            TellurionSectionLabel("Font")
             HStack(spacing: 12) {
                 Picker("Family", selection: Binding(get: { draft.font.family ?? "" }, set: { draft.font.family = $0.isEmpty ? nil : $0 })) {
                     Text("From your config").tag("")
@@ -439,7 +439,7 @@ private struct DesignEditor: View {
                 }
                 .frame(width: 110)
             }
-            .font(Extreme.font(11.5))
+            .font(Tellurion.font(11.5))
         }
     }
 
@@ -447,12 +447,12 @@ private struct DesignEditor: View {
 
     private var windowSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ExtremeSectionLabel("Window")
+            TellurionSectionLabel("Window")
             Toggle(isOn: Binding(get: { draft.window != nil }, set: { draft.window = $0 ? WindowLook() : nil })) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Set the window").font(Extreme.font(12.5, weight: .semibold)).foregroundColor(Extreme.text)
+                    Text("Set the window").font(Tellurion.font(12.5, weight: .semibold)).foregroundColor(Tellurion.text)
                     Text("Opacity, blur, padding and the cursor. Off leaves them to your config.")
-                        .font(Extreme.font(11, weight: .regular)).foregroundColor(Extreme.muted)
+                        .font(Tellurion.font(11, weight: .regular)).foregroundColor(Tellurion.muted)
                 }
             }
             .toggleStyle(.switch)
@@ -465,12 +465,12 @@ private struct DesignEditor: View {
                 slider("Padding", value: Binding(get: { Double(window.padding) }, set: { binding.wrappedValue.padding = Int($0) }), in: 0...40, step: 1,
                        label: "\(window.padding) pt")
                 HStack(spacing: 12) {
-                    Text("Cursor").font(Extreme.font(11.5)).foregroundColor(Extreme.text).frame(width: 60, alignment: .leading)
+                    Text("Cursor").font(Tellurion.font(11.5)).foregroundColor(Tellurion.text).frame(width: 60, alignment: .leading)
                     Picker("", selection: binding.cursor) {
                         ForEach(DesignCursorStyle.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented).labelsHidden().frame(width: 200)
-                    Toggle("Blink", isOn: binding.cursorBlink).toggleStyle(.checkbox).font(Extreme.font(11.5)).foregroundColor(Extreme.text)
+                    Toggle("Blink", isOn: binding.cursorBlink).toggleStyle(.checkbox).font(Tellurion.font(11.5)).foregroundColor(Tellurion.text)
                 }
             }
         }
@@ -482,21 +482,21 @@ private struct DesignEditor: View {
         VStack(spacing: 4) {
             ColorPicker("", selection: Binding(get: { color.color }, set: { set(DesignColor($0)) }), supportsOpacity: false)
                 .labelsHidden().frame(width: 44)
-            Text(title).font(Extreme.font(10, weight: .regular)).foregroundColor(Extreme.muted)
+            Text(title).font(Tellurion.font(10, weight: .regular)).foregroundColor(Tellurion.muted)
         }
         .accessibilityLabel(title)
     }
 
     private func slider(_ title: String, value: Binding<Double>, in range: ClosedRange<Double>, step: Double, label: String) -> some View {
         HStack(spacing: 12) {
-            Text(title).font(Extreme.font(11.5)).foregroundColor(Extreme.text).frame(width: 60, alignment: .leading)
+            Text(title).font(Tellurion.font(11.5)).foregroundColor(Tellurion.text).frame(width: 60, alignment: .leading)
             Slider(value: value, in: range, step: step).accessibilityLabel(title)
-            Text(label).font(Extreme.mono(10.5)).foregroundColor(Extreme.muted).frame(width: 44, alignment: .trailing)
+            Text(label).font(Tellurion.mono(10.5)).foregroundColor(Tellurion.muted).frame(width: 44, alignment: .trailing)
         }
     }
 
     private func note(_ text: String) -> some View {
-        Text(text).font(Extreme.font(11, weight: .regular)).foregroundColor(Extreme.muted).fixedSize(horizontal: false, vertical: true)
+        Text(text).font(Tellurion.font(11, weight: .regular)).foregroundColor(Tellurion.muted).fixedSize(horizontal: false, vertical: true)
     }
 }
 #endif

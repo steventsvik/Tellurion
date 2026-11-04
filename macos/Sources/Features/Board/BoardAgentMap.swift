@@ -258,7 +258,7 @@ final class AgentMapContent: CardContent {
 
     override func draw(_ dirtyRect: NSRect) {
         lastDraw = Date()
-        let chrome = Extreme.chrome
+        let chrome = Tellurion.chrome
         chrome.ink.nsColor.setFill()
         bounds.fill()
         guard let context = NSGraphicsContext.current?.cgContext else { return }

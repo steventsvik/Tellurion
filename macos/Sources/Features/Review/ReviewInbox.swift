@@ -171,7 +171,7 @@ final class ReviewInbox: ObservableObject {
         let info = VerticalTabsAgents.shared.info(for: surface)
         let previous = lastActivity[key]
         lastActivity[key] = info?.activity
-        guard let info, info.kind != .hermes, ExtremeSettings.isOn(.review) else { return }
+        guard let info, info.kind != .hermes, TellurionSettings.isOn(.review) else { return }
 
         switch info.activity {
         case .working, .needsPermission:

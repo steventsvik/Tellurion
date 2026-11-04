@@ -121,14 +121,14 @@ struct MissionGraph {
         let loose = model.surfaces.filter { !placed.contains($0.id) }
         if !loose.isEmpty {
             orchestrators.append(MissionNode(id: "command", kind: .commandBar, title: "Command bar",
-                                             detail: "\(loose.count) reached only by @", color: Extreme.muted, target: nil))
+                                             detail: "\(loose.count) reached only by @", color: Tellurion.muted, target: nil))
         }
         for surface in model.surfaces {
             let info = VerticalTabsAgents.shared.info(for: surface)
             let id = "a:" + surface.id.uuidString
             agents.append(MissionNode(id: id, kind: .agent, title: board.tileLabel(surface),
                                       detail: info.map { $0.kind.displayName + " · " + (model.paused.contains(surface.id) ? "Paused" : $0.activity.label) } ?? "Terminal",
-                                      color: info.map { $0.kind.brandColor } ?? Extreme.muted, status: MissionStatus(info?.activity), target: surface.id))
+                                      color: info.map { $0.kind.brandColor } ?? Tellurion.muted, status: MissionStatus(info?.activity), target: surface.id))
             if !placed.contains(surface.id) { link(MissionEdge(from: "command", to: id, dashed: true)) }
         }
     }
@@ -163,12 +163,12 @@ struct MissionMapView: View {
                     legend
                 }
                 .padding(18)
-                Rectangle().fill(Extreme.line).frame(width: 1)
+                Rectangle().fill(Tellurion.line).frame(width: 1)
                 inspector(graph).frame(width: 290)
             }
             .frame(maxWidth: 1180, maxHeight: 760)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Extreme.panel))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Extreme.lineStrong))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Tellurion.panel))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Tellurion.lineStrong))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .shadow(color: .black.opacity(0.5), radius: 30, y: 10)
             .padding(40)
@@ -196,16 +196,16 @@ struct MissionMapView: View {
     private func header(_ graph: MissionGraph) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "point.3.filled.connected.trianglepath.dotted").font(.system(size: 14, weight: .semibold))
-                .foregroundColor(Extreme.ink).frame(width: 30, height: 30)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Extreme.core))
+                .foregroundColor(Tellurion.ink).frame(width: 30, height: 30)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Tellurion.core))
             VStack(alignment: .leading, spacing: 1) {
-                Text("Mission Map").font(Extreme.font(16, weight: .semibold)).foregroundColor(Extreme.text)
-                Text(subtitle(graph)).font(Extreme.font(11.5)).foregroundColor(Extreme.muted)
+                Text("Mission Map").font(Tellurion.font(16, weight: .semibold)).foregroundColor(Tellurion.text)
+                Text(subtitle(graph)).font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted)
             }
             Spacer()
             Button(action: close) {
-                Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundColor(Extreme.muted)
-                    .frame(width: 26, height: 26).background(Circle().fill(Extreme.raised))
+                Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundColor(Tellurion.muted)
+                    .frame(width: 26, height: 26).background(Circle().fill(Tellurion.raised))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close")
@@ -233,11 +233,11 @@ struct MissionMapView: View {
             }
             Spacer()
             HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass").font(.system(size: 10.5)).foregroundColor(Extreme.dim)
-                TextField("Find an agent or group", text: $search).textFieldStyle(.plain).font(Extreme.font(12))
+                Image(systemName: "magnifyingglass").font(.system(size: 10.5)).foregroundColor(Tellurion.dim)
+                TextField("Find an agent or group", text: $search).textFieldStyle(.plain).font(Tellurion.font(12))
             }
             .padding(.horizontal, 10).frame(width: 220, height: 28)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Extreme.raised))
+            .background(RoundedRectangle(cornerRadius: 8).fill(Tellurion.raised))
         }
     }
 
@@ -245,12 +245,12 @@ struct MissionMapView: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 if let color { Circle().fill(color).frame(width: 6, height: 6) }
-                Text(title).font(Extreme.font(11.5, weight: .medium))
-                Text("\(count)").font(Extreme.mono(11)).opacity(0.7)
+                Text(title).font(Tellurion.font(11.5, weight: .medium))
+                Text("\(count)").font(Tellurion.mono(11)).opacity(0.7)
             }
-            .foregroundColor(on ? Extreme.ink : Extreme.text)
+            .foregroundColor(on ? Tellurion.ink : Tellurion.text)
             .padding(.horizontal, 10).frame(height: 26)
-            .background(Capsule().fill(on ? Extreme.core : Extreme.raised))
+            .background(Capsule().fill(on ? Tellurion.core : Tellurion.raised))
         }
         .buttonStyle(.plain)
     }
@@ -281,9 +281,9 @@ struct MissionMapView: View {
 
     private func column(_ title: String, _ nodes: [MissionNode]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(Extreme.font(9.5, weight: .bold)).foregroundColor(Extreme.dim).tracking(0.7)
+            Text(title).font(Tellurion.font(9.5, weight: .bold)).foregroundColor(Tellurion.dim).tracking(0.7)
             if nodes.isEmpty {
-                Text("None").font(Extreme.font(11.5)).foregroundColor(Extreme.dim).frame(width: 220, alignment: .leading)
+                Text("None").font(Tellurion.font(11.5)).foregroundColor(Tellurion.dim).frame(width: 220, alignment: .leading)
             }
             ForEach(nodes) { node in card(node) }
         }
@@ -294,16 +294,16 @@ struct MissionMapView: View {
         return HStack(spacing: 9) {
             Circle().fill(node.color).frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
-                Text(node.title).font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text).lineLimit(1)
-                Text(node.detail).font(Extreme.font(10.5)).foregroundColor(Extreme.muted).lineLimit(1)
+                Text(node.title).font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text).lineLimit(1)
+                Text(node.detail).font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted).lineLimit(1)
             }
             Spacer(minLength: 4)
             if let status = node.status { Circle().fill(status.color).frame(width: 7, height: 7) }
         }
         .padding(.horizontal, 10).frame(width: 220, height: 44)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Extreme.raised))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Tellurion.raised))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .strokeBorder(selected == node.id ? Extreme.core : Extreme.line, lineWidth: selected == node.id ? 1.5 : 1))
+            .strokeBorder(selected == node.id ? Tellurion.core : Tellurion.line, lineWidth: selected == node.id ? 1.5 : 1))
         .opacity(lit ? 1 : 0.35)
         .anchorPreference(key: MissionAnchors.self, value: .bounds) { [node.id: $0] }
         .contentShape(Rectangle())
@@ -322,7 +322,7 @@ struct MissionMapView: View {
                 let mid = (end.x - start.x) / 2
                 path.addCurve(to: end, control1: CGPoint(x: start.x + mid, y: start.y), control2: CGPoint(x: end.x - mid, y: end.y))
                 let lit = hovered == nil || edge.from == hovered || edge.to == hovered
-                let color = edge.dashed ? Extreme.muted : Color.green
+                let color = edge.dashed ? Tellurion.muted : Color.green
                 context.stroke(path, with: .color(color.opacity(lit ? 0.7 : 0.12)),
                                style: StrokeStyle(lineWidth: 1.4, lineCap: .round, dash: edge.dashed ? [4, 4] : []))
             }
@@ -334,12 +334,12 @@ struct MissionMapView: View {
             ForEach(MissionStatus.allCases, id: \.self) { status in
                 HStack(spacing: 4) {
                     Circle().fill(status.color).frame(width: 6, height: 6)
-                    Text(status.title).font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+                    Text(status.title).font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
                 }
             }
-            Text("- - - Command bar only").font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+            Text("- - - Command bar only").font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
             Spacer()
-            Text("Click to inspect · Double-click to go there").font(Extreme.font(10.5)).foregroundColor(Extreme.dim)
+            Text("Click to inspect · Double-click to go there").font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim)
         }
     }
 
@@ -373,7 +373,7 @@ struct MissionMapView: View {
                 row("Running orchestrators", "\(model.teams.filter { controller.orchestratorBrains[$0.id]?.running == true }.count)")
             }
             Text("Select an agent, a group or an orchestrator to see what it's doing and act on it.")
-                .font(Extreme.font(11.5)).foregroundColor(Extreme.muted).fixedSize(horizontal: false, vertical: true)
+                .font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -382,16 +382,16 @@ struct MissionMapView: View {
         HStack(spacing: 10) {
             Circle().fill(node.color).frame(width: 12, height: 12)
             VStack(alignment: .leading, spacing: 1) {
-                Text(node.title).font(Extreme.font(15, weight: .semibold)).foregroundColor(Extreme.text)
-                Text(node.detail).font(Extreme.font(11.5)).foregroundColor(Extreme.muted)
+                Text(node.title).font(Tellurion.font(15, weight: .semibold)).foregroundColor(Tellurion.text)
+                Text(node.detail).font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted)
             }
         }
         if node.kind != .commandBar {
             Button { goTo(node) } label: {
                 Label(node.kind == .group ? "Frame on the board" : "Go to it", systemImage: "arrow.up.forward")
-                    .font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.ink)
+                    .font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.ink)
                     .frame(maxWidth: .infinity).frame(height: 32)
-                    .background(RoundedRectangle(cornerRadius: 9).fill(Extreme.core))
+                    .background(RoundedRectangle(cornerRadius: 9).fill(Tellurion.core))
             }
             .buttonStyle(.plain)
         }
@@ -405,7 +405,7 @@ struct MissionMapView: View {
                     if let since = info?.since {
                         TimelineView(.periodic(from: .now, by: 1)) { _ in row("For", Self.elapsed(since)) }
                     }
-                    if let task = info?.task { Text(task).font(Extreme.font(11)).foregroundColor(Extreme.muted).lineLimit(4) }
+                    if let task = info?.task { Text(task).font(Tellurion.font(11)).foregroundColor(Tellurion.muted).lineLimit(4) }
                 }
                 section("Belongs to") {
                     let parents = graph.edges.filter { $0.to == node.id }.compactMap { edge in graph.all.first { $0.id == edge.from } }
@@ -434,13 +434,13 @@ struct MissionMapView: View {
         return HStack(spacing: 8) {
             Button { controller.setPaused(!paused, [surface.id]) } label: {
                 Label(paused ? "Resume" : "Pause", systemImage: paused ? "play.fill" : "pause.fill")
-                    .font(Extreme.font(11.5, weight: .medium)).foregroundColor(Extreme.text)
+                    .font(Tellurion.font(11.5, weight: .medium)).foregroundColor(Tellurion.text)
                     .frame(maxWidth: .infinity).frame(height: 28)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Extreme.raised))
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Tellurion.raised))
             }
             .buttonStyle(.plain)
             Button { controller.close(surface) } label: {
-                Label("Kill", systemImage: "xmark.octagon").font(Extreme.font(11.5, weight: .medium)).foregroundColor(.red)
+                Label("Kill", systemImage: "xmark.octagon").font(Tellurion.font(11.5, weight: .medium)).foregroundColor(.red)
                     .frame(maxWidth: .infinity).frame(height: 28)
                     .background(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.red.opacity(0.6)))
             }
@@ -450,20 +450,20 @@ struct MissionMapView: View {
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title.uppercased()).font(Extreme.font(9.5, weight: .bold)).foregroundColor(Extreme.dim).tracking(0.6)
+            Text(title.uppercased()).font(Tellurion.font(9.5, weight: .bold)).foregroundColor(Tellurion.dim).tracking(0.6)
             VStack(alignment: .leading, spacing: 6) { content() }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Extreme.raised))
+                .background(RoundedRectangle(cornerRadius: 10).fill(Tellurion.raised))
         }
     }
 
     private func row(_ title: String, _ value: String, color: Color? = nil) -> some View {
         HStack {
             if let color { Circle().fill(color).frame(width: 6, height: 6) }
-            Text(title).font(Extreme.font(11.5)).foregroundColor(Extreme.muted)
+            Text(title).font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted)
             Spacer()
-            Text(value).font(Extreme.mono(11.5)).foregroundColor(Extreme.text)
+            Text(value).font(Tellurion.mono(11.5)).foregroundColor(Tellurion.text)
         }
     }
 
@@ -471,9 +471,9 @@ struct MissionMapView: View {
         Button { selected = node.id } label: {
             HStack(spacing: 6) {
                 Circle().fill(node.color).frame(width: 6, height: 6)
-                Text(node.title).font(Extreme.font(11.5, weight: .medium)).foregroundColor(Extreme.text).lineLimit(1)
+                Text(node.title).font(Tellurion.font(11.5, weight: .medium)).foregroundColor(Tellurion.text).lineLimit(1)
                 Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundColor(Extreme.dim)
+                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundColor(Tellurion.dim)
             }
             .contentShape(Rectangle())
         }

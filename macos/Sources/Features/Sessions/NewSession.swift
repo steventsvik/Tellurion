@@ -62,7 +62,7 @@ struct NewSessionMenu: View {
     let compact: Bool
 
     var body: some View {
-        ExtremeIconButton(icon: .plus, label: compact ? "New" : "New tab", help: "New session", tint: Extreme.gold) {
+        TellurionIconButton(icon: .plus, label: compact ? "New" : "New tab", help: "New session", tint: Tellurion.gold) {
             NewSessionMenuBuilder.popUp(for: owner)
         }
     }
@@ -76,7 +76,7 @@ enum NewSessionMenuBuilder {
             menu.addItem(ClosureMenuItem(kind.title, image: icon(for: kind)) { kind.open(from: owner) })
             if kind == .codex { menu.addItem(dockerItem(owner)) }
         }
-        if ExtremeSettings.isOn(.localhost) {
+        if TellurionSettings.isOn(.localhost) {
             menu.addItem(.separator())
             menu.addItem(ClosureMenuItem("Localhost Server…", image: NSImage(systemSymbolName: "globe", accessibilityDescription: nil)) {
                 LocalhostManager.showNewServer(folder: owner.focusedSurface?.pwd, from: owner)

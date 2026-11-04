@@ -224,12 +224,12 @@ struct VerticalTabsProjectGroupView<Content: View>: View {
         HStack(spacing: 7) {
             Rectangle().fill(color).frame(width: 7, height: 7).shadow(color: color.opacity(0.8), radius: 3)
             Text(group.name)
-                .font(Extreme.font(12.5, weight: .semibold))
-                .foregroundColor(Extreme.text)
+                .font(Tellurion.font(12.5, weight: .semibold))
+                .foregroundColor(Tellurion.text)
                 .lineLimit(1)
                 .truncationMode(.tail)
             Text(group.agents == 1 ? "1 agent" : "\(group.agents) agents")
-                .font(Extreme.font(10, weight: .semibold))
+                .font(Tellurion.font(10, weight: .semibold))
                 .foregroundColor(color)
                 .padding(.horizontal, 4).padding(.vertical, 1)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(color.opacity(0.5), lineWidth: 1))
@@ -240,12 +240,12 @@ struct VerticalTabsProjectGroupView<Content: View>: View {
                     VisualFixPanel.shared.show(from: owner, url: url)
                 } label: {
                     HStack(spacing: 3) {
-                        PixelDot(color: Extreme.live, size: 4)
-                        Text(verbatim: ":\(url.port ?? 80)").font(Extreme.font(9.5)).foregroundColor(Extreme.gold)
-                        PixelIconView(icon: .target, color: Extreme.gold, pixel: 0.9)
+                        PixelDot(color: Tellurion.live, size: 4)
+                        Text(verbatim: ":\(url.port ?? 80)").font(Tellurion.font(9.5)).foregroundColor(Tellurion.gold)
+                        PixelIconView(icon: .target, color: Tellurion.gold, pixel: 0.9)
                     }
                     .padding(.horizontal, 4).frame(height: 16)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Extreme.gold.opacity(0.45), lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Tellurion.gold.opacity(0.45), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
                 .help("\(group.name) is live at localhost:\(url.port ?? 80). Click to fix it visually")
@@ -258,7 +258,7 @@ struct VerticalTabsProjectGroupView<Content: View>: View {
                 .transition(.opacity)
             }
             Button(action: toggleCollapse) {
-                PixelIconView(icon: collapsed ? .chevronRight : .chevronDown, color: Extreme.muted, pixel: 1.25)
+                PixelIconView(icon: collapsed ? .chevronRight : .chevronDown, color: Tellurion.muted, pixel: 1.25)
                     .frame(width: 14, height: 14)
                     .contentShape(Rectangle())
             }
@@ -272,39 +272,39 @@ struct VerticalTabsProjectGroupView<Content: View>: View {
         HStack(spacing: 8) {
             if summary.working > 0 {
                 HStack(spacing: 4) {
-                    PixelSpinner(color: Extreme.core, pixel: 1.5)
-                    Text("\(summary.working) working").foregroundColor(Extreme.core)
+                    PixelSpinner(color: Tellurion.core, pixel: 1.5)
+                    Text("\(summary.working) working").foregroundColor(Tellurion.core)
                 }
             }
             if summary.waiting > 0 {
                 HStack(spacing: 4) {
-                    PixelDot(color: Extreme.warn, blinking: true, size: 4, interval: 0.3)
-                    Text("\(summary.waiting) waiting").foregroundColor(Extreme.warn)
+                    PixelDot(color: Tellurion.warn, blinking: true, size: 4, interval: 0.3)
+                    Text("\(summary.waiting) waiting").foregroundColor(Tellurion.warn)
                 }
             }
             if summary.done > 0 {
                 HStack(spacing: 4) {
-                    PixelDot(color: Extreme.live, size: 4)
-                    Text("\(summary.done) done").foregroundColor(Extreme.live)
+                    PixelDot(color: Tellurion.live, size: 4)
+                    Text("\(summary.done) done").foregroundColor(Tellurion.live)
                 }
             }
             if summary.working + summary.waiting + summary.done == 0 {
-                Text((group.root as NSString).abbreviatingWithTildeInPath).foregroundColor(Extreme.dim).lineLimit(1)
+                Text((group.root as NSString).abbreviatingWithTildeInPath).foregroundColor(Tellurion.dim).lineLimit(1)
             }
         }
-        .font(Extreme.font(9.5))
+        .font(Tellurion.font(9.5))
         .fixedSize(horizontal: false, vertical: true)
     }
 
     private var overlapWarning: some View {
         HStack(alignment: .top, spacing: 6) {
-            Text("!").font(Extreme.font(10)).foregroundColor(Extreme.ink)
-                .frame(width: 13, height: 13).background(Extreme.warn)
+            Text("!").font(Tellurion.font(10)).foregroundColor(Tellurion.ink)
+                .frame(width: 13, height: 13).background(Tellurion.warn)
             Text("Both changed \(summary.overlaps.prefix(3).joined(separator: ", "))"
                  + (summary.overlaps.count > 3 ? " and \(summary.overlaps.count - 3) more" : "")
                  + ". Check they don't conflict.")
-                .font(Extreme.font(9.5))
-                .foregroundColor(Extreme.warn)
+                .font(Tellurion.font(9.5))
+                .foregroundColor(Tellurion.warn)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.trailing, 10)
@@ -314,9 +314,9 @@ struct VerticalTabsProjectGroupView<Content: View>: View {
 
     private func headerButton(_ icon: PixelIcon, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            PixelIconView(icon: icon, color: Extreme.text.opacity(0.85), pixel: 1.1)
+            PixelIconView(icon: icon, color: Tellurion.text.opacity(0.85), pixel: 1.1)
                 .frame(width: 20, height: 16)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Extreme.lineStrong, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Tellurion.lineStrong, lineWidth: 1))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -375,7 +375,7 @@ struct ProjectGroupSummary: Equatable {
 private struct ProjectBracket: View {
     let color: Color
     let state: ProjectGroupSummary.State
-    @Environment(\.extremeMotion) private var motion
+    @Environment(\.tellurionMotion) private var motion
 
     var body: some View {
         // Core Animation layers: the falling light and the blink cost the app nothing per frame.

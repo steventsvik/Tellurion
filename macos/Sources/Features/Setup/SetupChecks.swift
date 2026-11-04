@@ -114,12 +114,12 @@ final class SetupChecks: ObservableObject {
     /// Mirrors the skipped agents into `~/.ghostty-extreme/features/<agent>-off`, which the
     /// doctor script reads. Called at launch and on every change.
     static func writeSkipFlags() {
-        writeSkipFlags(skipped, in: ExtremeSettings.flagsFolder)
+        writeSkipFlags(skipped, in: TellurionSettings.flagsFolder)
     }
 
     static func writeSkipFlags(_ skipped: Set<HookConfig.Agent>, in folder: URL) {
         for agent in [HookConfig.Agent.claude, .codex] {
-            ExtremeSettings.setFlag(agent.rawValue + "-off", on: skipped.contains(agent), in: folder)
+            TellurionSettings.setFlag(agent.rawValue + "-off", on: skipped.contains(agent), in: folder)
         }
     }
 

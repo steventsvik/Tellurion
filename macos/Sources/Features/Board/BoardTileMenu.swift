@@ -13,7 +13,7 @@ enum BoardTileMenu {
     }
 
     static func actions(for surface: Ghostty.SurfaceView, in board: BoardController) -> [Action?] {
-        let settings = ExtremeSettings.shared
+        let settings = TellurionSettings.shared
         let pwd = surface.pwd
         let agent = VerticalTabsAgents.shared.info(for: surface)
         let hermes = HermesSessions.shared.isHermes(surface: surface)
@@ -87,7 +87,7 @@ enum BoardTileMenu {
 
     /// Starting the tile's agent on another account.
     private static func accountActions(for surface: Ghostty.SurfaceView, in board: BoardController) -> [Action?] {
-        guard ExtremeSettings.isOn(.accounts), let kind = VerticalTabsAgents.shared.info(for: surface)?.kind,
+        guard TellurionSettings.isOn(.accounts), let kind = VerticalTabsAgents.shared.info(for: surface)?.kind,
               let provider = BoardAccount.Provider.allCases.first(where: { $0.kind == kind }) else { return [] }
         let profiles = BoardAccounts.shared.accounts.filter { $0.provider == provider }
         guard !profiles.isEmpty else { return [] }
@@ -122,7 +122,7 @@ enum BoardTileMenu {
 
     /// Undo the agent's last turn, an earlier one, or a restore (see TurnCheckpoints).
     private static func undoActions(for surface: Ghostty.SurfaceView) -> [Action?] {
-        guard ExtremeSettings.isOn(.undo) else { return [] }
+        guard TellurionSettings.isOn(.undo) else { return [] }
         let list = TurnCheckpoints.shared.list(for: surface)
         guard !list.isEmpty else { return [] }
         let lastTurn = list.last { !$0.isRestorePoint }?.id

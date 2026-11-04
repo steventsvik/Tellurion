@@ -9,7 +9,7 @@ enum LocalModelsWindow {
     static let windowID = "local-models"
 
     static func show() {
-        guard ExtremeSettings.isOn(.localModels) else { return }
+        guard TellurionSettings.isOn(.localModels) else { return }
         AgentToolWindows.show(id: windowID, title: "Local Models", size: NSSize(width: 680, height: 760)) {
             LocalModelsWindowView()
         }
@@ -27,23 +27,23 @@ struct LocalModelsWindowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ExtremeWindowTitle(icon: .environment, title: "Local Models",
+            TellurionWindowTitle(icon: .environment, title: "Local Models",
                                subtitle: "Chat with a model on this Mac or on Venice. Drag one from the sidebar under a chat.")
                 .padding(.horizontal, 20)
                 .padding(.top, 34)
                 .padding(.bottom, 14)
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     status
                     if let error = models.error {
-                        Text(error).font(Extreme.font(12)).foregroundColor(Extreme.danger)
+                        Text(error).font(Tellurion.font(12)).foregroundColor(Tellurion.danger)
                     }
                     // Every provider's models: Ollama, LM Studio, a llama.cpp or MLX server, Apple's.
                     let installed = models.models.filter { $0.host != .venice }
                     if !installed.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
-                            ExtremeSectionLabel("On this Mac")
+                            TellurionSectionLabel("On this Mac")
                             ForEach(installed) { LocalModelWindowRow(item: $0) }
                         }
                     }
@@ -53,7 +53,7 @@ struct LocalModelsWindowView: View {
                     }
                     Text("Chats with models on this Mac run through Ollama and the like: nothing leaves it, and they work offline. "
                          + "Small models answer faster but know less.")
-                        .font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                        .font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(20)
@@ -67,19 +67,19 @@ struct LocalModelsWindowView: View {
     private var status: some View {
         HStack(spacing: 8) {
             let state = models.ollama
-            Circle().fill(state == .notInstalled ? Extreme.dim : state == .stopped ? Extreme.warn : Extreme.live)
+            Circle().fill(state == .notInstalled ? Tellurion.dim : state == .stopped ? Tellurion.warn : Tellurion.live)
                 .frame(width: 7, height: 7)
-            Text("Ollama").font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text)
+            Text("Ollama").font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text)
             switch state {
             case .notInstalled:
-                Text("isn't installed").font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                Text("isn't installed").font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
                 Button("Get Ollama") { NSWorkspace.shared.open(URL(string: "https://ollama.com/download")!) }
-                    .buttonStyle(ExtremeButtonStyle())
+                    .buttonStyle(TellurionButtonStyle())
             case .stopped:
-                Text("isn't running").font(Extreme.font(11)).foregroundColor(Extreme.warn)
-                Button("Start", action: models.startOllama).buttonStyle(ExtremeButtonStyle())
+                Text("isn't running").font(Tellurion.font(11)).foregroundColor(Tellurion.warn)
+                Button("Start", action: models.startOllama).buttonStyle(TellurionButtonStyle())
             case .running(let version):
-                Text(version.map { "running · \($0)" } ?? "running").font(Extreme.font(11)).foregroundColor(Extreme.muted)
+                Text(version.map { "running · \($0)" } ?? "running").font(Tellurion.font(11)).foregroundColor(Tellurion.muted)
             }
             Spacer()
         }
@@ -92,28 +92,28 @@ private struct LocalModelWindowRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(item.name).font(Extreme.mono(12)).foregroundColor(Extreme.text).lineLimit(1)
+            Text(item.name).font(Tellurion.mono(12)).foregroundColor(Tellurion.text).lineLimit(1)
             if item.loaded {
-                Text("LOADED").font(Extreme.font(9, weight: .bold)).foregroundColor(Extreme.ink)
+                Text("LOADED").font(Tellurion.font(9, weight: .bold)).foregroundColor(Tellurion.ink)
                     .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(RoundedRectangle(cornerRadius: 3).fill(Extreme.live))
+                    .background(RoundedRectangle(cornerRadius: 3).fill(Tellurion.live))
             }
             // Which app serves it: the same model can be in Ollama and LM Studio.
             Text(item.host == .ollama || item.host == .lmStudio ? "\(item.host.rawValue) · \(item.detail)" : item.detail)
-                .font(Extreme.font(11)).foregroundColor(Extreme.dim).lineLimit(1)
+                .font(Tellurion.font(11)).foregroundColor(Tellurion.dim).lineLimit(1)
             Spacer(minLength: 8)
             if models.busy.contains(item.id) {
                 ProgressView().controlSize(.small)
             } else {
                 if item.loaded, item.host.canUnload {
-                    Button("Unload") { models.unload(item) }.buttonStyle(ExtremeButtonStyle()).help("Free its memory now")
+                    Button("Unload") { models.unload(item) }.buttonStyle(TellurionButtonStyle()).help("Free its memory now")
                 }
                 Button("Open") {
                     guard let owner = LocalModelsWindow.frontTerminal else { return }
                     LocalModelSessions.open(item, from: owner)
                     owner.window?.makeKeyAndOrderFront(nil)
                 }
-                .buttonStyle(ExtremeButtonStyle(prominent: true))
+                .buttonStyle(TellurionButtonStyle(prominent: true))
                 .help("Chat with \(item.name): below the chat in front, or in a new tab")
             }
         }
@@ -132,7 +132,7 @@ struct LocalModelsSidebarSection: View {
         let list = models.models
         VStack(alignment: .leading, spacing: 4) {
             if !list.isEmpty {
-                Rectangle().fill(Extreme.line).frame(height: 1).padding(.bottom, 4)
+                Rectangle().fill(Tellurion.line).frame(height: 1).padding(.bottom, 4)
                 header(count: list.count)
                 if !collapsed {
                     ForEach(list) { LocalModelSidebarRow(item: $0, owner: owner) }
@@ -155,17 +155,17 @@ struct LocalModelsSidebarSection: View {
             Button { collapsed.toggle() } label: {
                 HStack(spacing: 6) {
                     Image(systemName: collapsed ? "chevron.right" : "chevron.down")
-                        .font(.system(size: 8, weight: .bold)).foregroundColor(Extreme.dim).frame(width: 8)
-                    Text("LOCAL MODELS").font(Extreme.font(10.5, weight: .semibold)).kerning(1.1).foregroundColor(Extreme.muted)
+                        .font(.system(size: 8, weight: .bold)).foregroundColor(Tellurion.dim).frame(width: 8)
+                    Text("LOCAL MODELS").font(Tellurion.font(10.5, weight: .semibold)).kerning(1.1).foregroundColor(Tellurion.muted)
                         .fixedSize()
-                    Text("\(count)").font(Extreme.font(10)).foregroundColor(Extreme.dim).fixedSize()
+                    Text("\(count)").font(Tellurion.font(10)).foregroundColor(Tellurion.dim).fixedSize()
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            Rectangle().fill(Extreme.line.opacity(0.7)).frame(height: 1)
+            Rectangle().fill(Tellurion.line.opacity(0.7)).frame(height: 1)
             Button { LocalModelsWindow.show() } label: {
-                Image(systemName: "arrow.up.right.square").font(.system(size: 10)).foregroundColor(Extreme.dim)
+                Image(systemName: "arrow.up.right.square").font(.system(size: 10)).foregroundColor(Tellurion.dim)
             }
             .buttonStyle(.plain)
             .help("Local Models: download, unload and open")
@@ -197,29 +197,29 @@ private struct LocalModelSidebarRow: View {
         HStack(spacing: 7) {
             Image(systemName: item.host == .venice ? "cloud" : "cpu")
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(item.loaded ? Extreme.live : Extreme.dim)
+                .foregroundColor(item.loaded ? Tellurion.live : Tellurion.dim)
                 .frame(width: 14)
             VStack(alignment: .leading, spacing: 0) {
                 Text(item.name)
-                    .font(Extreme.mono(11.5))
-                    .foregroundColor(Extreme.text)
+                    .font(Tellurion.mono(11.5))
+                    .foregroundColor(Tellurion.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(hostLine)
-                    .font(Extreme.font(9.5))
-                    .foregroundColor(item.loaded ? Extreme.live.opacity(0.85) : Extreme.dim)
+                    .font(Tellurion.font(9.5))
+                    .foregroundColor(item.loaded ? Tellurion.live.opacity(0.85) : Tellurion.dim)
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
             if hovering {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(Extreme.dim)
+                    .foregroundColor(Tellurion.dim)
             }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering ? Extreme.raised : .clear))
+        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering ? Tellurion.raised : .clear))
         .contentShape(Rectangle())
         .overlay(LocalModelDragSource(payload: item.host.rawValue + "\t" + item.name, title: item.name,
                                       onClick: { LocalModelSessions.open(item, from: owner) },

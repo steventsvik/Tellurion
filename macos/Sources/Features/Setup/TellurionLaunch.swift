@@ -2,7 +2,7 @@
 import AppKit
 
 /// Tellurion's setup work at launch, run once when the first window appears.
-enum ExtremeLaunch {
+enum TellurionLaunch {
     private static var started = false
     private static var observer: NSObjectProtocol?
 
@@ -10,7 +10,7 @@ enum ExtremeLaunch {
         guard !started else { return }
         started = true
         // The hooks read feature switches from files.
-        ExtremeSettings.writeFlags()
+        TellurionSettings.writeFlags()
         SetupChecks.writeSkipFlags()
         DispatchQueue.global(qos: .utility).async {
             // A rebuilt app brings already-installed hooks up to date.

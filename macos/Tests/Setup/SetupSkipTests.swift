@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Ghostty
 
-/// Agents the user said they don't use (the ExtremeSkippedAgents preference), the marker
+/// Agents the user said they don't use (the TellurionSkippedAgents preference), the marker
 /// files that tell `tellurion doctor` about them, and the doctor's reading of those files.
 struct SetupSkipTests {
     @Test func readsTheSavedChoiceAndIgnoresUnknownNames() {
