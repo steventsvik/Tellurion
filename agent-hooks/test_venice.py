@@ -140,7 +140,7 @@ class TellurionVeniceTests(unittest.TestCase):
         (self.root / "venice-proxy.json").write_text(json.dumps({"port": self.server.server_address[1], "token": self.token}, separators=(",", ":")))
 
     def run_cli(self, *args, **env):
-        environment = {"HOME": str(self.home), "PATH": f"{self.bin}:/usr/bin:/bin:/opt/homebrew/bin", "GHOSTTY_EXTREME_TEST_HOME": str(self.home),
+        environment = {"HOME": str(self.home), "PATH": f"{self.bin}:/usr/bin:/bin:/opt/homebrew/bin", "TELLURION_TEST_HOME": str(self.home),
                        "FAKE_LOG": str(self.log), "FAKE_BUNDLED": str(self.home / "bundled.json"), **env}
         return subprocess.run([str(HERE / "tellurion"), "venice", "codex", *args], env=environment, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
 
@@ -281,7 +281,7 @@ class TellurionVeniceTests(unittest.TestCase):
                            ("curl", 'exit 0\n'), ("openssl", 'echo abc123\n')):
             (fake / name).write_text("#!/bin/sh\n" + body)
             (fake / name).chmod(0o755)
-        environment = {"HOME": str(self.home), "PATH": f"{fake}:/usr/bin:/bin", "GHOSTTY_EXTREME_TEST_HOME": str(self.home),
+        environment = {"HOME": str(self.home), "PATH": f"{fake}:/usr/bin:/bin", "TELLURION_TEST_HOME": str(self.home),
                        "FAKE_DOCKER_LOG": str(self.log) + ".docker", **self.search_env}
         return subprocess.run([str(HERE / "tellurion"), "venice", "search", *args], env=environment, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
 
@@ -404,7 +404,7 @@ class ZshWrapperTests(unittest.TestCase):
         cli.chmod(0o755)
 
     def zsh(self, script, **env):
-        environment = {"HOME": str(self.home), "PATH": f"{self.path}:/usr/bin:/bin", "GHOSTTY_EXTREME_TEST_HOME": str(self.home),
+        environment = {"HOME": str(self.home), "PATH": f"{self.path}:/usr/bin:/bin", "TELLURION_TEST_HOME": str(self.home),
                        "GHOSTTY_EXTREME_AGENT_EVENTS": "1", "GHOSTTY_EXTREME_EVENT_TOKEN": "t", **env}
         return subprocess.run(["/bin/zsh", "-f", "-c", f'source "{HERE}/ghostty-extreme.zsh"; {script}'], env=environment,
                               capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=20)
@@ -465,7 +465,7 @@ class VeniceChatTests(unittest.TestCase):
             root = Path(folder) / ".ghostty-extreme"
             root.mkdir()
             (root / "venice-proxy.json").write_text('{"port":4242,"token":"tok"}')
-            with unittest.mock.patch.dict(os.environ, {"GHOSTTY_EXTREME_TEST_HOME": folder}):
+            with unittest.mock.patch.dict(os.environ, {"TELLURION_TEST_HOME": folder}):
                 chat.configure("venice", None)
         self.assertEqual(chat.BASE, "http://127.0.0.1:4242/api")
         self.assertEqual(chat.HEADERS["Authorization"], "Bearer tok")

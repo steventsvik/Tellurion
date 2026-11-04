@@ -5,7 +5,7 @@ import SwiftUI
 
 /// The design in use: loads and saves it, resolves the chrome's colors and the logo for
 /// the views, writes the terminal's part into the Ghostty config, and tells the windows
-/// to redraw. Every `Extreme` color reads from here.
+/// to redraw. Every `Tellurion` color reads from here.
 final class DesignStore: ObservableObject {
     static let shared = DesignStore()
 
@@ -18,7 +18,7 @@ final class DesignStore: ObservableObject {
     /// The user's own saved designs.
     @Published private(set) var mine: [TellurionDesign] = []
 
-    /// The chrome's colors, resolved. Read by `Extreme` on every draw, so it's a plain value.
+    /// The chrome's colors, resolved. Read by `Tellurion` on every draw, so it's a plain value.
     private(set) var chrome = ChromeColors.tellurion
     private(set) var chromeColors = ResolvedChrome(ChromeColors.tellurion)
     private(set) var logoRows = DesignLogo.tellurion.rows
@@ -32,7 +32,7 @@ final class DesignStore: ObservableObject {
     /// Whether the Dock shows the design's logo right now.
     private var dockIconShown = false
 
-    /// Where `design.json` and `designs/` live. Test-only: `GHOSTTY_EXTREME_TEST_HOME`
+    /// Where `design.json` and `designs/` live. Test-only: `TELLURION_TEST_HOME`
     /// moves them, so a test copy never changes the maintainer's design.
     static var folder: URL {
         if let home = TestHooks.home {
@@ -52,7 +52,7 @@ final class DesignStore: ObservableObject {
         }
         mine = Self.loadMine()
         resolve(reload: false, notify: false)
-        // Not from init: the views and `Extreme` read `shared`, which is still being made.
+        // Not from init: the views and `Tellurion` read `shared`, which is still being made.
         DispatchQueue.main.async { [weak self] in self?.applyDockIcon() }
         observers.append(NotificationCenter.default.addObserver(forName: .ghosttyConfigDidChange, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
@@ -221,7 +221,7 @@ struct ResolvedChrome {
     }
 }
 
-/// Rebuilds its content whenever the design changes, so every `Extreme` color inside is
+/// Rebuilds its content whenever the design changes, so every `Tellurion` color inside is
 /// read again. Put it at the root of a window or a chrome subtree, never around a terminal.
 struct DesignRoot<Content: View>: View {
     @ObservedObject private var store = DesignStore.shared
@@ -232,7 +232,7 @@ struct DesignRoot<Content: View>: View {
     }
 }
 
-/// The tool-window styling (`extremeWindow()`) re-applied on every design change without
+/// The tool-window styling (`tellurionWindow()`) re-applied on every design change without
 /// rebuilding the content: for views that keep state while the design changes under them.
 struct DesignSkin<Content: View>: View {
     @ObservedObject private var store = DesignStore.shared
@@ -241,10 +241,10 @@ struct DesignSkin<Content: View>: View {
     var body: some View {
         content()
             .background(store.chromeColors.ink)
-            .buttonStyle(ExtremeButtonStyle())
+            .buttonStyle(TellurionButtonStyle())
             .tint(store.chromeColors.gold)
             .environment(\.colorScheme, store.chrome.isLight ? .light : .dark)
-            .onAppear { Extreme.registerFonts() }
+            .onAppear { Tellurion.registerFonts() }
     }
 }
 

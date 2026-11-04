@@ -18,14 +18,14 @@ final class MenuBarStatus: NSObject, NSMenuDelegate {
         for name in [VerticalTabsAgents.didChange, AgentAlerts.waitingCountDidChange, NSWindow.willCloseNotification] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in self?.queueRefresh() })
         }
-        observers.append(center.addObserver(forName: ExtremeSettings.featuresDidChange, object: nil, queue: .main) { [weak self] _ in
+        observers.append(center.addObserver(forName: TellurionSettings.featuresDidChange, object: nil, queue: .main) { [weak self] _ in
             self?.apply()
         })
         apply()
     }
 
     private func apply() {
-        if ExtremeSettings.isOn(.menuBar) {
+        if TellurionSettings.isOn(.menuBar) {
             if item == nil {
                 let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
                 item.behavior = .removalAllowed
@@ -130,7 +130,7 @@ final class MenuBarStatus: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Settings…", image: nil) {
             NSApp.activate(ignoringOtherApps: true)
-            ExtremeSettingsWindow.show()
+            TellurionSettingsWindow.show()
         })
     }
 

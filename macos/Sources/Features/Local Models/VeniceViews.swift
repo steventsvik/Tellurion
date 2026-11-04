@@ -13,21 +13,21 @@ struct VeniceSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ExtremeSectionLabel("On Venice") {
+            TellurionSectionLabel("On Venice") {
                 if account.busy { ProgressView().controlSize(.small) }
                 if account.connected {
                     Button("Refresh", action: account.refresh)
-                        .buttonStyle(.plain).font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                        .buttonStyle(.plain).font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
                     Button("Disconnect", action: account.disconnect)
-                        .buttonStyle(.plain).font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                        .buttonStyle(.plain).font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
                 }
             }
             Text("Abliterated and other models on Venice's servers, from your own account, in a chat or driving Codex with its usual tools. "
                  + "Unlike models on this Mac, what you send goes to Venice. Nothing is sent until you open one.")
-                .font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                .font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
                 .fixedSize(horizontal: false, vertical: true)
             if let error = account.error {
-                Text(error).font(Extreme.font(12)).foregroundColor(Extreme.danger)
+                Text(error).font(Tellurion.font(12)).foregroundColor(Tellurion.danger)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if account.connected { list } else { connect }
@@ -38,15 +38,15 @@ struct VeniceSection: View {
     private var connect: some View {
         HStack(spacing: 8) {
             SecureField("Venice API key", text: $key)
-                .textFieldStyle(.plain).font(Extreme.mono(12))
+                .textFieldStyle(.plain).font(Tellurion.mono(12))
                 .padding(.horizontal, 8).padding(.vertical, 5)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Extreme.raised))
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Tellurion.raised))
                 .onSubmit(submit)
             Button("Connect", action: submit)
-                .buttonStyle(ExtremeButtonStyle(prominent: true))
+                .buttonStyle(TellurionButtonStyle(prominent: true))
                 .disabled(key.isEmpty || account.busy)
             Button("Get a Key") { NSWorkspace.shared.open(VeniceAPI.keysPage) }
-                .buttonStyle(ExtremeButtonStyle())
+                .buttonStyle(TellurionButtonStyle())
                 .help("Keys are made on Venice's site while you're signed in")
         }
     }
@@ -69,14 +69,14 @@ struct VeniceSection: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 TextField("Search \(account.models.count) models", text: $search)
-                    .textFieldStyle(.plain).font(Extreme.font(12))
+                    .textFieldStyle(.plain).font(Tellurion.font(12))
                     .padding(.horizontal, 8).padding(.vertical, 5)
-                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Extreme.raised))
-                Toggle("Uncensored", isOn: $uncensoredOnly).toggleStyle(.checkbox).font(Extreme.font(11))
-                Toggle("Private", isOn: $privateOnly).toggleStyle(.checkbox).font(Extreme.font(11))
+                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Tellurion.raised))
+                Toggle("Uncensored", isOn: $uncensoredOnly).toggleStyle(.checkbox).font(Tellurion.font(11))
+                Toggle("Private", isOn: $privateOnly).toggleStyle(.checkbox).font(Tellurion.font(11))
             }
             Text("Star a model to keep it in the sidebar. Private: Venice says nothing is stored. Anonymized: the model's own provider may store what's sent.")
-                .font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                .font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
                 .fixedSize(horizontal: false, vertical: true)
             ScrollView {
                 LazyVStack(spacing: 2) {
@@ -100,7 +100,7 @@ private struct VeniceOptions: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Codex sessions you start from now on").font(Extreme.font(11, weight: .medium)).foregroundColor(Extreme.dim)
+            Text("Codex sessions you start from now on").font(Tellurion.font(11, weight: .medium)).foregroundColor(Tellurion.dim)
             option("Search the web", "Sends what it searches for to Exa, free for about 50 searches a day. For more, run tellurion venice search setup, which needs Docker. Results count as tokens on Venice.",
                    .webSearch, $webSearch)
             option("Use my Codex memory", "Sends what Codex remembers about you and your projects to Venice. Venice sessions never add to it.",
@@ -116,16 +116,16 @@ private struct VeniceOptions: View {
     private var spendingRow: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
-                Text("Stop for the day at $").font(Extreme.font(12))
+                Text("Stop for the day at $").font(Tellurion.font(12))
                 TextField("", value: $limit, format: .number)
-                    .textFieldStyle(.plain).font(Extreme.mono(12)).frame(width: 52)
+                    .textFieldStyle(.plain).font(Tellurion.mono(12)).frame(width: 52)
                     .padding(.horizontal, 6).padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Extreme.raised))
+                    .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Tellurion.raised))
                     .onChange(of: limit) { VeniceSpendMeter.shared.limit = $0 }
             }
             Text(spendingText)
-                .font(Extreme.font(11))
-                .foregroundColor(VeniceSpendMeter.isOver(account.spending, limit: limit) ? Extreme.danger : Extreme.dim)
+                .font(Tellurion.font(11))
+                .foregroundColor(VeniceSpendMeter.isOver(account.spending, limit: limit) ? Tellurion.danger : Tellurion.dim)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -140,7 +140,7 @@ private struct VeniceOptions: View {
 
     private func option(_ title: String, _ detail: String, _ option: VeniceCodexOption, _ value: Binding<Bool>) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Toggle(title, isOn: value).toggleStyle(.checkbox).font(Extreme.font(12))
+            Toggle(title, isOn: value).toggleStyle(.checkbox).font(Tellurion.font(12))
                 .onChange(of: value.wrappedValue) { on in
                     do {
                         try option.set(on)
@@ -149,7 +149,7 @@ private struct VeniceOptions: View {
                         value.wrappedValue = option.isOn
                     }
                 }
-            Text(detail).font(Extreme.font(11)).foregroundColor(Extreme.dim)
+            Text(detail).font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -165,18 +165,18 @@ private struct VeniceRow: View {
         HStack(spacing: 10) {
             Button { account.toggleStar(model) } label: {
                 Image(systemName: isStarred ? "star.fill" : "star")
-                    .font(.system(size: 11)).foregroundColor(isStarred ? Extreme.gold : Extreme.dim)
+                    .font(.system(size: 11)).foregroundColor(isStarred ? Tellurion.gold : Tellurion.dim)
             }
             .buttonStyle(.plain)
             .help(isStarred ? "Take it out of the sidebar" : "Keep it in the sidebar")
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
-                    Text(model.name).font(Extreme.font(12, weight: .medium)).foregroundColor(Extreme.text)
+                    Text(model.name).font(Tellurion.font(12, weight: .medium)).foregroundColor(Tellurion.text)
                         .lineLimit(1).truncationMode(.middle)
-                    if model.uncensored { tag("UNCENSORED", Extreme.muted) }
-                    tag(model.isPrivate ? "PRIVATE" : "ANONYMIZED", model.isPrivate ? Extreme.muted : Extreme.warn)
+                    if model.uncensored { tag("UNCENSORED", Tellurion.muted) }
+                    tag(model.isPrivate ? "PRIVATE" : "ANONYMIZED", model.isPrivate ? Tellurion.muted : Tellurion.warn)
                 }
-                Text(model.detail).font(Extreme.font(11)).foregroundColor(Extreme.dim).lineLimit(1)
+                Text(model.detail).font(Tellurion.font(11)).foregroundColor(Tellurion.dim).lineLimit(1)
             }
             Spacer(minLength: 8)
             Button("Chat") {
@@ -184,14 +184,14 @@ private struct VeniceRow: View {
                 LocalModelSessions.open(item, from: owner)
                 owner.window?.makeKeyAndOrderFront(nil)
             }
-            .buttonStyle(ExtremeButtonStyle())
+            .buttonStyle(TellurionButtonStyle())
             .help("Chat with \(model.name) on Venice: below the chat in front, or in a new tab")
             Button("Open in Codex") {
                 guard let owner = LocalModelsWindow.frontTerminal else { return }
                 LocalModelSessions.openCodex(item, name: model.name, from: owner)
                 owner.window?.makeKeyAndOrderFront(nil)
             }
-            .buttonStyle(ExtremeButtonStyle(prominent: true))
+            .buttonStyle(TellurionButtonStyle(prominent: true))
             .disabled(!model.worksInCodex)
             .help(model.worksInCodex ? "Codex, with its usual tools and setup, on \(model.name)"
                   : "This model can't call tools, which Codex needs")
@@ -202,9 +202,9 @@ private struct VeniceRow: View {
     private var item: LocalModel { .venice(model.id, uncensored: model.uncensored, isPrivate: model.isPrivate) }
 
     private func tag(_ text: String, _ color: Color) -> some View {
-        Text(text).font(Extreme.font(8.5, weight: .bold)).foregroundColor(color)
+        Text(text).font(Tellurion.font(8.5, weight: .bold)).foregroundColor(color)
             .padding(.horizontal, 4).padding(.vertical, 1)
-            .background(RoundedRectangle(cornerRadius: 3).strokeBorder(Extreme.line, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 3).strokeBorder(Tellurion.line, lineWidth: 1))
     }
 }
 #endif

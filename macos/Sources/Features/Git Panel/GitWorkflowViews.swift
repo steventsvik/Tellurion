@@ -19,7 +19,7 @@ struct GitButlerSection: View {
         VStack(alignment: .leading, spacing: 14) {
             if model.loaded && GitButler.binary == nil {
                 Text("This repository is in GitButler's workspace. Install GitButler's CLI (but) to see its branches here.")
-                    .font(Extreme.font(10.5)).foregroundColor(Extreme.muted).fixedSize(horizontal: false, vertical: true)
+                    .font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted).fixedSize(horizontal: false, vertical: true)
             } else {
                 branchesSection
                 uncommittedSection
@@ -29,15 +29,15 @@ struct GitButlerSection: View {
 
     private var branchesSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ExtremeSectionLabel("Applied branches") {
+            TellurionSectionLabel("Applied branches") {
                 HStack(spacing: 10) {
                     Button(naming ? "Cancel" : "New…") { naming.toggle(); newBranch = "" }
-                        .buttonStyle(.plain).font(Extreme.font(10.5)).foregroundColor(Extreme.gold)
+                        .buttonStyle(.plain).font(Tellurion.font(10.5)).foregroundColor(Tellurion.gold)
                     Button("Undo") { model.butlerUndo() }
-                        .buttonStyle(.plain).font(Extreme.font(10.5)).foregroundColor(Extreme.gold)
+                        .buttonStyle(.plain).font(Tellurion.font(10.5)).foregroundColor(Tellurion.gold)
                         .disabled(model.busy).help("but undo: reverse GitButler's last operation")
                     Button("Open") { model.openGitButler() }
-                        .buttonStyle(.plain).font(Extreme.font(10.5)).foregroundColor(Extreme.gold)
+                        .buttonStyle(.plain).font(Tellurion.font(10.5)).foregroundColor(Tellurion.gold)
                         .help("Open this project in GitButler")
                 }
                 .fixedSize()
@@ -45,16 +45,16 @@ struct GitButlerSection: View {
             if naming {
                 HStack(spacing: 6) {
                     TextField("new-branch-name", text: $newBranch, onCommit: create)
-                        .textFieldStyle(.roundedBorder).font(Extreme.mono(11))
+                        .textFieldStyle(.roundedBorder).font(Tellurion.mono(11))
                     Button("Create", action: create).disabled(newBranch.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 Text("A new branch applied beside the others. Each agent can commit to its own.")
-                    .font(Extreme.font(10)).foregroundColor(Extreme.dim)
+                    .font(Tellurion.font(10)).foregroundColor(Tellurion.dim)
             }
             if let status, status.stacks.isEmpty {
-                Text("No branches applied yet").font(Extreme.font(10.5)).foregroundColor(Extreme.dim)
+                Text("No branches applied yet").font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim)
             } else if status == nil {
-                Text(model.loaded ? "Couldn't read GitButler's status" : "…").font(Extreme.font(10.5)).foregroundColor(Extreme.dim)
+                Text(model.loaded ? "Couldn't read GitButler's status" : "…").font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim)
             }
             ForEach(status?.stacks ?? []) { stack in
                 VStack(alignment: .leading, spacing: 3) {
@@ -63,15 +63,15 @@ struct GitButlerSection: View {
                     }
                     if !stack.assigned.isEmpty {
                         Text("\(stack.assigned.count) uncommitted file\(stack.assigned.count == 1 ? "" : "s") assigned")
-                            .font(Extreme.font(9.5)).foregroundColor(Extreme.dim).padding(.leading, 18)
+                            .font(Tellurion.font(9.5)).foregroundColor(Tellurion.dim).padding(.leading, 18)
                     }
                 }
                 .padding(6)
-                .extremePanel(fill: Extreme.raised)
+                .tellurionPanel(fill: Tellurion.raised)
             }
             if let behind = status?.behind, behind > 0 {
                 Text("\(behind) new commit\(behind == 1 ? "" : "s") on the target branch · but pull brings them in")
-                    .font(Extreme.font(10)).foregroundColor(Extreme.warn)
+                    .font(Tellurion.font(10)).foregroundColor(Tellurion.warn)
             }
         }
     }
@@ -79,18 +79,18 @@ struct GitButlerSection: View {
     private func branchRow(_ branch: GitButler.Branch, stacked: Bool) -> some View {
         HStack(spacing: 6) {
             Image(systemName: stacked ? "arrow.turn.down.right" : "arrow.triangle.branch")
-                .font(.system(size: 9.5, weight: .semibold)).foregroundColor(Extreme.dim).frame(width: 12)
+                .font(.system(size: 9.5, weight: .semibold)).foregroundColor(Tellurion.dim).frame(width: 12)
             VStack(alignment: .leading, spacing: 1) {
-                Text(branch.name).font(Extreme.mono(11)).foregroundColor(Extreme.text).lineLimit(1).truncationMode(.middle)
+                Text(branch.name).font(Tellurion.mono(11)).foregroundColor(Tellurion.text).lineLimit(1).truncationMode(.middle)
                 Text(([branch.commits.count == 1 ? "1 commit" : "\(branch.commits.count) commits", branch.statusText]
                       + (branch.commits.first.map { [$0] } ?? [])).joined(separator: " · "))
-                    .font(Extreme.font(9.5)).foregroundColor(Extreme.dim).lineLimit(1)
+                    .font(Tellurion.font(9.5)).foregroundColor(Tellurion.dim).lineLimit(1)
             }
             Spacer(minLength: 4)
             if let pull = pulls.pull(root: model.root, branch: branch.name) { PullRequestBadge(pull: pull) }
             if branch.status != "nothingToPush", branch.status != "integrated", !branch.commits.isEmpty {
                 Button("Push") { model.butlerPush(branch.name) }
-                    .buttonStyle(.plain).font(Extreme.font(10, weight: .semibold)).foregroundColor(Extreme.gold)
+                    .buttonStyle(.plain).font(Tellurion.font(10, weight: .semibold)).foregroundColor(Tellurion.gold)
                     .disabled(model.busy).help("but push \(branch.name)")
             }
         }
@@ -100,19 +100,19 @@ struct GitButlerSection: View {
     private var uncommittedSection: some View {
         let files = (status?.unassigned ?? []) + (status?.stacks.flatMap(\.assigned) ?? [])
         return VStack(alignment: .leading, spacing: 6) {
-            ExtremeSectionLabel("Uncommitted")
+            TellurionSectionLabel("Uncommitted")
             if files.isEmpty {
-                Text(model.loaded ? "Nothing uncommitted" : "…").font(Extreme.font(10.5)).foregroundColor(Extreme.dim)
+                Text(model.loaded ? "Nothing uncommitted" : "…").font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim)
             } else {
                 ForEach(files.prefix(5), id: \.self) { path in
-                    Text(path).font(Extreme.mono(10)).foregroundColor(Extreme.muted).lineLimit(1).truncationMode(.middle)
+                    Text(path).font(Tellurion.mono(10)).foregroundColor(Tellurion.muted).lineLimit(1).truncationMode(.middle)
                 }
                 if files.count > 5 {
-                    Text("… and \(files.count - 5) more").font(Extreme.font(10)).foregroundColor(Extreme.dim)
+                    Text("… and \(files.count - 5) more").font(Tellurion.font(10)).foregroundColor(Tellurion.dim)
                 }
                 if !branchNames.isEmpty {
                     HStack(spacing: 6) {
-                        TextField("Commit message", text: $message).textFieldStyle(.roundedBorder).font(Extreme.font(11))
+                        TextField("Commit message", text: $message).textFieldStyle(.roundedBorder).font(Tellurion.font(11))
                         Picker("", selection: Binding(get: { target ?? branchNames.first ?? "" }, set: { target = $0 })) {
                             ForEach(branchNames, id: \.self) { Text($0).tag($0) }
                         }
@@ -122,7 +122,7 @@ struct GitButlerSection: View {
                             model.butlerCommit(message, to: target ?? branchNames.first ?? "")
                             message = ""
                         }
-                        .buttonStyle(ExtremeButtonStyle(prominent: true))
+                        .buttonStyle(TellurionButtonStyle(prominent: true))
                         .disabled(message.trimmingCharacters(in: .whitespaces).isEmpty || model.busy)
                         .help("but commit: commit the uncommitted changes to this branch")
                     }
@@ -146,7 +146,7 @@ struct GraphiteStackSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            ExtremeSectionLabel("Stack") {
+            TellurionSectionLabel("Stack") {
                 HStack(spacing: 10) {
                     if model.stack.contains(where: \.needsRestack) {
                         tabButton("Restack", "restack", help: "gt restack: rebase each branch onto its parent")
@@ -162,13 +162,13 @@ struct GraphiteStackSection: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: branch.isTrunk ? "circle" : branch.name == model.currentBranch ? "largecircle.fill.circle" : "circle.fill")
-                            .font(.system(size: 7.5)).foregroundColor(branch.name == model.currentBranch ? Extreme.gold : Extreme.dim)
+                            .font(.system(size: 7.5)).foregroundColor(branch.name == model.currentBranch ? Tellurion.gold : Tellurion.dim)
                             .frame(width: 12)
-                        Text(branch.name).font(Extreme.mono(11))
-                            .foregroundColor(branch.name == model.currentBranch ? Extreme.gold : branch.isTrunk ? Extreme.muted : Extreme.text)
+                        Text(branch.name).font(Tellurion.mono(11))
+                            .foregroundColor(branch.name == model.currentBranch ? Tellurion.gold : branch.isTrunk ? Tellurion.muted : Tellurion.text)
                             .lineLimit(1).truncationMode(.middle)
                         if branch.needsRestack {
-                            Text("needs restack").font(Extreme.font(9.5)).foregroundColor(Extreme.warn)
+                            Text("needs restack").font(Tellurion.font(9.5)).foregroundColor(Tellurion.warn)
                         }
                         Spacer(minLength: 4)
                         if !branch.isTrunk, let pull = pulls.pull(root: model.root, branch: branch.name) {
@@ -186,7 +186,7 @@ struct GraphiteStackSection: View {
 
     private func tabButton(_ title: String, _ args: String, help: String) -> some View {
         Button(title) { model.graphiteInTab(args) }
-            .buttonStyle(.plain).font(Extreme.font(10.5)).foregroundColor(Extreme.gold)
+            .buttonStyle(.plain).font(Tellurion.font(10.5)).foregroundColor(Tellurion.gold)
             .disabled(Graphite.binary == nil)
             .help(Graphite.binary == nil ? "Install Graphite's CLI (gt) to run this" : help + " (runs in a new tab)")
     }

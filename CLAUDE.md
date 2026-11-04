@@ -51,12 +51,12 @@ The maintainer runs Tellurion all day with live agent sessions.
 - Anything that brings a window to the front, clicks, or records the screen needs the
   maintainer's go-ahead first; they may be using the Mac. Screenshots and recordings
   capture a single window (`screencapture -l <window id>`), never the whole screen.
-- Test-only switches: `GHOSTTY_EXTREME_TEST_TABS=N`, `GHOSTTY_EXTREME_DEMO=<script>`
-  (see `DemoDirector.swift`), `GHOSTTY_EXTREME_TEST_BOARD=<script>` (see `BoardTest.swift`),
-  `GHOSTTY_EXTREME_TEST_LOG=<file>`, `GHOSTTY_EXTREME_TEST_VENICE=<url>` (a mock in place of Venice). They're read through `TestHooks.swift` and exist only
+- Test-only switches: `TELLURION_TEST_TABS=N`, `TELLURION_DEMO=<script>`
+  (see `DemoDirector.swift`), `TELLURION_TEST_BOARD=<script>` (see `BoardTest.swift`),
+  `TELLURION_TEST_LOG=<file>`, `TELLURION_TEST_VENICE=<url>` (a mock in place of Venice). They're read through `TestHooks.swift` and exist only
   in builds made with the `TELLURION_TEST_HOOKS` flag: Debug, and ReleaseLocal as built
   above. `release.sh` builds without it and checks that the shipped app has none of them.
-- Always set `GHOSTTY_EXTREME_TEST_HOME=<empty folder>` on a test copy: it moves
+- Always set `TELLURION_TEST_HOME=<empty folder>` on a test copy: it moves
   `~/.ghostty-extreme` (boards, prompts, hooks) there. It works in every build, the release
   included. Setting `HOME` alone does nothing,
   since an app's `NSHomeDirectory()` ignores it, and the copy would then write into the
@@ -69,8 +69,8 @@ The sidebar and chrome are in every tab's window, so small costs multiply.
 
 - No SwiftUI `repeatForever` animations and no continuous `TimelineView`s in the
   chrome: each one re-lays out the whole window every frame. Endless motion uses Core
-  Animation (`ExtremeMotion.swift`, `ExtremeFilm.swift`), capped at `Motion.chromeRate`.
-- Gate any remaining timeline on `@Environment(\.extremeMotion)` (false while the
+  Animation (`TellurionMotion.swift`, `TellurionFilm.swift`), capped at `Motion.chromeRate`.
+- Gate any remaining timeline on `@Environment(\.tellurionMotion)` (false while the
   window or tab is off screen).
 - Glows get a `shadowPath`. Hidden pages and windows do no work.
 - Measure before and after: `ps -M -p <pid>` (main thread), `/usr/bin/sample`, `footprint`.

@@ -107,7 +107,7 @@ final class PortsMonitor: ObservableObject {
     }
 
     private func updateTimer(scanNow: Bool) {
-        let wanted = watchers > 0 && NSApp.isActive && ExtremeSettings.isOn(.ports)
+        let wanted = watchers > 0 && NSApp.isActive && TellurionSettings.isOn(.ports)
         if wanted, timer == nil {
             let timer = Timer(timeInterval: Self.interval, repeats: true) { [weak self] _ in self?.refresh() }
             timer.tolerance = 1
@@ -224,7 +224,7 @@ final class PortsMonitor: ObservableObject {
     /// Called with a failed command's output. "Port 3000 is in use" and friends raise a
     /// notice in the sidebar naming what holds the port.
     func commandFailed(_ command: String, output: String) {
-        guard ExtremeSettings.isOn(.ports),
+        guard TellurionSettings.isOn(.ports),
               let port = Self.conflictPort(in: output) ?? Self.conflictPort(command: command, output: output) else { return }
         conflict = Conflict(port: port, command: command, at: Date())
         refresh()

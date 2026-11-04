@@ -817,10 +817,10 @@ extension LocalhostSession {
 
     var statusColor: Color {
         switch state {
-        case .starting: return isQuiet ? Extreme.danger : Extreme.warn
-        case .live: return Extreme.live
-        case .stopped(let code): return Self.isCleanExit(code) ? Extreme.muted : Extreme.danger
-        case .detached: return Extreme.muted
+        case .starting: return isQuiet ? Tellurion.danger : Tellurion.warn
+        case .live: return Tellurion.live
+        case .stopped(let code): return Self.isCleanExit(code) ? Tellurion.muted : Tellurion.danger
+        case .detached: return Tellurion.muted
         }
     }
 }

@@ -6,11 +6,11 @@ extension PullRequestInfo {
     var color: Color {
         switch state {
         case .merged: return Color(red: 0.64, green: 0.48, blue: 0.98)
-        case .closed: return Extreme.dim
+        case .closed: return Tellurion.dim
         case .open:
-            if failed > 0 { return Extreme.danger }
-            if pending > 0 { return Extreme.warn }
-            return isDraft ? Extreme.muted : Extreme.live
+            if failed > 0 { return Tellurion.danger }
+            if pending > 0 { return Tellurion.warn }
+            return isDraft ? Tellurion.muted : Tellurion.live
         }
     }
 
@@ -29,10 +29,10 @@ extension PullRequestInfo {
 extension PullRequestInfo.Check.Result {
     var color: Color {
         switch self {
-        case .passed: return Extreme.live
-        case .failed: return Extreme.danger
-        case .pending: return Extreme.warn
-        case .skipped: return Extreme.dim
+        case .passed: return Tellurion.live
+        case .failed: return Tellurion.danger
+        case .pending: return Tellurion.warn
+        case .skipped: return Tellurion.dim
         }
     }
 
@@ -53,7 +53,7 @@ struct PullRequestBadge: View {
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: pull.symbol).font(.system(size: 8.5, weight: .bold))
-            Text("#\(String(pull.number))").font(Extreme.mono(10))
+            Text("#\(String(pull.number))").font(Tellurion.mono(10))
         }
         .foregroundColor(pull.color)
         .help("Pull request #\(pull.number): \(pull.title) · \(pull.summary)")
@@ -71,8 +71,8 @@ struct AheadBehindLabel: View {
                 if ahead > 0 { Text("↑\(ahead)") }
                 if behind > 0 { Text("↓\(behind)") }
             }
-            .font(Extreme.mono(10))
-            .foregroundColor(Extreme.muted)
+            .font(Tellurion.mono(10))
+            .foregroundColor(Tellurion.muted)
             .help([ahead > 0 ? "\(ahead) to push" : nil, behind > 0 ? "\(behind) to pull" : nil].compactMap { $0 }.joined(separator: ", "))
         }
     }
@@ -129,12 +129,12 @@ struct GitPanelView: View {
                     if let agent = busyAgent {
                         notice(isJJ ? "\(agent.kind.displayName) is working here. Changing the working copy under it can confuse it."
                                     : "\(agent.kind.displayName) is working here. Switching branches under it can confuse it.",
-                               color: Extreme.warn, symbol: "exclamationmark.triangle.fill")
+                               color: Tellurion.warn, symbol: "exclamationmark.triangle.fill")
                     }
                     if let error = isJJ ? jj.error : model.error {
-                        notice(error, color: Extreme.danger, symbol: "xmark.octagon.fill")
+                        notice(error, color: Tellurion.danger, symbol: "xmark.octagon.fill")
                     } else if let done = isJJ ? jj.notice : model.notice {
-                        notice(done, color: Extreme.live, symbol: "checkmark.circle.fill")
+                        notice(done, color: Tellurion.live, symbol: "checkmark.circle.fill")
                     }
                     pullSection
                     if isJJ {
@@ -154,7 +154,7 @@ struct GitPanelView: View {
             .frame(maxHeight: 460)
         }
         .frame(width: 360)
-        .extremePanel(active: true, fill: Extreme.ink)
+        .tellurionPanel(active: true, fill: Tellurion.ink)
         .shadow(color: .black.opacity(0.6), radius: 14, y: 6)
         .onAppear {
             if isJJ { jj.load() } else { model.load() }
@@ -172,20 +172,20 @@ struct GitPanelView: View {
         }
     }
 
-    private var divider: some View { Rectangle().fill(Extreme.line).frame(height: 1) }
+    private var divider: some View { Rectangle().fill(Tellurion.line).frame(height: 1) }
 
     private var header: some View {
         HStack(spacing: 8) {
-            PixelIconView(icon: .branch, color: Extreme.gold, pixel: 1.4)
+            PixelIconView(icon: .branch, color: Tellurion.gold, pixel: 1.4)
             VStack(alignment: .leading, spacing: 1) {
                 Text(info?.branch ?? model.currentBranch ?? "…")
-                    .font(Extreme.font(13, weight: .semibold)).foregroundColor(Extreme.text).lineLimit(1)
-                Text(headerDetail).font(Extreme.font(10.5)).foregroundColor(Extreme.muted).lineLimit(1)
+                    .font(Tellurion.font(13, weight: .semibold)).foregroundColor(Tellurion.text).lineLimit(1)
+                Text(headerDetail).font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted).lineLimit(1)
             }
             Spacer(minLength: 6)
             if model.busy || jj.busy { ProgressView().controlSize(.small) }
             Button(action: dismiss) {
-                Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundColor(Extreme.dim)
+                Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundColor(Tellurion.dim)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close")
@@ -225,21 +225,21 @@ struct GitPanelView: View {
     @ViewBuilder
     private var pullSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ExtremeSectionLabel("Pull request")
+            TellurionSectionLabel("Pull request")
             if pulls.available == false {
                 Text("Install the GitHub CLI (gh) and run gh auth login to see pull requests and checks here.")
-                    .font(Extreme.font(11)).foregroundColor(Extreme.muted).fixedSize(horizontal: false, vertical: true)
+                    .font(Tellurion.font(11)).foregroundColor(Tellurion.muted).fixedSize(horizontal: false, vertical: true)
             } else if let pull {
                 Button { if let url = pull.url { NSWorkspace.shared.open(url) } } label: {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: pull.symbol).foregroundColor(pull.color).font(.system(size: 12))
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(pull.title).font(Extreme.font(11.5, weight: .semibold)).foregroundColor(Extreme.text)
+                            Text(pull.title).font(Tellurion.font(11.5, weight: .semibold)).foregroundColor(Tellurion.text)
                                 .multilineTextAlignment(.leading).lineLimit(2)
-                            Text(pullDetail(pull)).font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+                            Text(pullDetail(pull)).font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
                         }
                         Spacer(minLength: 0)
-                        Image(systemName: "arrow.up.right.square").font(.system(size: 10)).foregroundColor(Extreme.dim)
+                        Image(systemName: "arrow.up.right.square").font(.system(size: 10)).foregroundColor(Tellurion.dim)
                     }
                     .contentShape(Rectangle())
                 }
@@ -250,7 +250,7 @@ struct GitPanelView: View {
                     Button { if let url = check.url { NSWorkspace.shared.open(url) } } label: {
                         HStack(spacing: 6) {
                             Image(systemName: check.result.symbol).font(.system(size: 10)).foregroundColor(check.result.color)
-                            Text(check.name).font(Extreme.font(10.5)).foregroundColor(Extreme.text).lineLimit(1).truncationMode(.middle)
+                            Text(check.name).font(Tellurion.font(10.5)).foregroundColor(Tellurion.text).lineLimit(1).truncationMode(.middle)
                             Spacer(minLength: 0)
                         }
                         .contentShape(Rectangle())
@@ -260,22 +260,22 @@ struct GitPanelView: View {
                     .help(check.url == nil ? check.name : "Open \(check.name)'s log")
                 }
                 if shown.count > 8 {
-                    Text("+\(shown.count - 8) more checks").font(Extreme.font(10)).foregroundColor(Extreme.dim)
+                    Text("+\(shown.count - 8) more checks").font(Tellurion.font(10)).foregroundColor(Tellurion.dim)
                 }
             } else if pulls.available == true, let branch = info?.branch {
                 HStack {
-                    Text("No pull request for \(branch)").font(Extreme.font(11)).foregroundColor(Extreme.muted)
+                    Text("No pull request for \(branch)").font(Tellurion.font(11)).foregroundColor(Tellurion.muted)
                     Spacer()
                     // Only once it's pushed: for an unpushed branch, gh would want to push first.
                     if isPushed {
                         Button("Create…") { pulls.createPullRequest(root: model.root, branch: isJJ ? info?.jj?.bookmark : nil) }
                             .help("Opens GitHub's new pull request page (gh pr create --web)")
                     } else if model.loaded || jj.loaded {
-                        Text(isJJ && info?.jj?.bookmark == nil ? "Set a bookmark first" : "Push it first").font(Extreme.font(10.5)).foregroundColor(Extreme.dim)
+                        Text(isJJ && info?.jj?.bookmark == nil ? "Set a bookmark first" : "Push it first").font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim)
                     }
                 }
             } else {
-                Text("Looking…").font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                Text("Looking…").font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
             }
         }
     }
@@ -305,34 +305,34 @@ struct GitPanelView: View {
 
     private var branchSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ExtremeSectionLabel("Branches") {
+            TellurionSectionLabel("Branches") {
                 Button(creating ? "Cancel" : "New…") { creating.toggle(); newBranch = "" }
-                    .buttonStyle(.plain).font(Extreme.font(10.5)).foregroundColor(Extreme.gold)
+                    .buttonStyle(.plain).font(Tellurion.font(10.5)).foregroundColor(Tellurion.gold)
             }
             if creating {
                 HStack(spacing: 6) {
                     TextField("new-branch-name", text: $newBranch, onCommit: create)
-                        .textFieldStyle(.roundedBorder).font(Extreme.mono(11))
+                        .textFieldStyle(.roundedBorder).font(Tellurion.mono(11))
                     Button("Create", action: create).disabled(newBranch.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 Text("From the current commit; uncommitted changes come along.")
-                    .font(Extreme.font(10)).foregroundColor(Extreme.dim)
+                    .font(Tellurion.font(10)).foregroundColor(Tellurion.dim)
             }
             if model.branches.count > 6 {
-                TextField("Filter branches", text: $filter).textFieldStyle(.roundedBorder).font(Extreme.font(11))
+                TextField("Filter branches", text: $filter).textFieldStyle(.roundedBorder).font(Tellurion.font(11))
             }
             let matches = model.branches.filter { filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter) }
             ForEach(matches.prefix(filter.isEmpty ? 8 : 30)) { branch in branchRow(branch) }
             if filter.isEmpty && model.branches.count > 8 {
-                Text("\(model.branches.count - 8) older branches · type to filter").font(Extreme.font(10)).foregroundColor(Extreme.dim)
+                Text("\(model.branches.count - 8) older branches · type to filter").font(Tellurion.font(10)).foregroundColor(Tellurion.dim)
             }
             if let target = confirmSwitch {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("You have uncommitted changes. Git brings them along to \(target) if they don't clash, and refuses if they do.")
-                        .font(Extreme.font(10.5)).foregroundColor(Extreme.text).fixedSize(horizontal: false, vertical: true)
+                        .font(Tellurion.font(10.5)).foregroundColor(Tellurion.text).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 6) {
                         Button("Switch") { model.switchTo(target); confirmSwitch = nil }
-                            .buttonStyle(ExtremeButtonStyle(prominent: true))
+                            .buttonStyle(TellurionButtonStyle(prominent: true))
                         Button("Stash, then switch") {
                             // Both run in order on the model's queue.
                             model.stashChanges()
@@ -343,7 +343,7 @@ struct GitPanelView: View {
                     }
                 }
                 .padding(8)
-                .extremePanel(fill: Extreme.raised)
+                .tellurionPanel(fill: Tellurion.raised)
             }
         }
     }
@@ -356,13 +356,13 @@ struct GitPanelView: View {
             HStack(spacing: 6) {
                 Image(systemName: branch.isCurrent ? "checkmark" : "arrow.triangle.branch")
                     .font(.system(size: 9.5, weight: .semibold))
-                    .foregroundColor(branch.isCurrent ? Extreme.gold : Extreme.dim)
+                    .foregroundColor(branch.isCurrent ? Tellurion.gold : Tellurion.dim)
                     .frame(width: 12)
-                Text(branch.name).font(Extreme.mono(11))
-                    .foregroundColor(branch.isCurrent ? Extreme.gold : Extreme.text)
+                Text(branch.name).font(Tellurion.mono(11))
+                    .foregroundColor(branch.isCurrent ? Tellurion.gold : Tellurion.text)
                     .lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 4)
-                Text(branch.age).font(Extreme.font(9.5)).foregroundColor(Extreme.dim).lineLimit(1)
+                Text(branch.age).font(Tellurion.font(9.5)).foregroundColor(Tellurion.dim).lineLimit(1)
             }
             .padding(.vertical, 2)
             .contentShape(Rectangle())
@@ -381,29 +381,29 @@ struct GitPanelView: View {
 
     private var stashSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ExtremeSectionLabel("Stashes") {
+            TellurionSectionLabel("Stashes") {
                 if dirty {
                     Button("Stash changes") { model.stashChanges() }
-                        .buttonStyle(.plain).font(Extreme.font(10.5)).foregroundColor(Extreme.gold)
+                        .buttonStyle(.plain).font(Tellurion.font(10.5)).foregroundColor(Tellurion.gold)
                         .help("git stash push --include-untracked")
                 }
             }
             if model.stashes.isEmpty {
-                Text(model.loaded ? "No stashes" : "…").font(Extreme.font(10.5)).foregroundColor(Extreme.dim)
+                Text(model.loaded ? "No stashes" : "…").font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim)
             }
             ForEach(model.stashes.prefix(6)) { stash in
                 HStack(spacing: 6) {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(stash.message).font(Extreme.font(10.5)).foregroundColor(Extreme.text).lineLimit(1)
-                        Text("\(stash.ref) · \(stash.age)").font(Extreme.font(9.5)).foregroundColor(Extreme.dim)
+                        Text(stash.message).font(Tellurion.font(10.5)).foregroundColor(Tellurion.text).lineLimit(1)
+                        Text("\(stash.ref) · \(stash.age)").font(Tellurion.font(9.5)).foregroundColor(Tellurion.dim)
                     }
                     Spacer(minLength: 4)
                     small("Apply") { model.apply(stash) }
                     small("Pop") { model.pop(stash) }
                     if armedDrop == stash.id {
-                        small("Drop?", color: Extreme.danger) { model.drop(stash); armedDrop = nil }
+                        small("Drop?", color: Tellurion.danger) { model.drop(stash); armedDrop = nil }
                     } else {
-                        small("Drop", color: Extreme.muted) {
+                        small("Drop", color: Tellurion.muted) {
                             armedDrop = stash.id
                             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { if armedDrop == stash.id { armedDrop = nil } }
                         }
@@ -413,10 +413,10 @@ struct GitPanelView: View {
         }
     }
 
-    private func small(_ title: String, color: Color = Extreme.gold, action: @escaping () -> Void) -> some View {
+    private func small(_ title: String, color: Color = Tellurion.gold, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
             .buttonStyle(.plain)
-            .font(Extreme.font(10, weight: .semibold))
+            .font(Tellurion.font(10, weight: .semibold))
             .foregroundColor(color)
             .disabled(model.busy)
     }
@@ -425,7 +425,7 @@ struct GitPanelView: View {
 
     private var commitSection: some View {
         VStack(alignment: .leading, spacing: 5) {
-            ExtremeSectionLabel("Recent commits")
+            TellurionSectionLabel("Recent commits")
             ForEach(model.commits) { commit in
                 Button {
                     NSPasteboard.general.clearContents()
@@ -433,10 +433,10 @@ struct GitPanelView: View {
                     model.notice = "Copied \(commit.hash)"
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(commit.hash).font(Extreme.mono(10)).foregroundColor(Extreme.bronze)
-                        Text(commit.subject).font(Extreme.font(10.5)).foregroundColor(Extreme.text).lineLimit(1)
+                        Text(commit.hash).font(Tellurion.mono(10)).foregroundColor(Tellurion.bronze)
+                        Text(commit.subject).font(Tellurion.font(10.5)).foregroundColor(Tellurion.text).lineLimit(1)
                         Spacer(minLength: 4)
-                        Text(commit.age).font(Extreme.font(9.5)).foregroundColor(Extreme.dim).lineLimit(1)
+                        Text(commit.age).font(Tellurion.font(9.5)).foregroundColor(Tellurion.dim).lineLimit(1)
                     }
                     .contentShape(Rectangle())
                 }
@@ -449,7 +449,7 @@ struct GitPanelView: View {
     private func notice(_ text: String, color: Color, symbol: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: symbol).font(.system(size: 10)).foregroundColor(color)
-            Text(text).font(Extreme.font(10.5)).foregroundColor(Extreme.text)
+            Text(text).font(Tellurion.font(10.5)).foregroundColor(Tellurion.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
         }

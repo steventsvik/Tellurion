@@ -170,7 +170,7 @@ final class VerticalTabsMenu: NSObject {
     static let shared = VerticalTabsMenu()
     private var installed = false
     /// Menu items that belong to an optional feature.
-    private var featureItems: [(NSMenuItem, ExtremeFeature)] = []
+    private var featureItems: [(NSMenuItem, TellurionFeature)] = []
 
     func installIfNeeded() {
         guard !installed, let mainMenu = NSApp.mainMenu else { return }
@@ -202,7 +202,7 @@ final class VerticalTabsMenu: NSObject {
         race.target = self
         viewMenu.insertItem(race, at: 4)
         featureItems.append((race, .races))
-        struct Extra { let title: String; let action: Selector; let key: String; let feature: ExtremeFeature? }
+        struct Extra { let title: String; let action: Selector; let key: String; let feature: TellurionFeature? }
         let extras: [Extra] = [
             Extra(title: "Localhost Manager", action: #selector(showLocalhost(_:)), key: "l", feature: .localhost),
             Extra(title: "Review Changes", action: #selector(showReview(_:)), key: "i", feature: .review),
@@ -229,7 +229,7 @@ final class VerticalTabsMenu: NSObject {
         installAppMenuItems(in: mainMenu)
         updateFeatureItems()
         NotificationCenter.default.addObserver(self, selector: #selector(featuresChanged(_:)),
-                                               name: ExtremeSettings.featuresDidChange, object: nil)
+                                               name: TellurionSettings.featuresDidChange, object: nil)
         ShortcutSheet.shared.install()
     }
 
@@ -241,13 +241,13 @@ final class VerticalTabsMenu: NSObject {
         let anchor = configIndex ?? 1
         if let configIndex { appMenu.items[configIndex].title = "Edit Config File…" }
         let items = [
-            ClosureMenuItem("Settings…", image: nil) { ExtremeSettingsWindow.show() },
+            ClosureMenuItem("Settings…", image: nil) { TellurionSettingsWindow.show() },
             ClosureMenuItem("Check Setup…", image: nil) { SetupCheckWindow.show() },
             ClosureMenuItem("Welcome to Tellurion…", image: nil) { WelcomeWindow.show() },
         ]
         items[0].image = NSImage(systemSymbolName: "gear", accessibilityDescription: nil)
         // The old shortcut keeps working.
-        let legacy = ClosureMenuItem("Settings…", image: nil) { ExtremeSettingsWindow.show() }
+        let legacy = ClosureMenuItem("Settings…", image: nil) { TellurionSettingsWindow.show() }
         legacy.keyEquivalent = ","
         legacy.keyEquivalentModifierMask = [.control, .command]
         legacy.isHidden = true
@@ -263,7 +263,7 @@ final class VerticalTabsMenu: NSObject {
 
     /// Hidden items don't answer their key equivalents, so this turns the shortcuts off too.
     private func updateFeatureItems() {
-        for (item, feature) in featureItems { item.isHidden = !ExtremeSettings.isOn(feature) }
+        for (item, feature) in featureItems { item.isHidden = !TellurionSettings.isOn(feature) }
     }
 
     @objc func showShortcuts(_ sender: Any?) {

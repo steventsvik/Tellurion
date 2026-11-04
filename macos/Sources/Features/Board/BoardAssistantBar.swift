@@ -94,12 +94,12 @@ struct BoardAssistantBar: View {
         Button(action: focusField) {
             HStack(spacing: 8) {
                 BoardAssistantOrb(busy: assistant.busy, listening: dictation.listening).frame(width: 18, height: 18)
-                Text("Ask the board").font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text)
-                Text("⌘L").font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                Text("Ask the board").font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text)
+                Text("⌘L").font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
             }
             .padding(.horizontal, 12).padding(.vertical, 7)
-            .background(Capsule().fill(Extreme.panel.opacity(0.96)))
-            .overlay(Capsule().strokeBorder(Extreme.lineStrong))
+            .background(Capsule().fill(Tellurion.panel.opacity(0.96)))
+            .overlay(Capsule().strokeBorder(Tellurion.lineStrong))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -108,7 +108,7 @@ struct BoardAssistantBar: View {
 
     private var handle: some View {
         Button { collapsed = true; expanded = false } label: {
-            Capsule().fill(Extreme.lineStrong).frame(width: 46, height: 5)
+            Capsule().fill(Tellurion.lineStrong).frame(width: 46, height: 5)
                 .frame(width: 80, height: 12).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -127,7 +127,7 @@ struct BoardAssistantBar: View {
             if dictation.listening {
                 HStack(spacing: 6) {
                     Circle().fill(Color.red).frame(width: 6, height: 6)
-                    Text("listening").font(Extreme.font(11, weight: .medium)).foregroundColor(.red)
+                    Text("listening").font(Tellurion.font(11, weight: .medium)).foregroundColor(.red)
                     BoardWaveform(levels: dictation.levels).frame(width: 56, height: 18)
                 }
                 .transition(.opacity)
@@ -142,15 +142,15 @@ struct BoardAssistantBar: View {
                     .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             iconButton(dictation.listening ? "mic.fill" : "mic", dictation.listening ? "Stop listening" : "Speak (or hold Space)",
-                       tint: dictation.listening ? Extreme.core : nil) {
+                       tint: dictation.listening ? Tellurion.core : nil) {
                 if dictation.listening { dictation.stop() } else { startDictation() }
             }
         }
         .padding(.leading, 10).padding(.trailing, 8)
         .frame(height: 50)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Extreme.panel.opacity(0.97)))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Tellurion.panel.opacity(0.97)))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(dictation.listening ? Extreme.core.opacity(0.7) : Extreme.lineStrong, lineWidth: dictation.listening ? 1.5 : 1))
+            .strokeBorder(dictation.listening ? Tellurion.core.opacity(0.7) : Tellurion.lineStrong, lineWidth: dictation.listening ? 1.5 : 1))
         .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
     }
 
@@ -164,9 +164,9 @@ struct BoardAssistantBar: View {
                             action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 12, weight: .bold))
-                .foregroundColor(filled ? Extreme.ink : (tint ?? Extreme.muted))
+                .foregroundColor(filled ? Tellurion.ink : (tint ?? Tellurion.muted))
                 .frame(width: 30, height: 30)
-                .background(Circle().fill(filled ? Extreme.gold : Extreme.raised))
+                .background(Circle().fill(filled ? Tellurion.gold : Tellurion.raised))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -217,9 +217,9 @@ struct BoardAssistantBar: View {
 
     private func chip(_ title: String, _ color: Int, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title).font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text)
+            Text(title).font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text)
                 .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(Capsule().fill(Extreme.panel.opacity(0.95)))
+                .background(Capsule().fill(Tellurion.panel.opacity(0.95)))
                 .overlay(Capsule().strokeBorder(BoardProjects.color(color).opacity(0.75), lineWidth: 1.5))
                 .contentShape(Capsule())
         }
@@ -232,21 +232,21 @@ struct BoardAssistantBar: View {
                 text = hint
                 focusField()
             } label: {
-                (Text("Try ").foregroundColor(Extreme.muted) + Text("“\(hint)”").foregroundColor(Extreme.text).bold())
-                    .font(Extreme.font(12))
+                (Text("Try ").foregroundColor(Tellurion.muted) + Text("“\(hint)”").foregroundColor(Tellurion.text).bold())
+                    .font(Tellurion.font(12))
             }
             .buttonStyle(.plain)
             .help("Use this")
             Button { hintsOff = true } label: {
-                Image(systemName: "xmark").font(.system(size: 8.5, weight: .bold)).foregroundColor(Extreme.dim)
+                Image(systemName: "xmark").font(.system(size: 8.5, weight: .bold)).foregroundColor(Tellurion.dim)
             }
             .buttonStyle(.plain)
             .help("Don't show suggestions")
             .accessibilityLabel("Don't show suggestions")
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
-        .background(Capsule().fill(Extreme.panel.opacity(0.9)))
-        .overlay(Capsule().strokeBorder(Extreme.line))
+        .background(Capsule().fill(Tellurion.panel.opacity(0.9)))
+        .overlay(Capsule().strokeBorder(Tellurion.line))
     }
 
     /// The answer to show: what it's working on, or its last reply.
@@ -260,7 +260,7 @@ struct BoardAssistantBar: View {
             messageBody(message)
             Spacer(minLength: 0)
             Button { showReply = false } label: {
-                Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundColor(Extreme.dim)
+                Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundColor(Tellurion.dim)
                     .frame(width: 16, height: 16)
             }
             .buttonStyle(.plain)
@@ -269,21 +269,21 @@ struct BoardAssistantBar: View {
         }
         .padding(12)
         .frame(maxWidth: 560, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Extreme.panel.opacity(0.97)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Extreme.line))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Tellurion.panel.opacity(0.97)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tellurion.line))
     }
 
     @ViewBuilder
     private func messageBody(_ message: BoardAssistant.Message) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             if !message.text.isEmpty {
-                Text(message.text).font(Extreme.font(12.5, weight: message.role == .user ? .semibold : .regular))
-                    .foregroundColor(message.role == .error ? Extreme.danger : Extreme.text)
+                Text(message.text).font(Tellurion.font(12.5, weight: message.role == .user ? .semibold : .regular))
+                    .foregroundColor(message.role == .error ? Tellurion.danger : Tellurion.text)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(Array(message.done.enumerated()), id: \.offset) { _, line in
-                Label(line, systemImage: "checkmark").font(Extreme.font(11.5)).foregroundColor(Extreme.muted)
+                Label(line, systemImage: "checkmark").font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted)
             }
         }
     }
@@ -291,7 +291,7 @@ struct BoardAssistantBar: View {
     private var conversation: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Text("Board agent").font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text)
+                Text("Board agent").font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text)
                 if let engines = assistant.engines, engines.count > 1 {
                     Picker("", selection: Binding(get: { assistant.engine ?? .claude }, set: { assistant.engine = $0 })) {
                         ForEach(engines) { Text($0.title).tag($0) }
@@ -299,34 +299,34 @@ struct BoardAssistantBar: View {
                     .labelsHidden().fixedSize()
                     .help("Which agent answers")
                 } else if let engine = assistant.engine {
-                    Text(engine.title).font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                    Text(engine.title).font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
                 }
                 Spacer()
                 Button("New Conversation") { assistant.reset() }
-                    .buttonStyle(ExtremeButtonStyle())
+                    .buttonStyle(TellurionButtonStyle())
                     .disabled(assistant.messages.isEmpty && !assistant.busy)
             }
             .padding(.horizontal, 12).padding(.vertical, 9)
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
                         if assistant.messages.isEmpty {
                             Text("Ask for agents, cards, sketches or a whole workflow, and the board sets it up. Start with @ and a tile's name to talk to its agent instead.")
-                                .font(Extreme.font(12)).foregroundColor(Extreme.muted)
+                                .font(Tellurion.font(12)).foregroundColor(Tellurion.muted)
                         }
                         ForEach(assistant.messages) { message in
                             HStack(alignment: .top, spacing: 8) {
                                 Image(systemName: message.role == .user ? "person.fill" : "sparkle")
                                     .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(message.role == .user ? Extreme.muted : Extreme.core)
+                                    .foregroundColor(message.role == .user ? Tellurion.muted : Tellurion.core)
                                     .frame(width: 14, height: 16)
                                 messageBody(message)
                             }
                             .id(message.id)
                         }
                         if assistant.busy {
-                            Text("Working on it…").font(Extreme.font(12)).foregroundColor(Extreme.dim).id("busy")
+                            Text("Working on it…").font(Tellurion.font(12)).foregroundColor(Tellurion.dim).id("busy")
                         }
                     }
                     .padding(12)
@@ -341,30 +341,30 @@ struct BoardAssistantBar: View {
         }
         .frame(maxWidth: 620)
         .fixedSize(horizontal: false, vertical: true)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Extreme.panel.opacity(0.98)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Extreme.line))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Tellurion.panel.opacity(0.98)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tellurion.line))
     }
 
     private func confirmation(_ pending: BoardAssistant.Pending) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(pending.lines.count == 1 ? "Is this OK?" : "Are these OK?")
-                .font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text)
+                .font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text)
             ForEach(Array(pending.lines.enumerated()), id: \.offset) { _, line in
-                Label(line, systemImage: "arrow.turn.down.right").font(Extreme.font(12)).foregroundColor(Extreme.muted)
+                Label(line, systemImage: "arrow.turn.down.right").font(Tellurion.font(12)).foregroundColor(Tellurion.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
                 Spacer()
                 Button("Cancel") { assistant.cancel() }
-                    .buttonStyle(ExtremeButtonStyle())
+                    .buttonStyle(TellurionButtonStyle())
                 Button("Do It") { assistant.confirm() }
-                    .buttonStyle(ExtremeButtonStyle(prominent: true))
+                    .buttonStyle(TellurionButtonStyle(prominent: true))
             }
         }
         .padding(12)
         .frame(maxWidth: 560, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Extreme.panel.opacity(0.98)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Extreme.warn.opacity(0.6)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Tellurion.panel.opacity(0.98)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tellurion.warn.opacity(0.6)))
     }
 
     // MARK: Doing
@@ -442,7 +442,7 @@ final class BoardAssistantOrbView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        let core = Extreme.chrome.core.nsColor, gold = Extreme.chrome.gold.nsColor
+        let core = Tellurion.chrome.core.nsColor, gold = Tellurion.chrome.gold.nsColor
         disc.type = .conic
         disc.startPoint = CGPoint(x: 0.5, y: 0.5)
         disc.endPoint = CGPoint(x: 0.5, y: 0)
@@ -473,7 +473,7 @@ final class BoardAssistantOrbView: NSView {
         guard busy != self.busy || listening != self.listening else { return }
         self.busy = busy
         self.listening = listening
-        let still = ExtremeSettings.motion != .full
+        let still = TellurionSettings.motion != .full
         if busy && !still {
             let spin = CABasicAnimation(keyPath: "transform.rotation.z")
             spin.fromValue = 0
@@ -525,7 +525,7 @@ struct BoardAssistantField: NSViewRepresentable {
         field.drawsBackground = false
         field.focusRingType = .none
         field.font = .systemFont(ofSize: 13.5)
-        field.textColor = Extreme.chrome.text.nsColor
+        field.textColor = Tellurion.chrome.text.nsColor
         field.lineBreakMode = .byTruncatingHead
         field.cell?.isScrollable = true
         field.cell?.wraps = false
@@ -547,7 +547,7 @@ struct BoardAssistantField: NSViewRepresentable {
         (field as? BoardAssistantTextField)?.onImages = onImages
         if field.stringValue != text { field.stringValue = text }
         field.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
-            .foregroundColor: Extreme.chrome.dim.nsColor, .font: NSFont.systemFont(ofSize: mentions == nil ? 13.5 : 12.5),
+            .foregroundColor: Tellurion.chrome.dim.nsColor, .font: NSFont.systemFont(ofSize: mentions == nil ? 13.5 : 12.5),
         ])
     }
 

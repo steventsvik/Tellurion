@@ -4,9 +4,9 @@ import Combine
 import SwiftUI
 
 private enum BlockColors {
-    static let success = Extreme.live
-    static let failure = Extreme.danger
-    static let neutral = Extreme.muted
+    static let success = Tellurion.live
+    static let failure = Tellurion.danger
+    static let neutral = Tellurion.muted
 
     static func color(_ block: CommandBlock) -> Color {
         guard let code = block.exitCode else { return neutral }
@@ -49,11 +49,11 @@ struct CommandFailureChip: View {
             PixelDot(color: BlockColors.failure, blinking: true, size: 8, interval: 0.4)
             VStack(alignment: .leading, spacing: 1) {
                 Text(block.command)
-                    .font(Extreme.mono(12))
+                    .font(Tellurion.mono(12))
                     .lineLimit(1).truncationMode(.middle)
                     .frame(maxWidth: compact ? 150 : 260, alignment: .leading)
                 Text("failed · exit \(block.exitCode ?? 1) · \(block.durationText)")
-                    .font(Extreme.font(10.5)).foregroundColor(BlockColors.failure)
+                    .font(Tellurion.font(10.5)).foregroundColor(BlockColors.failure)
             }
             // An agent already working on this project gets it first: it has the context.
             if let agent = AgentHandoff.nearestAgent(to: surfaceView) {
@@ -64,7 +64,7 @@ struct CommandFailureChip: View {
                         VerticalTabAgentLogo(kind: agent.info.kind, tint: .white).frame(width: 11, height: 11)
                         Text(compact ? "Send" : "Send to \(agent.info.kind.displayName)")
                     }
-                    .font(Extreme.font(11.5, weight: .semibold))
+                    .font(Tellurion.font(11.5, weight: .semibold))
                     .foregroundColor(.white)
                     .padding(.horizontal, compact ? 8 : 10).padding(.vertical, 5)
                     .background(Rectangle().fill(BlockColors.agentButton(agent.info.kind)))
@@ -83,7 +83,7 @@ struct CommandFailureChip: View {
                         VerticalTabAgentLogo(kind: kind, tint: .white).frame(width: 11, height: 11)
                         Text(compact ? "Fix" : kind == .claude ? "Fix with Claude" : "Fix with Codex")
                     }
-                    .font(Extreme.font(11.5))
+                    .font(Tellurion.font(11.5))
                     .foregroundColor(.white)
                     .padding(.horizontal, compact ? 8 : 10).padding(.vertical, 5)
                     .background(Rectangle().fill(BlockColors.agentButton(kind)))
@@ -97,23 +97,23 @@ struct CommandFailureChip: View {
                     CommandBlocksPanel.shared.show(controller)
                 }
             } label: {
-                Image(systemName: "list.bullet.rectangle").font(Extreme.font(12))
+                Image(systemName: "list.bullet.rectangle").font(Tellurion.font(12))
             }
             .buttonStyle(.plain)
-            .foregroundColor(Extreme.muted)
+            .foregroundColor(Tellurion.muted)
             .help("Show command history (⌃⌘B)")
             .accessibilityLabel("Show command history")
             Button { store.dismissFailure(on: surfaceView) } label: {
-                Image(systemName: "xmark").font(Extreme.font(10))
+                Image(systemName: "xmark").font(Tellurion.font(10))
             }
             .buttonStyle(.plain)
-            .foregroundColor(Extreme.muted)
+            .foregroundColor(Tellurion.muted)
             .help("Dismiss")
             .accessibilityLabel("Dismiss")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(Extreme.ink)
+        .background(Tellurion.ink)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(BlockColors.failure.opacity(0.8), lineWidth: 1))
         .shadow(color: .black.opacity(0.6), radius: 14, y: 6)
         .fixedSize()
@@ -152,9 +152,9 @@ struct CommandBlocksColumn: View {
             }
         }
         .frame(width: 400)
-        .background(Extreme.ink)
+        .background(Tellurion.ink)
         .overlay(alignment: layout.isLeftOfTerminal(.history) ? .trailing : .leading) {
-            Rectangle().fill(Extreme.text.opacity(0.1)).frame(width: 1)
+            Rectangle().fill(Tellurion.text.opacity(0.1)).frame(width: 1)
         }
         .onReceive(timer) { _ in
             // Follow the focused pane as it changes.
@@ -165,9 +165,9 @@ struct CommandBlocksColumn: View {
     private func header(count: Int, failures: Int, surface: Ghostty.SurfaceView?) -> some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Command History").font(Extreme.font(13, weight: .semibold)).foregroundColor(Extreme.gold)
+                Text("Command History").font(Tellurion.font(13, weight: .semibold)).foregroundColor(Tellurion.gold)
                 Text("\(count) command\(count == 1 ? "" : "s")\(failures > 0 ? " · \(failures) failed" : "") in this pane")
-                    .font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+                    .font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
             }
             Spacer()
             Picker("", selection: $failedOnly) {
@@ -192,10 +192,10 @@ struct CommandBlocksColumn: View {
 
     private var empty: some View {
         VStack(spacing: 8) {
-            Image(systemName: "terminal").font(Extreme.font(30)).foregroundColor(Extreme.muted)
-            Text(failedOnly ? "No failed commands" : "No commands yet").font(Extreme.font(13))
+            Image(systemName: "terminal").font(Tellurion.font(30)).foregroundColor(Tellurion.muted)
+            Text(failedOnly ? "No failed commands" : "No commands yet").font(Tellurion.font(13))
             Text("Commands you run in this pane show up here with their output, exit code and time. Failed ones can be sent to an agent to fix.")
-                .font(Extreme.font(11.5)).foregroundColor(Extreme.muted).multilineTextAlignment(.center)
+                .font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted).multilineTextAlignment(.center)
         }
         .padding(30)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -213,9 +213,9 @@ private struct CommandBlockCard: View {
         let lines = block.output.split(separator: "\n", omittingEmptySubsequences: false)
         VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .top, spacing: 8) {
-                Text("$").font(Extreme.font(12)).foregroundColor(color)
+                Text("$").font(Tellurion.font(12)).foregroundColor(color)
                 Text(block.command)
-                    .font(Extreme.mono(12))
+                    .font(Tellurion.mono(12))
                     .lineLimit(3)
                     .textSelection(.enabled)
                 Spacer(minLength: 4)
@@ -229,12 +229,12 @@ private struct CommandBlockCard: View {
                 }
                 Spacer()
             }
-            .font(Extreme.font(10.5))
-            .foregroundColor(Extreme.muted)
+            .font(Tellurion.font(10.5))
+            .foregroundColor(Tellurion.muted)
             if !block.output.isEmpty && !block.isInteractive {
                 let preview = Text((expanded ? lines[...] : lines.suffix(6)).joined(separator: "\n"))
-                    .font(Extreme.mono(10.5))
-                    .foregroundColor(Extreme.text.opacity(0.8))
+                    .font(Tellurion.mono(10.5))
+                    .foregroundColor(Tellurion.text.opacity(0.8))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -250,7 +250,7 @@ private struct CommandBlockCard: View {
                 if lines.count > 6 {
                     Button(expanded ? "Show less" : "Show all \(lines.count) lines") { expanded.toggle() }
                         .buttonStyle(.plain)
-                        .font(Extreme.font(10.5))
+                        .font(Tellurion.font(10.5))
                         .foregroundColor(.accentColor)
                 }
             }
@@ -259,11 +259,11 @@ private struct CommandBlockCard: View {
             }
         }
         .padding(10)
-        .background(Rectangle().fill(Extreme.text.opacity(hovering ? 0.07 : 0.045)))
+        .background(Rectangle().fill(Tellurion.text.opacity(hovering ? 0.07 : 0.045)))
         .overlay(alignment: .leading) {
             Rectangle().fill(color).frame(width: 3).padding(.vertical, 6)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(block.failed ? color.opacity(0.45) : Extreme.text.opacity(0.07)))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(block.failed ? color.opacity(0.45) : Tellurion.text.opacity(0.07)))
         .onHover { hovering = $0 }
     }
 
@@ -275,7 +275,7 @@ private struct CommandBlockCard: View {
             label = "done"
         }
         return Text(label)
-            .font(Extreme.font(10))
+            .font(Tellurion.font(10))
             .foregroundColor(color)
             .padding(.horizontal, 6).padding(.vertical, 1.5)
             .background(Rectangle().fill(color.opacity(0.16)))
@@ -298,7 +298,7 @@ private struct CommandBlockCard: View {
                         VerticalTabAgentLogo(kind: kind, tint: .white).frame(width: 10, height: 10)
                         Text(block.failed ? "Fix" : "Explain")
                     }
-                    .font(Extreme.font(10.5))
+                    .font(Tellurion.font(10.5))
                     .foregroundColor(.white)
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(Rectangle().fill(BlockColors.agentButton(kind)))
@@ -312,9 +312,9 @@ private struct CommandBlockCard: View {
     private func small(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: symbol)
-                .font(Extreme.font(10.5))
+                .font(Tellurion.font(10.5))
                 .padding(.horizontal, 7).padding(.vertical, 3)
-                .background(Rectangle().fill(Extreme.text.opacity(0.08)))
+                .background(Rectangle().fill(Tellurion.text.opacity(0.08)))
         }
         .buttonStyle(.plain)
     }

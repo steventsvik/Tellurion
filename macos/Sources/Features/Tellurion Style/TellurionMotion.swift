@@ -9,20 +9,20 @@ import SwiftUI
 // 1. Endless motion (pulsing dots, spinners, activity bars) runs as Core Animation on
 //    layers, which the system compositor animates without waking the app.
 // 2. Motion that has to be SwiftUI (pixel-art sprites, the living sigil, the wordmark
-//    glint) only runs while its window is on screen: `extremeMotion` turns false for
+//    glint) only runs while its window is on screen: `tellurionMotion` turns false for
 //    background tabs, hidden and minimized windows, so they cost nothing.
 
 // MARK: - Is this window on screen?
 
-private struct ExtremeMotionKey: EnvironmentKey {
+private struct TellurionMotionKey: EnvironmentKey {
     static let defaultValue = true
 }
 
 extension EnvironmentValues {
     /// False while the view's window isn't visible (a background tab, minimized, covered).
-    var extremeMotion: Bool {
-        get { self[ExtremeMotionKey.self] }
-        set { self[ExtremeMotionKey.self] = newValue }
+    var tellurionMotion: Bool {
+        get { self[TellurionMotionKey.self] }
+        set { self[TellurionMotionKey.self] = newValue }
     }
 }
 
@@ -52,7 +52,7 @@ final class WindowMotion: ObservableObject {
     }
 }
 
-/// Test hook: `GHOSTTY_EXTREME_TEST_NOANIM=comet,spinner,bar,dot,film,bracket` turns those off, to
+/// Test hook: `TELLURION_TEST_NOANIM=comet,spinner,bar,dot,film,bracket` turns those off, to
 /// measure what each costs the window server. Empty in release builds (see `TestHooks`).
 enum MotionTest {
     static let off = TestHooks.motionOff
@@ -368,7 +368,7 @@ struct ActivityBarLayer: NSViewRepresentable {
 /// moments, so six agent sprites, the sigil, the bracket and the frame light used to cost
 /// ~80 layouts a second. On a shared epoch and a common beat, their ticks coincide and
 /// SwiftUI handles them in one pass: ~12 a second however many agents are working.
-enum ExtremeClock {
+enum TellurionClock {
     /// Seconds per beat (12.5 a second). Slower animations use whole multiples of it.
     static let beat: TimeInterval = 0.08
     static let epoch = Date(timeIntervalSinceReferenceDate: 0)

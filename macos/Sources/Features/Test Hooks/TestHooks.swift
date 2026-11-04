@@ -1,18 +1,18 @@
 #if os(macOS)
 import Foundation
 
-/// The switches that drive test copies and recordings: the `GHOSTTY_EXTREME_TEST_*` and
-/// `GHOSTTY_EXTREME_DEMO*` environment variables. Every reader goes through here, and all of
+/// The switches that drive test copies and recordings: the `TELLURION_TEST_*` and
+/// `TELLURION_DEMO*` environment variables. Every reader goes through here, and all of
 /// it except `home` exists only in builds made with `TELLURION_TEST_HOOKS` (Debug, and
 /// ReleaseLocal as the Xcode project builds it). `release.sh` builds without that flag and
 /// checks the app for leftovers, so a shipped app has none of these.
 enum TestHooks {
-    /// `GHOSTTY_EXTREME_TEST_HOME=<folder>`: where a test copy keeps `.ghostty-extreme`
+    /// `TELLURION_TEST_HOME=<folder>`: where a test copy keeps `.ghostty-extreme`
     /// instead of the home folder, so it never touches the user's boards, hooks or designs.
     /// Honored in every build: release.sh's launch test relies on it, and a test copy made
     /// from a release build must stay apart too.
     static let home: String? = {
-        guard let home = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_HOME"], !home.isEmpty else { return nil }
+        guard let home = ProcessInfo.processInfo.environment["TELLURION_TEST_HOME"], !home.isEmpty else { return nil }
         return home
     }()
 
@@ -23,7 +23,7 @@ enum TestHooks {
     /// A launch driven by a test or a demo. Such launches stay quiet: no welcome window.
     static var isTestLaunch: Bool {
         home != nil || ProcessInfo.processInfo.environment.keys.contains {
-            $0.hasPrefix("GHOSTTY_EXTREME_TEST_") || $0 == "GHOSTTY_EXTREME_DEMO"
+            $0.hasPrefix("TELLURION_TEST_") || $0 == "TELLURION_DEMO"
         }
     }
 
@@ -36,21 +36,21 @@ enum TestHooks {
     /// Whether the variable is set to `1`.
     static func flag(_ name: String) -> Bool { value(name) == "1" }
 
-    /// `GHOSTTY_EXTREME_TEST_LOG=<file>`: where a test run collects what happened.
-    static var log: String? { value("GHOSTTY_EXTREME_TEST_LOG") }
-    /// `GHOSTTY_EXTREME_TEST_FEED=<url>`: points a test copy's updater at a local feed.
-    static var updateFeed: String? { value("GHOSTTY_EXTREME_TEST_FEED") }
-    /// `GHOSTTY_EXTREME_TEST_VENICE=<url>`: points a test copy's Venice models at a local server.
-    static var veniceServer: String? { value("GHOSTTY_EXTREME_TEST_VENICE") }
-    /// `GHOSTTY_EXTREME_TEST_WELCOME=1`: shows the welcome window even if it was finished before.
-    static var welcome: Bool { flag("GHOSTTY_EXTREME_TEST_WELCOME") }
-    /// `GHOSTTY_EXTREME_TEST_TOOL=<title>`: chooses that tool once the Tools panel is open.
-    static var tool: String? { value("GHOSTTY_EXTREME_TEST_TOOL") }
-    /// `GHOSTTY_EXTREME_TEST_BACKGROUND_SAMPLE=1`: the Background window shows sample items.
-    static var showsBackgroundSample: Bool { flag("GHOSTTY_EXTREME_TEST_BACKGROUND_SAMPLE") }
-    /// `GHOSTTY_EXTREME_TEST_NOANIM=comet,spinner,bar,dot,film,bracket`: turns those motions
+    /// `TELLURION_TEST_LOG=<file>`: where a test run collects what happened.
+    static var log: String? { value("TELLURION_TEST_LOG") }
+    /// `TELLURION_TEST_FEED=<url>`: points a test copy's updater at a local feed.
+    static var updateFeed: String? { value("TELLURION_TEST_FEED") }
+    /// `TELLURION_TEST_VENICE=<url>`: points a test copy's Venice models at a local server.
+    static var veniceServer: String? { value("TELLURION_TEST_VENICE") }
+    /// `TELLURION_TEST_WELCOME=1`: shows the welcome window even if it was finished before.
+    static var welcome: Bool { flag("TELLURION_TEST_WELCOME") }
+    /// `TELLURION_TEST_TOOL=<title>`: chooses that tool once the Tools panel is open.
+    static var tool: String? { value("TELLURION_TEST_TOOL") }
+    /// `TELLURION_TEST_BACKGROUND_SAMPLE=1`: the Background window shows sample items.
+    static var showsBackgroundSample: Bool { flag("TELLURION_TEST_BACKGROUND_SAMPLE") }
+    /// `TELLURION_TEST_NOANIM=comet,spinner,bar,dot,film,bracket`: turns those motions
     /// off, to measure what each costs the window server.
-    static let motionOff = Set((value("GHOSTTY_EXTREME_TEST_NOANIM") ?? "").split(separator: ",").map(String.init))
+    static let motionOff = Set((value("TELLURION_TEST_NOANIM") ?? "").split(separator: ",").map(String.init))
 
     /// Appends a line to the test log, if there is one. The line is only built when it is.
     static func note(_ line: @autoclosure () -> String) {

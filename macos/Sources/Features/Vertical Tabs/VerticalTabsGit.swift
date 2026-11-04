@@ -144,7 +144,7 @@ final class VerticalTabsGit: ObservableObject {
                 }
                 let (added, removed) = Self.diffStats(repo: root, gitPath: gitPath)
                 // Ahead/behind is for the Git panel's badge; skipped when that's turned off.
-                let counts = ExtremeSettings.isOn(.git) ? Self.aheadBehind(repo: root, gitPath: gitPath) : nil
+                let counts = TellurionSettings.isOn(.git) ? Self.aheadBehind(repo: root, gitPath: gitPath) : nil
                 result = VerticalTabsGitInfo(branch: branch, added: added, removed: removed,
                                              ahead: counts?.ahead, behind: counts?.behind)
             }

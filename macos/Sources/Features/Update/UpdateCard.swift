@@ -5,8 +5,8 @@ import SwiftUI
 
 /// Keeps Tellurion current: checks for a new release soon after launch and every hour,
 /// and installs it when asked, now or once the agents have finished their turns.
-final class ExtremeUpdates: ObservableObject {
-    static let shared = ExtremeUpdates()
+final class TellurionUpdates: ObservableObject {
+    static let shared = TellurionUpdates()
 
     /// Waiting for working agents to finish before installing.
     @Published private(set) var waitingForAgents = false
@@ -71,7 +71,7 @@ final class ExtremeUpdates: ObservableObject {
 /// bar while it downloads and installs.
 struct UpdateCard: View {
     @ObservedObject var model: UpdateViewModel
-    @ObservedObject private var updates = ExtremeUpdates.shared
+    @ObservedObject private var updates = TellurionUpdates.shared
 
     var body: some View {
         if let content {
@@ -80,8 +80,8 @@ struct UpdateCard: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Extreme.gold.opacity(0.08)))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Extreme.gold.opacity(0.45), lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 10).fill(Tellurion.gold.opacity(0.08)))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Tellurion.gold.opacity(0.45), lineWidth: 1))
             .padding(.horizontal, 10)
             .padding(.top, 10)
             .transition(.opacity.combined(with: .move(edge: .top)))
@@ -107,41 +107,41 @@ struct UpdateCard: View {
     private func available(version: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: "arrow.down.circle.fill").foregroundColor(Extreme.gold).font(.system(size: 15))
+                Image(systemName: "arrow.down.circle.fill").foregroundColor(Tellurion.gold).font(.system(size: 15))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Update available").font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text)
-                    Text("Tellurion \(version)").font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+                    Text("Update available").font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text)
+                    Text("Tellurion \(version)").font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
                 }
                 Spacer(minLength: 0)
                 Button("What's new") { UpdateWindow.show() }
                 .buttonStyle(.plain)
-                .font(Extreme.font(10.5))
-                .foregroundColor(Extreme.gold)
+                .font(Tellurion.font(10.5))
+                .foregroundColor(Tellurion.gold)
             }
             if updates.waitingForAgents {
                 Text("Updating when \(updates.busyAgents == 1 ? "the agent finishes" : "\(updates.busyAgents) agents finish") their turn…")
-                    .font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+                    .font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
                 HStack(spacing: 6) {
-                    Button("Update now") { updates.installNow() }.buttonStyle(ExtremeButtonStyle())
-                    Button("Cancel") { updates.cancelWaiting() }.buttonStyle(ExtremeButtonStyle())
+                    Button("Update now") { updates.installNow() }.buttonStyle(TellurionButtonStyle())
+                    Button("Cancel") { updates.cancelWaiting() }.buttonStyle(TellurionButtonStyle())
                 }
             } else if updates.busyAgents > 0 {
                 Text("\(updates.busyAgents == 1 ? "An agent is" : "\(updates.busyAgents) agents are") mid-turn. Everything reopens after the update, but a turn in progress stops.")
-                    .font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+                    .font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
                     Button("Update when done") { updates.installWhenAgentsFinish() }
-                        .buttonStyle(ExtremeButtonStyle(prominent: true))
-                    Button("Now") { updates.installNow() }.buttonStyle(ExtremeButtonStyle())
+                        .buttonStyle(TellurionButtonStyle(prominent: true))
+                    Button("Now") { updates.installNow() }.buttonStyle(TellurionButtonStyle())
                 }
             } else {
                 Text("Takes a few seconds. Your tabs, agents and servers reopen where they were.")
-                    .font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+                    .font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 Button { updates.installNow() } label: {
                     Text("Update and restart").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(ExtremeButtonStyle(prominent: true))
+                .buttonStyle(TellurionButtonStyle(prominent: true))
             }
         }
     }
@@ -149,22 +149,22 @@ struct UpdateCard: View {
     private func progress(title: String, fraction: Double?, cancel: (() -> Void)?) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack {
-                Text(title).font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text)
+                Text(title).font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text)
                 Spacer()
                 if let fraction {
-                    Text("\(Int((fraction * 100).rounded()))%").font(Extreme.font(11)).foregroundColor(Extreme.gold)
+                    Text("\(Int((fraction * 100).rounded()))%").font(Tellurion.font(11)).foregroundColor(Tellurion.gold)
                         .monospacedDigit()
                 }
             }
             UpdateProgressBar(fraction: fraction)
             HStack {
                 Text("Your tabs, agents and servers reopen after the restart.")
-                    .font(Extreme.font(10)).foregroundColor(Extreme.muted)
+                    .font(Tellurion.font(10)).foregroundColor(Tellurion.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
                 if let cancel {
                     Button("Cancel", action: cancel).buttonStyle(.plain)
-                        .font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+                        .font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
                 }
             }
         }
@@ -180,13 +180,13 @@ struct UpdateProgressBar: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
-                Capsule().fill(Extreme.text.opacity(0.1))
+                Capsule().fill(Tellurion.text.opacity(0.1))
                 if let fraction {
-                    Capsule().fill(Extreme.gold)
+                    Capsule().fill(Tellurion.gold)
                         .frame(width: max(6, geometry.size.width * min(max(fraction, 0), 1)))
                         .animation(.easeOut(duration: 0.25), value: fraction)
                 } else {
-                    Capsule().fill(Extreme.gold)
+                    Capsule().fill(Tellurion.gold)
                         .frame(width: geometry.size.width * 0.3)
                         .offset(x: sweep ? geometry.size.width * 0.7 : 0)
                         // Only shown for the few seconds before the restart.

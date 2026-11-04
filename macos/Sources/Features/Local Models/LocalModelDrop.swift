@@ -45,11 +45,11 @@ struct LocalModelDropPreview: View {
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
                 ZStack {
-                    Rectangle().fill(Extreme.gold.opacity(0.16))
-                    Rectangle().strokeBorder(Extreme.gold.opacity(0.7), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                    Rectangle().fill(Tellurion.gold.opacity(0.16))
+                    Rectangle().strokeBorder(Tellurion.gold.opacity(0.7), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
                     Label("Open below this chat", systemImage: "rectangle.split.1x2")
-                        .font(Extreme.font(12, weight: .semibold))
-                        .foregroundColor(Extreme.gold)
+                        .font(Tellurion.font(12, weight: .semibold))
+                        .foregroundColor(Tellurion.gold)
                 }
                 .frame(height: geometry.size.height / 2)
             }

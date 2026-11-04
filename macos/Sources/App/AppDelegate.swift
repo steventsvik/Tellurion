@@ -238,7 +238,7 @@ class AppDelegate: NSObject,
 
         // Start our update checker.
         updateController.startUpdater()
-        ExtremeUpdates.shared.start(updateController)
+        TellurionUpdates.shared.start(updateController)
 
         // After an update's restart, reopen the agents and servers that were running.
         // Before anything is resumed, so agents on Venice find it.
@@ -394,7 +394,7 @@ class AppDelegate: NSObject,
             // is possible to have other windows in a few scenarios:
             //   - if we're opening a URL since `application(_:openFile:)` is called before this.
             //   - if we're restoring from persisted state
-            if ExtremeEdition.current == .board {
+            if TellurionEdition.current == .board {
                 // Boards reopen themselves; restored classic windows stay as they were.
                 if BoardController.all.isEmpty && derivedConfig.initialWindow {
                     undoManager.disableUndoRegistration()
@@ -511,7 +511,7 @@ class AppDelegate: NSObject,
         }
 
         // No visible windows, open a new one.
-        if ExtremeEdition.current == .board {
+        if TellurionEdition.current == .board {
             Board.openAtLaunch(ghostty)
         } else {
             _ = TerminalController.newWindow(ghostty)
@@ -831,7 +831,7 @@ class AppDelegate: NSObject,
     @objc private func ghosttyNewWindow(_ notification: Notification) {
         let configAny = notification.userInfo?[Ghostty.Notification.NewSurfaceConfigKey]
         let config = configAny as? Ghostty.SurfaceConfiguration
-        if ExtremeEdition.current == .board {
+        if TellurionEdition.current == .board {
             Board.newBoard(ghostty, folder: config?.workingDirectory)
             return
         }
@@ -1092,7 +1092,7 @@ class AppDelegate: NSObject,
     }
 
     @IBAction func newWindow(_ sender: Any?) {
-        if ExtremeEdition.current == .board {
+        if TellurionEdition.current == .board {
             Board.newBoard(ghostty)
             return
         }

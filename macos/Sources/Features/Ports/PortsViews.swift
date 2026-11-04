@@ -7,7 +7,7 @@ import SwiftUI
 struct PortsSidebarSection: View {
     let owner: BaseTerminalController
     @ObservedObject private var monitor = PortsMonitor.shared
-    @ObservedObject private var settings = ExtremeSettings.shared
+    @ObservedObject private var settings = TellurionSettings.shared
     @AppStorage("PortsSectionCollapsed") private var collapsed = false
     @State private var showOthers = false
 
@@ -17,7 +17,7 @@ struct PortsSidebarSection: View {
         let others = monitor.entries.filter { $0.kind != .dev }
         VStack(alignment: .leading, spacing: 4) {
             if !dev.isEmpty || monitor.conflict != nil || showOthers {
-                Rectangle().fill(Extreme.line).frame(height: 1).padding(.bottom, 4)
+                Rectangle().fill(Tellurion.line).frame(height: 1).padding(.bottom, 4)
                 header(count: dev.count, others: others.count)
                 if let conflict = monitor.conflict {
                     PortConflictBanner(conflict: conflict, holder: monitor.entries.first { $0.port == conflict.port })
@@ -46,19 +46,19 @@ struct PortsSidebarSection: View {
             Button { collapsed.toggle() } label: {
                 HStack(spacing: 6) {
                     Image(systemName: collapsed ? "chevron.right" : "chevron.down")
-                        .font(.system(size: 8, weight: .bold)).foregroundColor(Extreme.dim).frame(width: 8)
-                    Text("PORTS").font(Extreme.font(10.5, weight: .semibold)).kerning(1.1).foregroundColor(Extreme.muted)
-                    Text("\(count)").font(Extreme.font(10)).foregroundColor(Extreme.dim)
+                        .font(.system(size: 8, weight: .bold)).foregroundColor(Tellurion.dim).frame(width: 8)
+                    Text("PORTS").font(Tellurion.font(10.5, weight: .semibold)).kerning(1.1).foregroundColor(Tellurion.muted)
+                    Text("\(count)").font(Tellurion.font(10)).foregroundColor(Tellurion.dim)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            Rectangle().fill(Extreme.line.opacity(0.7)).frame(height: 1)
+            Rectangle().fill(Tellurion.line.opacity(0.7)).frame(height: 1)
             if others > 0 && !collapsed {
                 Button(showOthers ? "Hide \(others) other" : "+\(others) other") { showOthers.toggle() }
                     .buttonStyle(.plain)
-                    .font(Extreme.font(10))
-                    .foregroundColor(Extreme.dim)
+                    .font(Tellurion.font(10))
+                    .foregroundColor(Tellurion.dim)
                     .help("Apps, background services and container ports")
             }
         }
@@ -70,7 +70,7 @@ private struct PortRow: View {
     let entry: PortEntry
     let owner: BaseTerminalController
     @ObservedObject private var monitor = PortsMonitor.shared
-    @ObservedObject private var settings = ExtremeSettings.shared
+    @ObservedObject private var settings = TellurionSettings.shared
     @State private var hovering = false
     @State private var armed = false
 
@@ -80,19 +80,19 @@ private struct PortRow: View {
         HStack(spacing: 7) {
             Image(systemName: entry.kind == .container ? "shippingbox.fill" : entry.kind == .other ? "app.dashed" : framework.symbol)
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(entry.kind == .dev ? framework.color : Extreme.dim)
+                .foregroundColor(entry.kind == .dev ? framework.color : Tellurion.dim)
                 .frame(width: 14)
             Text(":\(String(entry.port))")
-                .font(Extreme.mono(11.5))
-                .foregroundColor(entry.kind == .dev ? Extreme.text : Extreme.muted)
+                .font(Tellurion.mono(11.5))
+                .foregroundColor(entry.kind == .dev ? Tellurion.text : Tellurion.muted)
             VStack(alignment: .leading, spacing: 0) {
                 Text(entry.title)
-                    .font(Extreme.font(11, weight: .medium))
-                    .foregroundColor(entry.project.map { $0.color.opacity(0.95) } ?? Extreme.muted)
+                    .font(Tellurion.font(11, weight: .medium))
+                    .foregroundColor(entry.project.map { $0.color.opacity(0.95) } ?? Tellurion.muted)
                     .lineLimit(1)
                 Text(stopping ? "Stopping…" : subtitle)
-                    .font(Extreme.font(9.5))
-                    .foregroundColor(stopping ? Extreme.warn : Extreme.dim)
+                    .font(Tellurion.font(9.5))
+                    .foregroundColor(stopping ? Tellurion.warn : Tellurion.dim)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -100,12 +100,12 @@ private struct PortRow: View {
             if hovering || armed {
                 actions
             } else if entry.memory > 0 {
-                Text(Housekeeping.bytes(entry.memory)).font(Extreme.font(9.5)).foregroundColor(Extreme.dim)
+                Text(Housekeeping.bytes(entry.memory)).font(Tellurion.font(9.5)).foregroundColor(Tellurion.dim)
             }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering ? Extreme.raised : .clear))
+        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering ? Tellurion.raised : .clear))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture(perform: focusOwner)
@@ -157,9 +157,9 @@ private struct PortRow: View {
             if entry.kind != .container {
                 if armed {
                     Button { armed = false; monitor.stop(entry) } label: {
-                        Text("Stop?").font(Extreme.font(10, weight: .bold)).foregroundColor(Extreme.ink)
+                        Text("Stop?").font(Tellurion.font(10, weight: .bold)).foregroundColor(Tellurion.ink)
                             .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Capsule().fill(Extreme.danger))
+                            .background(Capsule().fill(Tellurion.danger))
                     }
                     .buttonStyle(.plain)
                     .help("Click again to stop \(entry.command)")
@@ -176,7 +176,7 @@ private struct PortRow: View {
     private func icon(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
-                .foregroundColor(Extreme.muted)
+                .foregroundColor(Tellurion.muted)
                 .frame(width: 20, height: 18)
                 .contentShape(Rectangle())
         }
@@ -240,27 +240,27 @@ private struct PortConflictBanner: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundColor(Extreme.warn)
+            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundColor(Tellurion.warn)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Port \(String(conflict.port)) is taken").font(Extreme.font(11, weight: .semibold)).foregroundColor(Extreme.text)
+                Text("Port \(String(conflict.port)) is taken").font(Tellurion.font(11, weight: .semibold)).foregroundColor(Tellurion.text)
                 Text(holder.map { "by \($0.title) · \($0.command)" } ?? "by something outside your account")
-                    .font(Extreme.font(10)).foregroundColor(Extreme.muted).lineLimit(2)
+                    .font(Tellurion.font(10)).foregroundColor(Tellurion.muted).lineLimit(2)
                 if let holder, holder.kind != .container {
                     Button("Stop it") { monitor.stop(holder) }
-                        .buttonStyle(ExtremeButtonStyle(prominent: true))
+                        .buttonStyle(TellurionButtonStyle(prominent: true))
                         .padding(.top, 3)
                 }
             }
             Spacer(minLength: 0)
             Button { monitor.dismissConflict() } label: {
-                Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundColor(Extreme.dim)
+                Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundColor(Tellurion.dim)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss")
         }
         .padding(8)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Extreme.warn.opacity(0.1)))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Extreme.warn.opacity(0.35), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Tellurion.warn.opacity(0.1)))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Tellurion.warn.opacity(0.35), lineWidth: 1))
     }
 }
 #endif

@@ -23,7 +23,7 @@ codex() {
   # its model requests going through Tellurion. This must never fall through to plain Codex,
   # which would send the same work to another provider.
   if [[ ${TELLURION_CODEX_BACKEND:-} == venice ]]; then
-    local _gc_cli="${GHOSTTY_EXTREME_TEST_HOME:-$HOME}/.ghostty-extreme/bin/tellurion"
+    local _gc_cli="${TELLURION_TEST_HOME:-$HOME}/.ghostty-extreme/bin/tellurion"
     if [[ ! -x $_gc_cli ]]; then
       print -u2 "Tellurion's command isn't installed, so Codex can't reach Venice. Run Tellurion > Check Setup…"
       return 1

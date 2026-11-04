@@ -43,7 +43,7 @@ def clean(text):
 
 
 def tellurion_home():
-    return os.environ.get("GHOSTTY_EXTREME_TEST_HOME") or os.path.expanduser("~")
+    return os.environ.get("TELLURION_TEST_HOME") or os.path.expanduser("~")
 
 
 def ollama_base():

@@ -68,7 +68,7 @@ final class EditorPanel: ObservableObject {
 
     /// Opens this tab's editor, optionally on a specific folder.
     func show(from controller: BaseTerminalController?, folder: String? = nil) {
-        guard ExtremeSettings.isOn(.editor) else { return }
+        guard TellurionSettings.isOn(.editor) else { return }
         // Boards are for managing agents; their Agent Map shows where agents are working.
         guard let controller, !HermesSessions.shared.isHermes(controller), !(controller is BoardController) else { return }
         let session = session(for: controller)
@@ -104,7 +104,7 @@ final class EditorPanel: ObservableObject {
 
     func toggle(from controller: BaseTerminalController?) {
         // Off in Settings: it can still close, never open.
-        guard ExtremeSettings.isOn(.editor) || controller.map(isVisible) == true else { return }
+        guard TellurionSettings.isOn(.editor) || controller.map(isVisible) == true else { return }
         guard let controller else { return }
         if isVisible(controller) { hide(returningFocusTo: controller) } else { show(from: controller) }
     }

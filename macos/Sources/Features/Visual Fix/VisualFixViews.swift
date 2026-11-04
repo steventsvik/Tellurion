@@ -13,7 +13,7 @@ struct VisualFixColumn: View {
     var body: some View {
         // The handle is on the side facing the terminal.
         let left = layout.isLeftOfTerminal(.visualFix)
-        let handle = ColumnResizeHandle(color: Extreme.gold.opacity(0.35), width: $width,
+        let handle = ColumnResizeHandle(color: Tellurion.gold.opacity(0.35), width: $width,
                                         range: 360...max(360, min(1800, Double(maxWidth))), onTrailingEdge: left)
         HStack(spacing: 0) {
             if !left { handle }
@@ -47,7 +47,7 @@ struct VisualFixPanelView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .background(Extreme.ink)
+        .background(Tellurion.ink)
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: session.requests.isEmpty)
     }
 }
@@ -67,36 +67,36 @@ private struct VisualFixToolbar: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(Extreme.panel)
-        .overlay(alignment: .bottom) { Rectangle().fill(Extreme.line).frame(height: 1) }
+        .background(Tellurion.panel)
+        .overlay(alignment: .bottom) { Rectangle().fill(Tellurion.line).frame(height: 1) }
     }
 
     private func bar(wide: Bool) -> some View {
         HStack(spacing: 6) {
             if wide {
                 HStack(spacing: 7) {
-                    PixelIconView(icon: .target, color: Extreme.gold, pixel: 1.6)
-                    Text("Visual Fix").font(Extreme.font(13, weight: .semibold)).foregroundColor(Extreme.gold).fixedSize()
+                    PixelIconView(icon: .target, color: Tellurion.gold, pixel: 1.6)
+                    Text("Visual Fix").font(Tellurion.font(13, weight: .semibold)).foregroundColor(Tellurion.gold).fixedSize()
                 }
                 .padding(.trailing, 4)
             }
-            ExtremeIconButton(icon: .target, label: "Pick", help: "Point at things on the page (click to choose one)",
+            TellurionIconButton(icon: .target, label: "Pick", help: "Point at things on the page (click to choose one)",
                               active: session.picking) {
                 session.setPicking(!session.picking)
             }
             appButton
-            ExtremeIconButton(icon: .restart, help: "Reload the page (⌘R)") { session.reload() }
+            TellurionIconButton(icon: .restart, help: "Reload the page (⌘R)") { session.reload() }
                 .keyboardShortcut("r", modifiers: .command)
             Spacer(minLength: 4)
             HStack(spacing: 0) {
                 ForEach(VisualFixDevice.allCases) { device in
-                    ExtremeIconButton(icon: device.icon, help: "\(device.name) · \(Int(device.width))px wide",
+                    TellurionIconButton(icon: device.icon, help: "\(device.name) · \(Int(device.width))px wide",
                                       active: session.device == device) {
                         withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) { session.device = device }
                     }
                 }
             }
-            ExtremeIconButton(icon: .close, label: wide ? "Close" : nil, help: "Close Visual Fix (⌃⌘V)") {
+            TellurionIconButton(icon: .close, label: wide ? "Close" : nil, help: "Close Visual Fix (⌃⌘V)") {
                 VisualFixPanel.shared.hide(controller)
             }
         }
@@ -111,15 +111,15 @@ private struct VisualFixToolbar: View {
             showAppMenu()
         } label: {
             HStack(spacing: 6) {
-                PixelDot(color: session.loadError == nil ? Extreme.live : Extreme.danger, size: 5)
-                Text(name ?? "localhost").font(Extreme.font(10.5)).foregroundColor(Extreme.text).lineLimit(1).fixedSize()
-                Text(verbatim: port).font(Extreme.font(10.5)).foregroundColor(Extreme.gold).fixedSize()
-                PixelIconView(icon: .chevronDown, color: Extreme.muted, pixel: 1)
+                PixelDot(color: session.loadError == nil ? Tellurion.live : Tellurion.danger, size: 5)
+                Text(name ?? "localhost").font(Tellurion.font(10.5)).foregroundColor(Tellurion.text).lineLimit(1).fixedSize()
+                Text(verbatim: port).font(Tellurion.font(10.5)).foregroundColor(Tellurion.gold).fixedSize()
+                PixelIconView(icon: .chevronDown, color: Tellurion.muted, pixel: 1)
             }
             .padding(.horizontal, 9)
             .frame(height: 28)
-            .background(Extreme.raised)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Extreme.lineStrong, lineWidth: 1))
+            .background(Tellurion.raised)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Tellurion.lineStrong, lineWidth: 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -160,28 +160,28 @@ private struct VisualFixHint: View {
 
     var body: some View {
         let (text, color): (String, Color) = {
-            if session.url == nil { return ("Start your app to point at things in it", Extreme.muted) }
-            if session.loadError != nil { return ("The app isn't answering", Extreme.danger) }
-            if session.selection != nil { return ("Say what should change, then press Return to send it", Extreme.core) }
-            if session.picking { return ("Hover anything in your app, then click it to fix it", Extreme.gold) }
-            return ("Browsing freely. Turn on PICK to point at something", Extreme.muted)
+            if session.url == nil { return ("Start your app to point at things in it", Tellurion.muted) }
+            if session.loadError != nil { return ("The app isn't answering", Tellurion.danger) }
+            if session.selection != nil { return ("Say what should change, then press Return to send it", Tellurion.core) }
+            if session.picking { return ("Hover anything in your app, then click it to fix it", Tellurion.gold) }
+            return ("Browsing freely. Turn on PICK to point at something", Tellurion.muted)
         }()
         HStack(spacing: 8) {
             PixelDot(color: color, blinking: session.picking && session.selection == nil, size: 5, interval: 0.6)
-            Text(text).font(Extreme.font(10.5)).foregroundColor(color)
+            Text(text).font(Tellurion.font(10.5)).foregroundColor(color)
                 .id(text)
                 .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
             Spacer()
-            if session.loading { PixelSpinner(color: Extreme.gold, pixel: 2) }
+            if session.loading { PixelSpinner(color: Tellurion.gold, pixel: 2) }
         }
         .padding(.horizontal, 12)
         .frame(height: 26)
-        .background(Extreme.raised.opacity(0.6))
+        .background(Tellurion.raised.opacity(0.6))
         .overlay(alignment: .bottom) {
             if session.loading {
-                PixelActivityBar(color: Extreme.gold, pixel: 2)
+                PixelActivityBar(color: Tellurion.gold, pixel: 2)
             } else {
-                Rectangle().fill(Extreme.line).frame(height: 1)
+                Rectangle().fill(Tellurion.line).frame(height: 1)
             }
         }
         .clipped()
@@ -202,8 +202,8 @@ private struct VisualFixStage: View {
                 VisualFixBackdrop()
                 // The device frame.
                 RoundedRectangle(cornerRadius: layout.corner)
-                    .fill(Extreme.panel)
-                    .overlay(RoundedRectangle(cornerRadius: layout.corner).strokeBorder(Extreme.lineStrong, lineWidth: 1))
+                    .fill(Tellurion.panel)
+                    .overlay(RoundedRectangle(cornerRadius: layout.corner).strokeBorder(Tellurion.lineStrong, lineWidth: 1))
                     .shadow(color: .black.opacity(0.6), radius: 16, y: 6)
                     .frame(width: layout.page.width + layout.bezel * 2, height: layout.page.height + layout.bezel * 2)
                     .offset(x: layout.page.minX - layout.bezel, y: layout.page.minY - layout.bezel)
@@ -217,7 +217,7 @@ private struct VisualFixStage: View {
                         .frame(width: geometry.size.width, height: geometry.size.height)
                 }
                 Text(verbatim: "\(Int(session.device.width)) px · \(Int(layout.zoom * 100))%")
-                    .font(Extreme.font(9)).kerning(1).foregroundColor(Extreme.dim)
+                    .font(Tellurion.font(9)).kerning(1).foregroundColor(Tellurion.dim)
                     .offset(x: layout.page.minX, y: layout.page.maxY + layout.bezel + 4)
             }
             .onAppear { session.zoom = layout.zoom }
@@ -257,13 +257,13 @@ private struct VisualFixBackdrop: View {
             while y < size.height {
                 var x: CGFloat = 0
                 while x < size.width {
-                    context.fill(Path(CGRect(x: x, y: y, width: 1, height: 1)), with: .color(Extreme.lineStrong.opacity(0.5)))
+                    context.fill(Path(CGRect(x: x, y: y, width: 1, height: 1)), with: .color(Tellurion.lineStrong.opacity(0.5)))
                     x += step
                 }
                 y += step
             }
         }
-        .background(Extreme.ink)
+        .background(Tellurion.ink)
     }
 }
 
@@ -273,12 +273,12 @@ private struct VisualFixUnreachable: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            PixelIconView(icon: .globe, color: Extreme.danger, pixel: 3)
-            Text(message).font(Extreme.font(12)).foregroundColor(Extreme.text).multilineTextAlignment(.center)
-            Button("Try Again", action: retry).buttonStyle(ExtremeButtonStyle(prominent: true))
+            PixelIconView(icon: .globe, color: Tellurion.danger, pixel: 3)
+            Text(message).font(Tellurion.font(12)).foregroundColor(Tellurion.text).multilineTextAlignment(.center)
+            Button("Try Again", action: retry).buttonStyle(TellurionButtonStyle(prominent: true))
         }
         .padding(24)
-        .extremePanel()
+        .tellurionPanel()
     }
 }
 
@@ -370,16 +370,16 @@ private struct HoverBox: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             Rectangle()
-                .fill(Extreme.gold.opacity(0.09))
-                .overlay(Rectangle().strokeBorder(Extreme.gold, lineWidth: 2))
-                .shadow(color: Extreme.gold.opacity(0.55), radius: 6)
+                .fill(Tellurion.gold.opacity(0.09))
+                .overlay(Rectangle().strokeBorder(Tellurion.gold, lineWidth: 2))
+                .shadow(color: Tellurion.gold.opacity(0.55), radius: 6)
                 .frame(width: max(4, rect.width), height: max(4, rect.height))
                 .offset(x: rect.minX, y: rect.minY)
             Text(label)
-                .font(Extreme.font(9.5))
-                .foregroundColor(Extreme.ink)
+                .font(Tellurion.font(9.5))
+                .foregroundColor(Tellurion.ink)
                 .padding(.horizontal, 5).padding(.vertical, 2)
-                .background(Extreme.gold)
+                .background(Tellurion.gold)
                 .fixedSize()
                 .offset(x: max(0, rect.minX), y: rect.minY > 18 ? rect.minY - 17 : rect.maxY + 2)
         }
@@ -394,12 +394,12 @@ private struct SelectionBox: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
             let phase = CGFloat(context.date.timeIntervalSinceReferenceDate * 18).truncatingRemainder(dividingBy: 12)
             ZStack {
-                Rectangle().fill(Extreme.core.opacity(0.08))
-                Rectangle().strokeBorder(Extreme.core, style: StrokeStyle(lineWidth: 2, dash: [6, 6], dashPhase: -phase))
-                Brackets(color: Extreme.core)
+                Rectangle().fill(Tellurion.core.opacity(0.08))
+                Rectangle().strokeBorder(Tellurion.core, style: StrokeStyle(lineWidth: 2, dash: [6, 6], dashPhase: -phase))
+                Brackets(color: Tellurion.core)
                     .padding(-6)
             }
-            .shadow(color: Extreme.core.opacity(0.6), radius: 8)
+            .shadow(color: Tellurion.core.opacity(0.6), radius: 8)
         }
         .frame(width: max(4, rect.width), height: max(4, rect.height))
         .offset(x: rect.minX, y: rect.minY)
@@ -444,10 +444,10 @@ private struct PinOutline: View {
 
     private var color: Color {
         switch state {
-        case .queued: return Extreme.gold
-        case .working: return Extreme.core
-        case .needsYou: return Extreme.warn
-        case .done: return Extreme.live
+        case .queued: return Tellurion.gold
+        case .working: return Tellurion.core
+        case .needsYou: return Tellurion.warn
+        case .done: return Tellurion.live
         }
     }
 }
@@ -458,29 +458,29 @@ private struct PinBadge: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Text("\(request.id)").font(Extreme.font(10.5))
+            Text("\(request.id)").font(Tellurion.font(10.5))
             switch request.state {
-            case .queued: PixelDot(color: Extreme.ink, blinking: true, size: 4, interval: 0.4)
-            case .working: PixelSpinner(color: Extreme.ink, pixel: 1.8)
-            case .needsYou: Text("!").font(Extreme.font(10.5))
+            case .queued: PixelDot(color: Tellurion.ink, blinking: true, size: 4, interval: 0.4)
+            case .working: PixelSpinner(color: Tellurion.ink, pixel: 1.8)
+            case .needsYou: Text("!").font(Tellurion.font(10.5))
             case .done: EmptyView()
             }
         }
-        .foregroundColor(Extreme.ink)
+        .foregroundColor(Tellurion.ink)
         .padding(.horizontal, 6)
         .frame(height: 18)
         .background(background)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Extreme.ink.opacity(0.5), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Tellurion.ink.opacity(0.5), lineWidth: 1))
         .shadow(color: background.opacity(0.8), radius: 6)
         .help(request.text)
     }
 
     private var background: Color {
         switch request.state {
-        case .queued: return Extreme.gold
-        case .working: return Extreme.core
-        case .needsYou: return Extreme.warn
-        case .done: return Extreme.live
+        case .queued: return Tellurion.gold
+        case .working: return Tellurion.core
+        case .needsYou: return Tellurion.warn
+        case .done: return Tellurion.live
         }
     }
 }
@@ -492,16 +492,16 @@ private struct DoneSweep: View {
 
     var body: some View {
         ZStack {
-            Rectangle().strokeBorder(Extreme.live, lineWidth: 2)
+            Rectangle().strokeBorder(Tellurion.live, lineWidth: 2)
             GeometryReader { geometry in
-                LinearGradient(colors: [Extreme.live.opacity(0), Extreme.live.opacity(0.45), Extreme.live.opacity(0)],
+                LinearGradient(colors: [Tellurion.live.opacity(0), Tellurion.live.opacity(0.45), Tellurion.live.opacity(0)],
                                startPoint: .leading, endPoint: .trailing)
                     .frame(width: max(30, geometry.size.width * 0.35))
                     .offset(x: progress * geometry.size.width)
             }
             .clipped()
         }
-        .shadow(color: Extreme.live.opacity(0.7), radius: 10)
+        .shadow(color: Tellurion.live.opacity(0.7), radius: 10)
         .frame(width: max(4, rect.width), height: max(4, rect.height))
         .offset(x: rect.minX, y: rect.minY)
         .onAppear {
@@ -528,34 +528,34 @@ private struct VisualFixComposer: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 7) {
                 Text("#\(number)")
-                    .font(Extreme.font(10.5)).foregroundColor(Extreme.ink)
+                    .font(Tellurion.font(10.5)).foregroundColor(Tellurion.ink)
                     .padding(.horizontal, 5).padding(.vertical, 1.5)
-                    .background(Extreme.core)
-                Text(element.label).font(Extreme.font(11)).foregroundColor(Extreme.text).lineLimit(1)
+                    .background(Tellurion.core)
+                Text(element.label).font(Tellurion.font(11)).foregroundColor(Tellurion.text).lineLimit(1)
                 Spacer(minLength: 4)
                 smallButton("↑ Parent", help: "Choose the element around this one") { session.selectParent() }
                 smallButton("✕", help: "Cancel (Esc)") { session.cancelSelection() }
             }
             if let path = element.componentPath ?? element.source {
                 HStack(spacing: 5) {
-                    PixelIconView(icon: .code, color: Extreme.core, pixel: 1)
+                    PixelIconView(icon: .code, color: Tellurion.core, pixel: 1)
                     Text(element.source.map { path == $0 ? $0 : "\(path) · \(shortSource($0))" } ?? path)
-                        .font(Extreme.font(9.5)).foregroundColor(Extreme.core).lineLimit(1).truncationMode(.middle)
+                        .font(Tellurion.font(9.5)).foregroundColor(Tellurion.core).lineLimit(1).truncationMode(.middle)
                 }
             }
             if !element.text.isEmpty {
-                Text("“\(element.text)”").font(Extreme.font(10)).foregroundColor(Extreme.muted).lineLimit(1)
+                Text("“\(element.text)”").font(Tellurion.font(10)).foregroundColor(Tellurion.muted).lineLimit(1)
             }
 
             TextField("What should change?", text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
-                .font(Extreme.font(12))
-                .foregroundColor(Extreme.text)
+                .font(Tellurion.font(12))
+                .foregroundColor(Tellurion.text)
                 .lineLimit(2...4)
                 .focused($focused)
                 .padding(8)
-                .background(Extreme.ink)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(focused ? Extreme.gold : Extreme.lineStrong, lineWidth: 1))
+                .background(Tellurion.ink)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(focused ? Tellurion.gold : Tellurion.lineStrong, lineWidth: 1))
                 .onSubmit(send)
 
             WrappingChips(items: Self.suggestions) { suggestion in
@@ -568,18 +568,18 @@ private struct VisualFixComposer: View {
                 Spacer(minLength: 4)
                 Button(action: send) {
                     HStack(spacing: 6) {
-                        if session.sending { PixelSpinner(color: Extreme.ink, pixel: 1.6) }
+                        if session.sending { PixelSpinner(color: Tellurion.ink, pixel: 1.6) }
                         Text("Send  ⏎")
                     }
                 }
-                .buttonStyle(ExtremeButtonStyle(prominent: true))
+                .buttonStyle(TellurionButtonStyle(prominent: true))
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || session.sending)
             }
         }
         .padding(12)
-        .background(Extreme.panel)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Extreme.gold.opacity(0.8), lineWidth: 1))
-        .overlay(Brackets(color: Extreme.gold, length: 8).padding(-3).allowsHitTesting(false))
+        .background(Tellurion.panel)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Tellurion.gold.opacity(0.8), lineWidth: 1))
+        .overlay(Brackets(color: Tellurion.gold, length: 8).padding(-3).allowsHitTesting(false))
         .shadow(color: .black.opacity(0.65), radius: 18, y: 8)
         .onAppear { DispatchQueue.main.async { focused = true } }
         .onExitCommand { session.cancelSelection() }
@@ -592,15 +592,15 @@ private struct VisualFixComposer: View {
             let otherTab = session.isInAnotherTab(surface)
             HStack(spacing: 6) {
                 AgentSprite(kind: info.kind, pixel: 1.2)
-                Text("to \(info.kind.displayName)").font(Extreme.font(10)).foregroundColor(Extreme.text)
+                Text("to \(info.kind.displayName)").font(Tellurion.font(10)).foregroundColor(Tellurion.text)
                 if let project = session.projectName {
-                    Text("· \(project)").font(Extreme.font(10)).foregroundColor(Extreme.gold).lineLimit(1)
+                    Text("· \(project)").font(Tellurion.font(10)).foregroundColor(Tellurion.gold).lineLimit(1)
                 }
                 if otherTab {
-                    Text("· other tab").font(Extreme.font(10)).foregroundColor(Extreme.muted)
+                    Text("· other tab").font(Tellurion.font(10)).foregroundColor(Tellurion.muted)
                 }
                 if info.activity == .working {
-                    Text("· queued").font(Extreme.font(10)).foregroundColor(Extreme.muted)
+                    Text("· queued").font(Tellurion.font(10)).foregroundColor(Tellurion.muted)
                 }
             }
             .help((session.projectRoot.map { "The agent working in \(($0 as NSString).abbreviatingWithTildeInPath)" }
@@ -609,19 +609,19 @@ private struct VisualFixComposer: View {
                   + (info.activity == .working ? ". It's busy; this is queued for when it's done." : "."))
         } else {
             HStack(spacing: 4) {
-                Text("start").font(Extreme.font(10)).foregroundColor(Extreme.muted)
+                Text("start").font(Tellurion.font(10)).foregroundColor(Tellurion.muted)
                 if let project = session.projectName {
-                    Text("in \(project):").font(Extreme.font(10)).foregroundColor(Extreme.gold).lineLimit(1)
+                    Text("in \(project):").font(Tellurion.font(10)).foregroundColor(Tellurion.gold).lineLimit(1)
                 }
                 ForEach([VerticalTabAgentKind.claude, .codex], id: \.self) { kind in
                     Button { newAgent = kind } label: {
                         HStack(spacing: 4) {
                             AgentSprite(kind: kind, pixel: 1)
-                            Text(kind == .claude ? "Claude" : "Codex").font(Extreme.font(10))
+                            Text(kind == .claude ? "Claude" : "Codex").font(Tellurion.font(10))
                         }
-                        .foregroundColor(newAgent == kind ? Extreme.ink : Extreme.text)
+                        .foregroundColor(newAgent == kind ? Tellurion.ink : Tellurion.text)
                         .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(newAgent == kind ? Extreme.gold : Extreme.raised)
+                        .background(newAgent == kind ? Tellurion.gold : Tellurion.raised)
                     }
                     .buttonStyle(.plain)
                 }
@@ -643,9 +643,9 @@ private struct VisualFixComposer: View {
 
     private func smallButton(_ title: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title).font(Extreme.font(9.5)).foregroundColor(Extreme.muted)
+            Text(title).font(Tellurion.font(9.5)).foregroundColor(Tellurion.muted)
                 .padding(.horizontal, 5).padding(.vertical, 2)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Extreme.line, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Tellurion.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .help(help)
@@ -674,11 +674,11 @@ private struct ChipButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(Extreme.font(9.5))
-                .foregroundColor(hovering ? Extreme.ink : Extreme.gold)
+                .font(Tellurion.font(9.5))
+                .foregroundColor(hovering ? Tellurion.ink : Tellurion.gold)
                 .padding(.horizontal, 6).padding(.vertical, 3)
-                .background(hovering ? Extreme.gold : Extreme.gold.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Extreme.gold.opacity(0.5), lineWidth: 1))
+                .background(hovering ? Tellurion.gold : Tellurion.gold.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Tellurion.gold.opacity(0.5), lineWidth: 1))
                 .scaleEffect(hovering ? 1.04 : 1)
         }
         .buttonStyle(.plain)
@@ -723,10 +723,10 @@ private struct VisualFixRequestList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                ExtremeSectionLabel("Requests")
+                TellurionSectionLabel("Requests")
                 let working = session.requests.filter { $0.state != .done }.count
                 if working > 0 {
-                    Text("\(working) in progress").font(Extreme.font(9.5)).foregroundColor(Extreme.core)
+                    Text("\(working) in progress").font(Tellurion.font(9.5)).foregroundColor(Tellurion.core)
                 }
             }
             ScrollView(.horizontal, showsIndicators: false) {
@@ -742,8 +742,8 @@ private struct VisualFixRequestList: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(Extreme.panel)
-        .overlay(alignment: .top) { Rectangle().fill(Extreme.line).frame(height: 1) }
+        .background(Tellurion.panel)
+        .overlay(alignment: .top) { Rectangle().fill(Tellurion.line).frame(height: 1) }
     }
 }
 
@@ -756,8 +756,8 @@ private struct RequestCard: View {
         HStack(alignment: .top, spacing: 8) {
             status
             VStack(alignment: .leading, spacing: 3) {
-                Text(request.text).font(Extreme.font(10.5)).foregroundColor(Extreme.text).lineLimit(1)
-                Text(detail).font(Extreme.font(9.5)).foregroundColor(color).lineLimit(1)
+                Text(request.text).font(Tellurion.font(10.5)).foregroundColor(Tellurion.text).lineLimit(1)
+                Text(detail).font(Tellurion.font(9.5)).foregroundColor(color).lineLimit(1)
             }
             .frame(width: 190, alignment: .leading)
             if hovering {
@@ -776,7 +776,7 @@ private struct RequestCard: View {
             }
         }
         .padding(8)
-        .background(request.id == session.justFinished ? Extreme.live.opacity(0.14) : Extreme.raised)
+        .background(request.id == session.justFinished ? Tellurion.live.opacity(0.14) : Tellurion.raised)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(color.opacity(hovering ? 0.9 : 0.45), lineWidth: 1))
         .contentShape(Rectangle())
         .onHover { inside in withAnimation(.easeOut(duration: 0.15)) { hovering = inside } }
@@ -789,10 +789,10 @@ private struct RequestCard: View {
         ZStack {
             Rectangle().fill(color).frame(width: 22, height: 22)
             switch request.state {
-            case .working: PixelSpinner(color: Extreme.ink, pixel: 2)
-            case .done: Text("✓").font(Extreme.font(12)).foregroundColor(Extreme.ink)
-            case .needsYou: Text("!").font(Extreme.font(12)).foregroundColor(Extreme.ink)
-            case .queued: Text("\(request.id)").font(Extreme.font(11)).foregroundColor(Extreme.ink)
+            case .working: PixelSpinner(color: Tellurion.ink, pixel: 2)
+            case .done: Text("✓").font(Tellurion.font(12)).foregroundColor(Tellurion.ink)
+            case .needsYou: Text("!").font(Tellurion.font(12)).foregroundColor(Tellurion.ink)
+            case .queued: Text("\(request.id)").font(Tellurion.font(11)).foregroundColor(Tellurion.ink)
             }
         }
         .shadow(color: color.opacity(0.7), radius: request.state == .working ? 6 : 2)
@@ -810,19 +810,19 @@ private struct RequestCard: View {
 
     private var color: Color {
         switch request.state {
-        case .queued: return Extreme.gold
-        case .working: return Extreme.core
-        case .needsYou: return Extreme.warn
-        case .done: return Extreme.live
+        case .queued: return Tellurion.gold
+        case .working: return Tellurion.core
+        case .needsYou: return Tellurion.warn
+        case .done: return Tellurion.live
         }
     }
 
     private func miniButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title).font(Extreme.font(10, weight: .semibold)).foregroundColor(Extreme.text)
+            Text(title).font(Tellurion.font(10, weight: .semibold)).foregroundColor(Tellurion.text)
                 .frame(minWidth: 44).padding(.vertical, 2)
-                .background(Extreme.panel)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Extreme.line, lineWidth: 1))
+                .background(Tellurion.panel)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Tellurion.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -838,15 +838,15 @@ private struct VisualFixEmptyState: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            PixelIconView(icon: .target, color: Extreme.gold, pixel: 5)
+            PixelIconView(icon: .target, color: Tellurion.gold, pixel: 5)
                 .scaleEffect(breathe ? 1.08 : 0.94)
-                .shadow(color: Extreme.gold.opacity(breathe ? 0.6 : 0.2), radius: breathe ? 14 : 4)
+                .shadow(color: Tellurion.gold.opacity(breathe ? 0.6 : 0.2), radius: breathe ? 14 : 4)
                 .onAppear {
                     withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) { breathe = true }
                 }
-            Text("Point at your app, say what to change").font(Extreme.font(14)).foregroundColor(Extreme.text)
+            Text("Point at your app, say what to change").font(Tellurion.font(14)).foregroundColor(Tellurion.text)
             Text("Start your dev server (or ask your agent to), then pick it here.\nClick anything on the page and your agent fixes it.")
-                .font(Extreme.font(11)).foregroundColor(Extreme.muted).multilineTextAlignment(.center)
+                .font(Tellurion.font(11)).foregroundColor(Tellurion.muted).multilineTextAlignment(.center)
             let live = localhost.sessions.filter { $0.url != nil && $0.isRunning }
             if !live.isEmpty {
                 VStack(spacing: 6) {
@@ -855,15 +855,15 @@ private struct VisualFixEmptyState: View {
                             if let url = app.url { session.load(url) }
                         } label: {
                             HStack(spacing: 8) {
-                                PixelDot(color: Extreme.live, blinking: true, size: 5, interval: 0.8)
-                                Text(app.project.name).font(Extreme.font(11.5)).foregroundColor(Extreme.text)
-                                Text(verbatim: ":\(app.ports.first ?? 0)").font(Extreme.font(11.5)).foregroundColor(Extreme.gold)
+                                PixelDot(color: Tellurion.live, blinking: true, size: 5, interval: 0.8)
+                                Text(app.project.name).font(Tellurion.font(11.5)).foregroundColor(Tellurion.text)
+                                Text(verbatim: ":\(app.ports.first ?? 0)").font(Tellurion.font(11.5)).foregroundColor(Tellurion.gold)
                                 Spacer()
-                                Text("Preview →").font(Extreme.font(11, weight: .semibold)).foregroundColor(Extreme.gold)
+                                Text("Preview →").font(Tellurion.font(11, weight: .semibold)).foregroundColor(Tellurion.gold)
                             }
                             .padding(.horizontal, 12).frame(width: 300, height: 34)
-                            .background(Extreme.raised)
-                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Extreme.lineStrong, lineWidth: 1))
+                            .background(Tellurion.raised)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Tellurion.lineStrong, lineWidth: 1))
                         }
                         .buttonStyle(.plain)
                     }
@@ -872,13 +872,13 @@ private struct VisualFixEmptyState: View {
             HStack(spacing: 6) {
                 TextField("localhost:3000", text: $address)
                     .textFieldStyle(.plain)
-                    .font(Extreme.font(11.5))
+                    .font(Tellurion.font(11.5))
                     .padding(.horizontal, 8).frame(width: 190, height: 28)
-                    .background(Extreme.ink)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Extreme.lineStrong, lineWidth: 1))
+                    .background(Tellurion.ink)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Tellurion.lineStrong, lineWidth: 1))
                     .onSubmit(open)
-                Button("Open", action: open).buttonStyle(ExtremeButtonStyle(prominent: !address.isEmpty))
-                Button("Localhost Manager") { LocalhostManager.show() }.buttonStyle(ExtremeButtonStyle())
+                Button("Open", action: open).buttonStyle(TellurionButtonStyle(prominent: !address.isEmpty))
+                Button("Localhost Manager") { LocalhostManager.show() }.buttonStyle(TellurionButtonStyle())
             }
         }
         .padding(30)
@@ -960,15 +960,15 @@ struct VisualFixLaunchButton: View {
             VisualFixPanel.shared.show(from: controller, url: url)
         } label: {
             HStack(spacing: 5) {
-                PixelIconView(icon: .target, color: hovering ? Extreme.ink : Extreme.gold, pixel: large ? 1.4 : 1.1)
-                Text(large ? "Fix visually" : "Fix").font(Extreme.font(large ? 11.5 : 10.5, weight: .semibold))
+                PixelIconView(icon: .target, color: hovering ? Tellurion.ink : Tellurion.gold, pixel: large ? 1.4 : 1.1)
+                Text(large ? "Fix visually" : "Fix").font(Tellurion.font(large ? 11.5 : 10.5, weight: .semibold))
             }
-            .foregroundColor(hovering ? Extreme.ink : Extreme.gold)
+            .foregroundColor(hovering ? Tellurion.ink : Tellurion.gold)
             .padding(.horizontal, large ? 9 : 6)
             .frame(height: large ? 26 : 20)
-            .background(hovering ? Extreme.gold : Extreme.gold.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Extreme.gold.opacity(0.75), lineWidth: 1))
-            .shadow(color: Extreme.gold.opacity(hovering ? 0.6 : 0), radius: 6)
+            .background(hovering ? Tellurion.gold : Tellurion.gold.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Tellurion.gold.opacity(0.75), lineWidth: 1))
+            .shadow(color: Tellurion.gold.opacity(hovering ? 0.6 : 0), radius: 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

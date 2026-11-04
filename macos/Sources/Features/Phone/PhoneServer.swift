@@ -20,8 +20,8 @@ final class PhoneServer: ObservableObject {
     static let enabledKey = "PhoneAccessEnabled"
     /// The local port `tailscale serve` forwards to.
     static let localPort: UInt16 = 47_811
-    /// Test copies can talk to it from this Mac without Tailscale (GHOSTTY_EXTREME_PHONE_DEV=1).
-    static let devMode = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_PHONE_DEV"] == "1"
+    /// Test copies can talk to it from this Mac without Tailscale (TELLURION_PHONE_DEV=1).
+    static let devMode = ProcessInfo.processInfo.environment["TELLURION_PHONE_DEV"] == "1"
 
     @Published private(set) var running = false
     /// The HTTPS port `tailscale serve` uses for it, once set up.
@@ -65,20 +65,20 @@ final class PhoneServer: ObservableObject {
 
     /// Starts the server at launch if the user left phone access on.
     func startIfEnabled() {
-        guard ExtremeSettings.isOn(.phone) else { return }
+        guard TellurionSettings.isOn(.phone) else { return }
         // A test copy in dev mode serves on this Mac only, without touching Tailscale.
         if Self.devMode {
             start()
             servePort = Int(Self.localPort)
-            // Tests pair without the window: GHOSTTY_EXTREME_PHONE_DEV_CODE is the pairing code.
-            if let code = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_PHONE_DEV_CODE"], !code.isEmpty {
+            // Tests pair without the window: TELLURION_PHONE_DEV_CODE is the pairing code.
+            if let code = ProcessInfo.processInfo.environment["TELLURION_PHONE_DEV_CODE"], !code.isEmpty {
                 PhoneDevices.shared.useTestPairingCode(code)
             }
             return
         }
-        // Test copies only: GHOSTTY_EXTREME_PHONE_TEST=on|off presses Turn on / Turn off at launch.
+        // Test copies only: TELLURION_PHONE_TEST=on|off presses Turn on / Turn off at launch.
         if Bundle.main.bundleIdentifier == "com.steventsvik.ghostty-extreme.test",
-           let test = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_PHONE_TEST"] {
+           let test = ProcessInfo.processInfo.environment["TELLURION_PHONE_TEST"] {
             if test == "on" { turnOn() } else if test == "off" { turnOff() }
             return
         }

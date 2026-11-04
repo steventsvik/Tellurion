@@ -68,14 +68,14 @@ struct LivingSigil: View {
     var size: CGFloat = 26
     @ObservedObject private var pulse = AgentPulse.shared
 
-    @Environment(\.extremeMotion) private var motion
+    @Environment(\.tellurionMotion) private var motion
 
     var body: some View {
         let animating = (pulse.working > 0 || pulse.waiting > 0) && motion
         Group {
             if flaring(at: Date()) && motion {
                 // The 1.6 s finish flare: brief, so SwiftUI draws it.
-                TimelineView(ExtremeClock.schedule(every: ExtremeClock.beat)) { context in
+                TimelineView(TellurionClock.schedule(every: TellurionClock.beat)) { context in
                     let t = context.date.timeIntervalSinceReferenceDate
                     frame(glow: glowLevel(at: t), orbit: t * orbitSpeed / (2 * .pi), waiting: Int(t / 0.32) % 2 == 0, flareAt: context.date)
                 }
@@ -83,7 +83,7 @@ struct LivingSigil: View {
                 // Working or waiting: one loop rendered once and played by Core Animation.
                 let frames = loopFrames
                 FilmStrip(key: "sigil|\(min(pulse.working, 6))|\(pulse.waiting > 0)|\(size)", frames: frames,
-                          frameDuration: ExtremeClock.beat, size: CGSize(width: size, height: size * 31 / 32)) { index in
+                          frameDuration: TellurionClock.beat, size: CGSize(width: size, height: size * 31 / 32)) { index in
                     let phase = Double(index) / Double(frames)
                     frame(glow: level(phase * Double(glowCycles(frames))), orbit: phase, waiting: (index / 4) % 2 == 0, flareAt: nil)
                 }
@@ -99,7 +99,7 @@ struct LivingSigil: View {
     private func frame(glow: Double, orbit: Double, waiting: Bool, flareAt: Date?) -> some View {
         ZStack {
             glowView(glow)
-            ExtremeSigil(size: size, alive: false)
+            TellurionSigil(size: size, alive: false)
             Canvas { gc, canvas in
                 orbiters(gc, canvas, turns: orbit)
                 if waiting { waitingTicks(gc, canvas) }
@@ -118,12 +118,12 @@ struct LivingSigil: View {
     /// in whole beats and a multiple of the amber blink.
     private var loopFrames: Int {
         let seconds = pulse.working > 0 ? 2 * .pi / orbitSpeed : glowPeriod
-        return max(8, Int((seconds / ExtremeClock.beat / 8).rounded()) * 8)
+        return max(8, Int((seconds / TellurionClock.beat / 8).rounded()) * 8)
     }
 
     /// Whole breaths per loop, so the glow joins up where the loop repeats.
     private func glowCycles(_ frames: Int) -> Int {
-        max(1, Int((Double(frames) * ExtremeClock.beat / glowPeriod).rounded()))
+        max(1, Int((Double(frames) * TellurionClock.beat / glowPeriod).rounded()))
     }
 
     private func glowLevel(at t: TimeInterval) -> Double { level((t / glowPeriod).truncatingRemainder(dividingBy: 1)) }
@@ -143,7 +143,7 @@ struct LivingSigil: View {
 
     /// The core's light: slow breathing at rest, faster with each working agent.
     private func glowView(_ level: Double) -> some View {
-        let color = pulse.waiting > 0 ? Extreme.warn : Extreme.core
+        let color = pulse.waiting > 0 ? Tellurion.warn : Tellurion.core
         let strength = pulse.working > 0 || pulse.waiting > 0 ? 0.5 : 0.24
         return Circle()
             .fill(color.opacity(0.1 + level * strength))
@@ -167,7 +167,7 @@ struct LivingSigil: View {
                 let x = center.x + CGFloat(cos(angle)) * radius
                 let y = center.y + CGFloat(sin(angle)) * radius * 0.92
                 gc.fill(Path(CGRect(x: (x - pixel / 2).rounded(), y: (y - pixel / 2).rounded(), width: pixel, height: pixel)),
-                        with: .color(Extreme.core.opacity(1 - Double(trail) * 0.28)))
+                        with: .color(Tellurion.core.opacity(1 - Double(trail) * 0.28)))
             }
         }
     }
@@ -179,7 +179,7 @@ struct LivingSigil: View {
         let r = size * 0.66, p = max(2, size / 12)
         for (dx, dy) in [(0.0, -1.0), (1, 0), (0, 1), (-1, 0)] {
             gc.fill(Path(CGRect(x: c.x + CGFloat(dx) * r - p / 2, y: c.y + CGFloat(dy) * r - p / 2, width: p, height: p)),
-                    with: .color(Extreme.warn))
+                    with: .color(Tellurion.warn))
         }
     }
 
@@ -197,13 +197,13 @@ struct LivingSigil: View {
         let radius = size * (0.25 + progress * 0.55)
         let alpha = Double(1 - progress)
         gc.stroke(Path(ellipseIn: CGRect(x: c.x - radius, y: c.y - radius, width: radius * 2, height: radius * 2)),
-                  with: .color(Extreme.gold.opacity(alpha)), lineWidth: 2)
+                  with: .color(Tellurion.gold.opacity(alpha)), lineWidth: 2)
         let p = max(2, size / 12)
         for i in 0..<8 {
             let angle = Double(i) * .pi / 4 + .pi / 8
             let d = size * (0.3 + progress * 0.5)
             let x = c.x + CGFloat(cos(angle)) * d, y = c.y + CGFloat(sin(angle)) * d
-            gc.fill(Path(CGRect(x: x.rounded(), y: y.rounded(), width: p, height: p)), with: .color(Extreme.gold.opacity(alpha)))
+            gc.fill(Path(CGRect(x: x.rounded(), y: y.rounded(), width: p, height: p)), with: .color(Tellurion.gold.opacity(alpha)))
         }
     }
 }
@@ -244,7 +244,7 @@ struct MoodSprite: View {
     let mood: AgentMood
     var pixel: CGFloat = 2
 
-    @Environment(\.extremeMotion) private var motion
+    @Environment(\.tellurionMotion) private var motion
 
     var body: some View {
         if kind == nil || mood == .idle && !blinks || !motion {
@@ -319,38 +319,38 @@ struct MoodSprite: View {
             // Three rising dots, lighting in turn.
             for i in 0..<3 {
                 let on = (frame / 3) % 4 > i
-                dot(cx + 7 + CGFloat(i) * 3, cy - 9 - CGFloat(i) * 3, Extreme.text.opacity(on ? 0.95 : 0.2), 2.5)
+                dot(cx + 7 + CGFloat(i) * 3, cy - 9 - CGFloat(i) * 3, Tellurion.text.opacity(on ? 0.95 : 0.2), 2.5)
             }
         case .reading:
             // A scan line sweeping down the sprite.
             let y = cy - 7 + CGFloat(frame % 8) * 2
-            gc.fill(Path(CGRect(x: cx - 12, y: y, width: 24, height: 1.5)), with: .color(Extreme.core.opacity(0.9)))
+            gc.fill(Path(CGRect(x: cx - 12, y: y, width: 24, height: 1.5)), with: .color(Tellurion.core.opacity(0.9)))
         case .editing:
             // Keystrokes under the sprite.
             for i in 0..<4 where (frame + i * 3) % 5 < 2 {
-                dot(cx - 8 + CGFloat(i) * 5, cy + 10, Extreme.gold, 2.5)
+                dot(cx - 8 + CGFloat(i) * 5, cy + 10, Tellurion.gold, 2.5)
             }
         case .running:
             // A tiny prompt that blinks beside it.
-            let color = Extreme.core.opacity(frame % 6 < 3 ? 1 : 0.3)
+            let color = Tellurion.core.opacity(frame % 6 < 3 ? 1 : 0.3)
             dot(cx + 12, cy - 3, color); dot(cx + 13.5, cy - 1.5, color); dot(cx + 12, cy, color)
             dot(cx + 15, cy + 1, color, 2)
         case .waiting:
             guard frame % 4 < 2 else { return }
-            gc.fill(Path(CGRect(x: cx - 1.5, y: cy - 17, width: 3, height: 6)), with: .color(Extreme.warn))
-            gc.fill(Path(CGRect(x: cx - 1.5, y: cy - 10, width: 3, height: 2.5)), with: .color(Extreme.warn))
+            gc.fill(Path(CGRect(x: cx - 1.5, y: cy - 17, width: 3, height: 6)), with: .color(Tellurion.warn))
+            gc.fill(Path(CGRect(x: cx - 1.5, y: cy - 10, width: 3, height: 2.5)), with: .color(Tellurion.warn))
         case .celebrating:
             // Sparkles popping at fixed spots around it.
             let spots: [(CGFloat, CGFloat)] = [(-12, -9), (11, -10), (-13, 5), (12, 6), (0, -14), (-6, 11), (7, 12)]
             for (i, spot) in spots.enumerated() where (frame + i * 2) % 7 < 3 {
                 let x = cx + spot.0, y = cy + spot.1
-                dot(x, y, Extreme.gold, 2.5)
+                dot(x, y, Tellurion.gold, 2.5)
                 if (frame + i) % 3 == 0 {
-                    dot(x - 2, y + 0.5, Extreme.gold.opacity(0.6)); dot(x + 2.5, y + 0.5, Extreme.gold.opacity(0.6))
+                    dot(x - 2, y + 0.5, Tellurion.gold.opacity(0.6)); dot(x + 2.5, y + 0.5, Tellurion.gold.opacity(0.6))
                 }
             }
         case .failed:
-            let color = Extreme.danger.opacity(frame % 8 < 4 ? 1 : 0.4)
+            let color = Tellurion.danger.opacity(frame % 8 < 4 ? 1 : 0.4)
             for d in stride(from: CGFloat(-2), through: 2, by: 1) {
                 dot(cx + 11 + d, cy - 11 + d, color); dot(cx + 11 + d, cy - 11 - d, color)
             }
@@ -374,7 +374,7 @@ struct AgentAurora: View {
     @State private var finishedAt: Date?
     @State private var previous: Mode = .idle
 
-    @Environment(\.extremeMotion) private var motion
+    @Environment(\.tellurionMotion) private var motion
 
     var body: some View {
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -407,8 +407,8 @@ struct AgentAurora: View {
     private var palette: [Color] {
         switch mode {
         case .idle: return [Color(rgb: 0x1B2C7A), Color(rgb: 0x2B1F66), Color(rgb: 0x123A5C)]
-        case .working: return [Extreme.core, Color(rgb: 0x3A7BFF), Color(rgb: 0x8A63FF)]
-        case .waiting: return [Extreme.warn, Color(rgb: 0xFF7A3D), Color(rgb: 0xD9A55B)]
+        case .working: return [Tellurion.core, Color(rgb: 0x3A7BFF), Color(rgb: 0x8A63FF)]
+        case .waiting: return [Tellurion.warn, Color(rgb: 0xFF7A3D), Color(rgb: 0xD9A55B)]
         }
     }
 
@@ -449,7 +449,7 @@ struct AgentAurora: View {
                 let x = w * CGFloat(age / 2.2) * 1.3 - w * 0.2
                 let fade = age < 2.0 ? 1 : (2.6 - age) / 0.6
                 gc.fill(Path(CGRect(x: x - w * 0.18, y: 0, width: w * 0.36, height: h)), with: .linearGradient(
-                    Gradient(colors: [Extreme.gold.opacity(0), Extreme.gold.opacity(0.4 * fade), Extreme.gold.opacity(0)]),
+                    Gradient(colors: [Tellurion.gold.opacity(0), Tellurion.gold.opacity(0.4 * fade), Tellurion.gold.opacity(0)]),
                     startPoint: CGPoint(x: x - w * 0.18, y: 0), endPoint: CGPoint(x: x + w * 0.18, y: 0)))
             }
         }

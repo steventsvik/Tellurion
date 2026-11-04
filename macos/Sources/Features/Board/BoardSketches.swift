@@ -219,7 +219,7 @@ extension BoardController {
         // Video and audio play in a media tile; Markdown shows as a document.
         let media = urls.filter(BoardMedia.isMedia)
         if !media.isEmpty, addMedia(media, at: point) != nil { opened = true }
-        let documents = ExtremeSettings.isOn(.documents)
+        let documents = TellurionSettings.isOn(.documents)
         for url in urls where documents && url.pathExtension.lowercased() == "md" {
             placeDocument(url, at: point)
             opened = true

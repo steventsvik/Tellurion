@@ -252,7 +252,7 @@ extension BoardController {
     }
 
     func showDocuments() {
-        guard ExtremeSettings.isOn(.documents) else { return }
+        guard TellurionSettings.isOn(.documents) else { return }
         documents.open(project: documentsProject)
         withAnimation(.easeOut(duration: 0.18)) { model.showDocuments = true }
     }
@@ -280,12 +280,12 @@ struct StudioDocumentsView: View {
             Color.black.opacity(0.45).onTapGesture { close() }
             HStack(spacing: 0) {
                 sidebar.frame(width: 300)
-                Rectangle().fill(Extreme.line).frame(width: 1)
+                Rectangle().fill(Tellurion.line).frame(width: 1)
                 page
             }
             .frame(maxWidth: 1180, maxHeight: 780)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Extreme.panel))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Extreme.lineStrong))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Tellurion.panel))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Tellurion.lineStrong))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .shadow(color: .black.opacity(0.5), radius: 30, y: 10)
             .padding(40)
@@ -303,21 +303,21 @@ struct StudioDocumentsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Documents").font(Extreme.font(17, weight: .semibold)).foregroundColor(Extreme.text)
-                    Text("Generate a document from your repo, with your CLI.").font(Extreme.font(11.5)).foregroundColor(Extreme.muted)
+                    Text("Documents").font(Tellurion.font(17, weight: .semibold)).foregroundColor(Tellurion.text)
+                    Text("Generate a document from your repo, with your CLI.").font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted)
                 }
                 projectRow
                 HStack(spacing: 6) {
                     ForEach(HeadlessAgent.Engine.allCases) { engine in
                         Button { docs.engine = engine } label: {
                             HStack(spacing: 5) {
-                                VerticalTabAgentLogo(kind: engine.kind, tint: Extreme.text).frame(width: 13, height: 13)
-                                Text(engine.title).font(Extreme.font(11.5, weight: .medium))
+                                VerticalTabAgentLogo(kind: engine.kind, tint: Tellurion.text).frame(width: 13, height: 13)
+                                Text(engine.title).font(Tellurion.font(11.5, weight: .medium))
                             }
-                            .foregroundColor(Extreme.text)
+                            .foregroundColor(Tellurion.text)
                             .padding(.horizontal, 10).frame(height: 28)
-                            .background(Capsule().fill(docs.engine == engine ? Extreme.raised : .clear))
-                            .overlay(Capsule().strokeBorder(docs.engine == engine ? Extreme.core : Extreme.line))
+                            .background(Capsule().fill(docs.engine == engine ? Tellurion.raised : .clear))
+                            .overlay(Capsule().strokeBorder(docs.engine == engine ? Tellurion.core : Tellurion.line))
                         }
                         .buttonStyle(.plain)
                     }
@@ -326,45 +326,45 @@ struct StudioDocumentsView: View {
                     ForEach(StudioDocs.Effort.allCases) { effort in
                         Button { docs.effort = effort } label: {
                             VStack(spacing: 1) {
-                                Text(effort.title).font(Extreme.font(11.5, weight: .semibold))
-                                Text(docs.lastRun(effort).map(Self.clock) ?? "not timed").font(Extreme.mono(10)).opacity(0.7)
+                                Text(effort.title).font(Tellurion.font(11.5, weight: .semibold))
+                                Text(docs.lastRun(effort).map(Self.clock) ?? "not timed").font(Tellurion.mono(10)).opacity(0.7)
                             }
-                            .foregroundColor(docs.effort == effort ? Extreme.ink : Extreme.text)
+                            .foregroundColor(docs.effort == effort ? Tellurion.ink : Tellurion.text)
                             .frame(maxWidth: .infinity).frame(height: 40)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(docs.effort == effort ? Extreme.core : Extreme.raised))
+                            .background(RoundedRectangle(cornerRadius: 8).fill(docs.effort == effort ? Tellurion.core : Tellurion.raised))
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                ExtremeSectionLabel("Documents")
+                TellurionSectionLabel("Documents")
                 VStack(spacing: 2) {
                     ForEach(StudioDocs.templates) { template in templateRow(template) }
                 }
-                ExtremeSectionLabel("Ask for anything")
+                TellurionSectionLabel("Ask for anything")
                 HStack(alignment: .bottom, spacing: 6) {
                     TextField("e.g. a migration plan from REST to GraphQL…", text: $docs.ask, axis: .vertical)
-                        .textFieldStyle(.plain).font(Extreme.font(12)).lineLimit(2...5)
+                        .textFieldStyle(.plain).font(Tellurion.font(12)).lineLimit(2...5)
                     Button { docs.generate(custom: true) } label: {
-                        Image(systemName: "arrow.up").font(.system(size: 11, weight: .bold)).foregroundColor(Extreme.ink)
-                            .frame(width: 26, height: 26).background(Circle().fill(Extreme.core))
+                        Image(systemName: "arrow.up").font(.system(size: 11, weight: .bold)).foregroundColor(Tellurion.ink)
+                            .frame(width: 26, height: 26).background(Circle().fill(Tellurion.core))
                     }
                     .buttonStyle(.plain)
                     .disabled(docs.ask.trimmingCharacters(in: .whitespaces).isEmpty || docs.running || docs.project == nil)
                 }
                 .padding(10)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Extreme.raised))
+                .background(RoundedRectangle(cornerRadius: 10).fill(Tellurion.raised))
                 if !docs.library.isEmpty {
-                    ExtremeSectionLabel("Library")
+                    TellurionSectionLabel("Library")
                     VStack(spacing: 2) {
                         ForEach(docs.library, id: \.self) { url in
                             Button { docs.show(url) } label: {
                                 HStack(spacing: 8) {
-                                    Image(systemName: "doc.text").font(.system(size: 11)).foregroundColor(Extreme.muted)
-                                    Text(url.deletingPathExtension().lastPathComponent).font(Extreme.font(12)).foregroundColor(Extreme.text).lineLimit(1)
+                                    Image(systemName: "doc.text").font(.system(size: 11)).foregroundColor(Tellurion.muted)
+                                    Text(url.deletingPathExtension().lastPathComponent).font(Tellurion.font(12)).foregroundColor(Tellurion.text).lineLimit(1)
                                     Spacer()
                                 }
                                 .padding(.horizontal, 8).frame(height: 26)
-                                .background(RoundedRectangle(cornerRadius: 6).fill(docs.file == url ? Extreme.raised : .clear))
+                                .background(RoundedRectangle(cornerRadius: 6).fill(docs.file == url ? Tellurion.raised : .clear))
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -378,9 +378,9 @@ struct StudioDocumentsView: View {
 
     private var projectRow: some View {
         HStack(spacing: 6) {
-            Image(systemName: "folder").font(.system(size: 11)).foregroundColor(Extreme.dim)
+            Image(systemName: "folder").font(.system(size: 11)).foregroundColor(Tellurion.dim)
             Text(docs.project.map { ($0 as NSString).abbreviatingWithTildeInPath } ?? "Choose a project")
-                .font(Extreme.mono(11)).foregroundColor(Extreme.muted).lineLimit(1).truncationMode(.middle)
+                .font(Tellurion.mono(11)).foregroundColor(Tellurion.muted).lineLimit(1).truncationMode(.middle)
             Spacer()
             Button("Change…") {
                 let panel = NSOpenPanel()
@@ -400,16 +400,16 @@ struct StudioDocumentsView: View {
         let on = docs.template == template
         return Button { docs.template = template } label: {
             HStack(spacing: 9) {
-                Image(systemName: template.symbol).font(.system(size: 12)).foregroundColor(on ? Extreme.core : Extreme.muted).frame(width: 18)
+                Image(systemName: template.symbol).font(.system(size: 12)).foregroundColor(on ? Tellurion.core : Tellurion.muted).frame(width: 18)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(template.title).font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text)
-                    Text(template.subtitle).font(Extreme.font(10.5)).foregroundColor(Extreme.dim)
+                    Text(template.title).font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text)
+                    Text(template.subtitle).font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim)
                 }
                 Spacer()
                 if done { Image(systemName: "checkmark.circle.fill").font(.system(size: 11)).foregroundColor(.green) }
             }
             .padding(.horizontal, 8).padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 8).fill(on ? Extreme.raised : .clear))
+            .background(RoundedRectangle(cornerRadius: 8).fill(on ? Tellurion.raised : .clear))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -422,31 +422,31 @@ struct StudioDocumentsView: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(MarkdownHTML.title(docs.markdown) ?? docs.template?.title ?? "Document")
-                        .font(Extreme.font(14, weight: .semibold)).foregroundColor(Extreme.text).lineLimit(1)
+                        .font(Tellurion.font(14, weight: .semibold)).foregroundColor(Tellurion.text).lineLimit(1)
                     if !docs.running, !docs.markdown.isEmpty {
                         let stats = MarkdownHTML.stats(docs.markdown)
-                        Text("\(stats.words) words · ~\(stats.minutes) min read").font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                        Text("\(stats.words) words · ~\(stats.minutes) min read").font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
                     }
                 }
                 Spacer()
                 if let phase = docs.phase { statusChip(phase) }
                 if docs.running {
                     Button { docs.stop() } label: {
-                        Label("Stop", systemImage: "stop.fill").font(Extreme.font(11.5, weight: .semibold)).foregroundColor(.red)
+                        Label("Stop", systemImage: "stop.fill").font(Tellurion.font(11.5, weight: .semibold)).foregroundColor(.red)
                     }
                     .buttonStyle(.plain)
                 } else if !docs.markdown.isEmpty {
                     toolbar
                 }
                 Button(action: close) {
-                    Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundColor(Extreme.muted)
-                        .frame(width: 26, height: 26).background(Circle().fill(Extreme.raised))
+                    Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundColor(Tellurion.muted)
+                        .frame(width: 26, height: 26).background(Circle().fill(Tellurion.raised))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Close")
             }
             .padding(.horizontal, 18).frame(height: 60)
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             if docs.markdown.isEmpty && !docs.running {
                 emptyPage
             } else {
@@ -458,11 +458,11 @@ struct StudioDocumentsView: View {
     private func statusChip(_ phase: HeadlessAgent.Phase) -> some View {
         HStack(spacing: 6) {
             ProgressView().controlSize(.mini)
-            Text(Self.phaseText(phase, docs.engine) + " · ").font(Extreme.font(11.5, weight: .medium)).foregroundColor(Extreme.text)
-                + Text(docs.started ?? Date(), style: .timer).font(Extreme.font(11.5, weight: .medium).monospacedDigit()).foregroundColor(Extreme.text)
+            Text(Self.phaseText(phase, docs.engine) + " · ").font(Tellurion.font(11.5, weight: .medium)).foregroundColor(Tellurion.text)
+                + Text(docs.started ?? Date(), style: .timer).font(Tellurion.font(11.5, weight: .medium).monospacedDigit()).foregroundColor(Tellurion.text)
         }
         .padding(.horizontal, 10).frame(height: 26)
-        .background(Capsule().fill(Extreme.raised))
+        .background(Capsule().fill(Tellurion.raised))
     }
 
     static func phaseText(_ phase: HeadlessAgent.Phase, _ engine: HeadlessAgent.Engine) -> String {
@@ -489,8 +489,8 @@ struct StudioDocumentsView: View {
             Button {
                 StudioDocs.exportPDF(markdown: docs.markdown, title: MarkdownHTML.title(docs.markdown) ?? "Document", from: controller.window)
             } label: {
-                Text("Export PDF").font(Extreme.font(11.5, weight: .semibold)).foregroundColor(Extreme.ink)
-                    .padding(.horizontal, 12).frame(height: 26).background(Capsule().fill(Extreme.core))
+                Text("Export PDF").font(Tellurion.font(11.5, weight: .semibold)).foregroundColor(Tellurion.ink)
+                    .padding(.horizontal, 12).frame(height: 26).background(Capsule().fill(Tellurion.core))
             }
             .buttonStyle(.plain)
         }
@@ -498,8 +498,8 @@ struct StudioDocumentsView: View {
 
     private func icon(_ symbol: String, _ help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 11.5, weight: .medium)).foregroundColor(Extreme.text)
-                .frame(width: 28, height: 26).background(RoundedRectangle(cornerRadius: 7).fill(Extreme.raised))
+            Image(systemName: symbol).font(.system(size: 11.5, weight: .medium)).foregroundColor(Tellurion.text)
+                .frame(width: 28, height: 26).background(RoundedRectangle(cornerRadius: 7).fill(Tellurion.raised))
         }
         .buttonStyle(.plain)
         .help(help)
@@ -509,20 +509,20 @@ struct StudioDocumentsView: View {
     private var emptyPage: some View {
         VStack(spacing: 12) {
             Spacer()
-            Image(systemName: docs.template?.symbol ?? "doc.text").font(.system(size: 30, weight: .light)).foregroundColor(Extreme.muted)
-            Text(docs.template?.title ?? "Document").font(Extreme.font(16, weight: .semibold)).foregroundColor(Extreme.text)
-            Text(docs.template?.subtitle ?? "").font(Extreme.font(12)).foregroundColor(Extreme.muted)
+            Image(systemName: docs.template?.symbol ?? "doc.text").font(.system(size: 30, weight: .light)).foregroundColor(Tellurion.muted)
+            Text(docs.template?.title ?? "Document").font(Tellurion.font(16, weight: .semibold)).foregroundColor(Tellurion.text)
+            Text(docs.template?.subtitle ?? "").font(Tellurion.font(12)).foregroundColor(Tellurion.muted)
             if let error = docs.error {
-                Text(error).font(Extreme.font(11.5)).foregroundColor(.red).multilineTextAlignment(.center).padding(.horizontal, 60)
+                Text(error).font(Tellurion.font(11.5)).foregroundColor(.red).multilineTextAlignment(.center).padding(.horizontal, 60)
             }
             Button { docs.generate() } label: {
                 Label("Generate with \(docs.engine.title)", systemImage: "sparkle")
-                    .font(Extreme.font(12.5, weight: .semibold)).foregroundColor(Extreme.ink)
-                    .padding(.horizontal, 16).frame(height: 32).background(Capsule().fill(Extreme.core))
+                    .font(Tellurion.font(12.5, weight: .semibold)).foregroundColor(Tellurion.ink)
+                    .padding(.horizontal, 16).frame(height: 32).background(Capsule().fill(Tellurion.core))
             }
             .buttonStyle(.plain)
             .disabled(docs.project == nil)
-            Text("Saved to this project's library when it finishes.").font(Extreme.font(11)).foregroundColor(Extreme.dim)
+            Text("Saved to this project's library when it finishes.").font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
             Spacer()
         }
         .frame(maxWidth: .infinity)

@@ -159,7 +159,7 @@ final class BoardAccounts: ObservableObject {
 extension BoardController {
     /// Points a new tile's agents at the active profiles, and remembers which they were.
     func applyAccounts(_ config: inout Ghostty.SurfaceConfiguration, chosen: [BoardAccount.Provider: UUID]? = nil) -> [BoardAccount.Provider: UUID] {
-        guard ExtremeSettings.isOn(.accounts) else { return [:] }
+        guard TellurionSettings.isOn(.accounts) else { return [:] }
         let chosen = chosen ?? BoardAccounts.shared.active
         config.environmentVariables.merge(BoardAccounts.shared.environment(chosen)) { $1 }
         return chosen
@@ -167,7 +167,7 @@ extension BoardController {
 
     /// The profile a tile's running agent signed in with, if not your usual one.
     func account(of surface: Ghostty.SurfaceView) -> BoardAccount? {
-        guard ExtremeSettings.isOn(.accounts), let kind = VerticalTabsAgents.shared.info(for: surface)?.kind,
+        guard TellurionSettings.isOn(.accounts), let kind = VerticalTabsAgents.shared.info(for: surface)?.kind,
               let provider = BoardAccount.Provider.allCases.first(where: { $0.kind == kind }) else { return nil }
         return BoardAccounts.shared.account(model.tileAccounts[surface.id]?[provider])
     }
@@ -270,7 +270,7 @@ struct BoardAccountsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Accounts").font(Extreme.font(16, weight: .semibold)).foregroundColor(Extreme.text)
+                Text("Accounts").font(Tellurion.font(16, weight: .semibold)).foregroundColor(Tellurion.text)
                 Spacer()
                 Picker("", selection: $provider) {
                     ForEach(BoardAccount.Provider.allCases) { Text($0.title).tag($0) }
@@ -281,7 +281,7 @@ struct BoardAccountsView: View {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "key.fill").foregroundColor(.yellow)
                     Text("Claude Code may keep its sign-in in your Mac's keychain, which profiles can't fully separate. After switching, check the account with /status in the tile.")
-                        .font(Extreme.font(11.5)).foregroundColor(Extreme.muted).fixedSize(horizontal: false, vertical: true)
+                        .font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted).fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(10)
                 .background(RoundedRectangle(cornerRadius: 9).fill(Color.yellow.opacity(0.08)))
@@ -293,7 +293,7 @@ struct BoardAccountsView: View {
                 }
             }
             if provider == .codex { veniceModels }
-            ExtremeSectionLabel("Connect another account")
+            TellurionSectionLabel("Connect another account")
             HStack(spacing: 8) {
                 TextField("e.g. Personal Max", text: $name).textFieldStyle(.roundedBorder)
                 Button("Connect") {
@@ -302,10 +302,10 @@ struct BoardAccountsView: View {
                     controller.connect(account)
                     isPresented = false
                 }
-                .buttonStyle(ExtremeButtonStyle(prominent: true))
+                .buttonStyle(TellurionButtonStyle(prominent: true))
             }
             Text("Opens a \(provider.title) tile where its own sign-in runs. New \(provider.title) tiles use the account marked Active.")
-                .font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                .font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
             HStack {
                 Spacer()
                 Button("Done") { isPresented = false }.keyboardShortcut(.defaultAction)
@@ -313,7 +313,7 @@ struct BoardAccountsView: View {
         }
         .padding(20)
         .frame(width: 520)
-        .background(Extreme.panel)
+        .background(Tellurion.panel)
     }
 
     /// Codex with its usual setup, its model requests going to Venice.
@@ -331,7 +331,7 @@ struct BoardAccountsView: View {
             .onAppear { venice.refreshIfEmpty() }
         } else {
             Button("Connect Venice…") { LocalModelsWindow.show() }
-                .buttonStyle(ExtremeButtonStyle())
+                .buttonStyle(TellurionButtonStyle())
                 .help("Run Codex on abliterated and other models from your own Venice account")
         }
     }
@@ -339,22 +339,22 @@ struct BoardAccountsView: View {
     private func row(_ account: BoardAccount?, title: String, detail: String) -> some View {
         let active = store.active[provider] == account?.id
         return HStack(spacing: 10) {
-            Text(account?.initials ?? "ME").font(Extreme.font(11, weight: .bold)).foregroundColor(Extreme.ink)
+            Text(account?.initials ?? "ME").font(Tellurion.font(11, weight: .bold)).foregroundColor(Tellurion.ink)
                 .frame(width: 30, height: 30)
-                .background(RoundedRectangle(cornerRadius: 8).fill(account == nil ? Extreme.muted : Extreme.core))
+                .background(RoundedRectangle(cornerRadius: 8).fill(account == nil ? Tellurion.muted : Tellurion.core))
             VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(Extreme.font(12.5, weight: .semibold)).foregroundColor(Extreme.text)
-                Text(detail).font(Extreme.font(11)).foregroundColor(Extreme.dim)
+                Text(title).font(Tellurion.font(12.5, weight: .semibold)).foregroundColor(Tellurion.text)
+                Text(detail).font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
             }
             Spacer()
             if active {
-                Text("● ACTIVE").font(Extreme.font(10, weight: .bold)).foregroundColor(Extreme.core)
+                Text("● ACTIVE").font(Tellurion.font(10, weight: .bold)).foregroundColor(Tellurion.core)
             } else {
                 Button("Use") {
                     if let account, account.isVenice, !controller.prepareVenice(account) { return }
                     store.use(account?.id, for: provider)
                 }
-                .buttonStyle(ExtremeButtonStyle(prominent: true))
+                .buttonStyle(TellurionButtonStyle(prominent: true))
             }
             if let account {
                 Button { controller.connect(account) } label: { Image(systemName: "terminal") }
@@ -367,10 +367,10 @@ struct BoardAccountsView: View {
                     .buttonStyle(.plain).help("Remove this account and its sign-in")
             }
         }
-        .foregroundColor(Extreme.muted)
+        .foregroundColor(Tellurion.muted)
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Extreme.raised))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(active ? Extreme.core.opacity(0.6) : .clear))
+        .background(RoundedRectangle(cornerRadius: 10).fill(Tellurion.raised))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(active ? Tellurion.core.opacity(0.6) : .clear))
     }
 }
 #endif

@@ -57,8 +57,8 @@ enum BoardTool: String, CaseIterable, Identifiable {
     /// Off when its feature is turned off in Settings.
     var available: Bool {
         switch self {
-        case .pen, .eraser, .text: return ExtremeSettings.isOn(.ink)
-        case .web: return ExtremeSettings.isOn(.webTiles)
+        case .pen, .eraser, .text: return TellurionSettings.isOn(.ink)
+        case .web: return TellurionSettings.isOn(.webTiles)
         default: return true
         }
     }
@@ -162,20 +162,20 @@ extension BoardController {
 struct BoardToolPalette: View {
     let controller: BoardController
     @ObservedObject var model: BoardModel
-    @ObservedObject private var settings = ExtremeSettings.shared
+    @ObservedObject private var settings = TellurionSettings.shared
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(spacing: 2) {
                 ForEach(BoardTool.allCases.filter(\.available)) { tool in
                     if tool == .text || tool == .web || tool == .fit {
-                        Rectangle().fill(Extreme.line).frame(width: 18, height: 1).padding(.vertical, 3)
+                        Rectangle().fill(Tellurion.line).frame(width: 18, height: 1).padding(.vertical, 3)
                     }
                     Button { controller.choose(tool) } label: {
                         Image(systemName: tool.symbol).font(.system(size: 12.5, weight: .medium))
-                            .foregroundColor(model.tool == tool ? Extreme.ink : Extreme.text.opacity(0.85))
+                            .foregroundColor(model.tool == tool ? Tellurion.ink : Tellurion.text.opacity(0.85))
                             .frame(width: 30, height: 30)
-                            .background(Circle().fill(model.tool == tool ? Extreme.core : .clear))
+                            .background(Circle().fill(model.tool == tool ? Tellurion.core : .clear))
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -184,8 +184,8 @@ struct BoardToolPalette: View {
                 }
             }
             .padding(5)
-            .background(Capsule(style: .continuous).fill(Extreme.panel.opacity(0.96)))
-            .overlay(Capsule(style: .continuous).strokeBorder(Extreme.lineStrong))
+            .background(Capsule(style: .continuous).fill(Tellurion.panel.opacity(0.96)))
+            .overlay(Capsule(style: .continuous).strokeBorder(Tellurion.lineStrong))
             .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
             if model.tool == .pen { inkFlyout }
         }
@@ -194,25 +194,25 @@ struct BoardToolPalette: View {
     /// The pen's color and width.
     private var inkFlyout: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("COLOR").font(Extreme.font(9.5, weight: .bold)).foregroundColor(Extreme.dim).tracking(0.6)
+            Text("COLOR").font(Tellurion.font(9.5, weight: .bold)).foregroundColor(Tellurion.dim).tracking(0.6)
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(22), spacing: 6), count: 4), spacing: 6) {
                 ForEach(BoardInk.colors.indices, id: \.self) { index in
                     Button { model.inkColor = index } label: {
                         Circle().fill(Color(nsColor: BoardInk.color(index))).frame(width: 18, height: 18)
-                            .overlay(Circle().strokeBorder(model.inkColor == index ? Extreme.text : .clear, lineWidth: 2).padding(-3))
+                            .overlay(Circle().strokeBorder(model.inkColor == index ? Tellurion.text : .clear, lineWidth: 2).padding(-3))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(BoardLabelView.colorNames[index])
                 }
             }
-            Text("WIDTH").font(Extreme.font(9.5, weight: .bold)).foregroundColor(Extreme.dim).tracking(0.6)
+            Text("WIDTH").font(Tellurion.font(9.5, weight: .bold)).foregroundColor(Tellurion.dim).tracking(0.6)
             HStack(spacing: 6) {
                 ForEach(BoardInk.widths.indices, id: \.self) { index in
                     let width = BoardInk.widths[index]
                     Button { model.inkWidth = width } label: {
-                        Circle().fill(Extreme.text).frame(width: 3 + width, height: 3 + width)
+                        Circle().fill(Tellurion.text).frame(width: 3 + width, height: 3 + width)
                             .frame(width: 22, height: 22)
-                            .background(RoundedRectangle(cornerRadius: 6).strokeBorder(model.inkWidth == width ? Extreme.core : .clear, lineWidth: 1.5))
+                            .background(RoundedRectangle(cornerRadius: 6).strokeBorder(model.inkWidth == width ? Tellurion.core : .clear, lineWidth: 1.5))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Width \(index + 1)")
@@ -220,8 +220,8 @@ struct BoardToolPalette: View {
             }
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Extreme.panel.opacity(0.97)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Extreme.lineStrong))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Tellurion.panel.opacity(0.97)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tellurion.lineStrong))
         .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
         .transition(.opacity)
     }
@@ -233,7 +233,7 @@ struct BoardToolPalette: View {
 struct BoardSidePalette: View {
     let controller: BoardController
     @ObservedObject var model: BoardModel
-    @ObservedObject private var settings = ExtremeSettings.shared
+    @ObservedObject private var settings = TellurionSettings.shared
     @State private var showLayers = false
     @State private var showDiagrams = false
 
@@ -242,37 +242,37 @@ struct BoardSidePalette: View {
             button("square.3.layers.3d", "Layers") { showLayers.toggle() }
                 .popover(isPresented: $showLayers, arrowEdge: .leading) { BoardLayersList(controller: controller, model: model) }
             button("checklist", "Tasks") { showTasks() }
-            if ExtremeSettings.isOn(.missionMap) {
+            if TellurionSettings.isOn(.missionMap) {
                 button("point.3.filled.connected.trianglepath.dotted", "Mission Map") {
                     withAnimation(.easeOut(duration: 0.18)) { model.showMissionMap = true }
                 }
             }
-            if ExtremeSettings.isOn(.documents) {
+            if TellurionSettings.isOn(.documents) {
                 button("doc.richtext", "Documents") { controller.showDocuments() }
             }
-            if ExtremeSettings.isOn(.diagrams) {
+            if TellurionSettings.isOn(.diagrams) {
                 button("flowchart", "Diagrams") { showDiagrams.toggle() }
                     .popover(isPresented: $showDiagrams, arrowEdge: .leading) {
                         StudioDiagramsPanel(diagrams: controller.diagrams) { showDiagrams = false }
                     }
             }
             button("folder", "Files and changes") { showFiles() }
-            if ExtremeSettings.isOn(.accounts) {
+            if TellurionSettings.isOn(.accounts) {
                 button("person.2.circle", "Accounts") { model.showAccounts = true }
             }
             button("house", "Home: every project and board") { BoardHome.show() }
             button("arrow.triangle.2.circlepath", "Review loop for the focused agent") { showLoops() }
         }
         .padding(5)
-        .background(Capsule(style: .continuous).fill(Extreme.panel.opacity(0.96)))
-        .overlay(Capsule(style: .continuous).strokeBorder(Extreme.lineStrong))
+        .background(Capsule(style: .continuous).fill(Tellurion.panel.opacity(0.96)))
+        .overlay(Capsule(style: .continuous).strokeBorder(Tellurion.lineStrong))
         .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
     }
 
     private func button(_ symbol: String, _ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 12.5, weight: .medium))
-                .foregroundColor(Extreme.text.opacity(0.85))
+                .foregroundColor(Tellurion.text.opacity(0.85))
                 .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
         }
@@ -303,7 +303,7 @@ struct BoardSidePalette: View {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: folder)])
             })
         }
-        if ExtremeSettings.isOn(.review) {
+        if TellurionSettings.isOn(.review) {
             menu.addItem(ClosureMenuItem("Review Changes", image: nil) { ReviewInbox.toggle() })
         }
         popUp(menu)
@@ -332,7 +332,7 @@ private struct BoardLayersList: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 2) {
-                Text("LAYERS").font(Extreme.font(9.5, weight: .bold)).foregroundColor(Extreme.dim).tracking(0.6)
+                Text("LAYERS").font(Tellurion.font(9.5, weight: .bold)).foregroundColor(Tellurion.dim).tracking(0.6)
                     .padding(.horizontal, 8).padding(.top, 4)
                 ForEach(rows, id: \.id) { row in
                     Button {
@@ -340,8 +340,8 @@ private struct BoardLayersList: View {
                         controller.zoom(toNode: row.id)
                     } label: {
                         HStack(spacing: 8) {
-                            Image(systemName: row.symbol).font(.system(size: 10.5)).foregroundColor(Extreme.muted).frame(width: 16)
-                            Text(row.title).font(Extreme.font(12)).foregroundColor(Extreme.text).lineLimit(1)
+                            Image(systemName: row.symbol).font(.system(size: 10.5)).foregroundColor(Tellurion.muted).frame(width: 16)
+                            Text(row.title).font(Tellurion.font(12)).foregroundColor(Tellurion.text).lineLimit(1)
                             Spacer()
                         }
                         .padding(.horizontal, 8).frame(height: 26)
@@ -353,7 +353,7 @@ private struct BoardLayersList: View {
             .padding(6)
         }
         .frame(width: 240, height: min(CGFloat(rows.count) * 28 + 40, 420))
-        .background(Extreme.panel)
+        .background(Tellurion.panel)
     }
 
     /// Front to back.
@@ -376,7 +376,7 @@ private struct BoardLayersList: View {
 struct BoardRadialMenu: View {
     let controller: BoardController
     @ObservedObject var model: BoardModel
-    @ObservedObject private var settings = ExtremeSettings.shared
+    @ObservedObject private var settings = TellurionSettings.shared
 
     private struct Item {
         let symbol: String
@@ -384,7 +384,7 @@ struct BoardRadialMenu: View {
         let run: (BoardController, CGPoint) -> Void
     }
 
-    private static var items: [Item] { allItems.filter { $0.title != "Web" || ExtremeSettings.isOn(.webTiles) } }
+    private static var items: [Item] { allItems.filter { $0.title != "Web" || TellurionSettings.isOn(.webTiles) } }
 
     private static let allItems: [Item] = [
         Item(symbol: "square.grid.2x2", title: "Group…") { board, _ in board.choose(.group) },
@@ -414,12 +414,12 @@ struct BoardRadialMenu: View {
                         item.run(controller, radial.board)
                     } label: {
                         VStack(spacing: 3) {
-                            Image(systemName: item.symbol).font(.system(size: 14, weight: .medium)).foregroundColor(Extreme.text)
+                            Image(systemName: item.symbol).font(.system(size: 14, weight: .medium)).foregroundColor(Tellurion.text)
                                 .frame(width: 40, height: 40)
-                                .background(Circle().fill(Extreme.panel.opacity(0.97)))
-                                .overlay(Circle().strokeBorder(Extreme.lineStrong))
+                                .background(Circle().fill(Tellurion.panel.opacity(0.97)))
+                                .overlay(Circle().strokeBorder(Tellurion.lineStrong))
                                 .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
-                            Text(item.title).font(Extreme.font(10.5, weight: .medium)).foregroundColor(Extreme.muted)
+                            Text(item.title).font(Tellurion.font(10.5, weight: .medium)).foregroundColor(Tellurion.muted)
                         }
                     }
                     .buttonStyle(.plain)

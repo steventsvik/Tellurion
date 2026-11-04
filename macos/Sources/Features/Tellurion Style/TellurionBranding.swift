@@ -15,18 +15,18 @@ struct TerminalFrameOverlay: View {
 
     private enum Mode: Equatable { case idle, working, waiting }
     @State private var mode: Mode = .idle
-    @Environment(\.extremeMotion) private var motion
+    @Environment(\.tellurionMotion) private var motion
 
     var body: some View {
         Group {
             switch mode {
             // Core Animation layers: the pulse and the breath cost nothing per frame.
             case .idle:
-                FrameLights(color: Extreme.bronze.opacity(0.55))
+                FrameLights(color: Tellurion.bronze.opacity(0.55))
             case .waiting:
-                FrameLights(color: Extreme.warn, length: 20, pulse: motion)
+                FrameLights(color: Tellurion.warn, length: 20, pulse: motion)
             case .working:
-                FrameLights(color: Extreme.core.opacity(0.8), breathe: motion)
+                FrameLights(color: Tellurion.core.opacity(0.8), breathe: motion)
             }
         }
         .allowsHitTesting(false)
@@ -55,7 +55,7 @@ struct NewTabSplash: View {
     /// The logo's pixels in a fixed shuffled order, so they appear scattered.
     private let order: [(x: Int, y: Int, c: Character)] = {
         var pixels: [(x: Int, y: Int, c: Character)] = []
-        for (y, row) in ExtremeSigil.rows.enumerated() {
+        for (y, row) in TellurionSigil.rows.enumerated() {
             for (x, c) in row.enumerated() where c != "." { pixels.append((x, y, c)) }
         }
         var generator = SeededGenerator(seed: 0xE7)
@@ -76,20 +76,20 @@ struct NewTabSplash: View {
                         let count = Int(Double(order.count) * build)
                         for pixel in order.prefix(count) {
                             gc.fill(Path(CGRect(x: CGFloat(pixel.x) * px, y: CGFloat(pixel.y) * px, width: px, height: px)),
-                                    with: .color(ExtremeSigil.colors[pixel.c] ?? Extreme.bronze))
+                                    with: .color(TellurionSigil.colors[pixel.c] ?? Tellurion.bronze))
                         }
                     }
                     .frame(width: 96, height: 93)
-                    .shadow(color: Extreme.core.opacity(build >= 1 ? 0.6 : 0), radius: 10)
+                    .shadow(color: Tellurion.core.opacity(build >= 1 ? 0.6 : 0), radius: 10)
                     Text(String("TELLURION".prefix(Int(9 * min(1, max(0, (t - 0.3) / 0.5))))))
-                        .font(Extreme.font(12))
+                        .font(Tellurion.font(12))
                         .kerning(4.5)
-                        .foregroundColor(Extreme.gold)
+                        .foregroundColor(Tellurion.gold)
                         .frame(height: 16)
                 }
                 .padding(28)
-                .background(Extreme.ink.opacity(0.82))
-                .overlay(Rectangle().strokeBorder(Extreme.line, lineWidth: 1))
+                .background(Tellurion.ink.opacity(0.82))
+                .overlay(Rectangle().strokeBorder(Tellurion.line, lineWidth: 1))
                 .opacity(fade)
             }
             .allowsHitTesting(false)
@@ -133,21 +133,21 @@ struct AgentLinkSweep: View {
                     ZStack(alignment: .topLeading) {
                         if sweep < 1 {
                             Rectangle()
-                                .fill(LinearGradient(colors: [Extreme.core.opacity(0), Extreme.core.opacity(0.22)],
+                                .fill(LinearGradient(colors: [Tellurion.core.opacity(0), Tellurion.core.opacity(0.22)],
                                                      startPoint: .top, endPoint: .bottom))
                                 .frame(height: 36)
-                                .overlay(alignment: .bottom) { Rectangle().fill(Extreme.core).frame(height: 2) }
+                                .overlay(alignment: .bottom) { Rectangle().fill(Tellurion.core).frame(height: 2) }
                                 .offset(y: y - 36)
                         }
                         HStack(spacing: 7) {
-                            PixelDot(color: Extreme.core, blinking: true, size: 6, interval: 0.2)
+                            PixelDot(color: Tellurion.core, blinking: true, size: 6, interval: 0.2)
                             Text("AI LINKED · \((kind?.displayName ?? "AGENT").uppercased())")
-                                .font(Extreme.font(10.5)).kerning(1.8)
-                                .foregroundColor(Extreme.core)
+                                .font(Tellurion.font(10.5)).kerning(1.8)
+                                .foregroundColor(Tellurion.core)
                         }
                         .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(Extreme.ink.opacity(0.9))
-                        .overlay(Rectangle().strokeBorder(Extreme.core.opacity(0.6), lineWidth: 1))
+                        .background(Tellurion.ink.opacity(0.9))
+                        .overlay(Rectangle().strokeBorder(Tellurion.core.opacity(0.6), lineWidth: 1))
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(10)
                     }
@@ -175,7 +175,7 @@ struct AgentLinkSweep: View {
 /// A slow shine that passes across text every so often, in steps.
 struct GlintModifier: ViewModifier {
     var every: TimeInterval = 9
-    @Environment(\.extremeMotion) private var motion
+    @Environment(\.tellurionMotion) private var motion
 
     func body(content: Content) -> some View {
         if motion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
@@ -207,6 +207,6 @@ struct GlintModifier: ViewModifier {
 }
 
 extension View {
-    func extremeGlint(every: TimeInterval = 9) -> some View { modifier(GlintModifier(every: every)) }
+    func tellurionGlint(every: TimeInterval = 9) -> some View { modifier(GlintModifier(every: every)) }
 }
 #endif

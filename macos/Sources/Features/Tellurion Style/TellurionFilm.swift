@@ -292,13 +292,13 @@ struct BracketLights: NSViewRepresentable {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             let t: CGFloat = 2, tick: CGFloat = 8, h = bounds.height
-            let shadow = state == .working ? NSColor(Extreme.core).cgColor : color
+            let shadow = state == .working ? NSColor(Tellurion.core).cgColor : color
             spine.frame = CGRect(x: 0, y: 0, width: t, height: h)
             glow(spine, shadow, 0.5, 3)
             spine.backgroundColor = NSColor(cgColor: color)?.withAlphaComponent(0.55).cgColor
             ticks.frame = bounds
             ticks.sublayers?.forEach { $0.removeFromSuperlayer() }
-            let tickColor = state == .waiting ? NSColor(Extreme.warn).cgColor : color
+            let tickColor = state == .waiting ? NSColor(Tellurion.warn).cgColor : color
             for rect in [CGRect(x: 0, y: 0, width: tick, height: t), CGRect(x: 0, y: h - t, width: tick, height: t),
                          CGRect(x: 0, y: 0, width: t, height: tick), CGRect(x: 0, y: h - tick, width: t, height: tick)] {
                 let bar = CALayer()
@@ -324,7 +324,7 @@ struct BracketLights: NSViewRepresentable {
                     let piece = CALayer()
                     piece.anchorPoint = .zero
                     piece.frame = CGRect(x: 0, y: -segment, width: t, height: segment - 1)
-                    piece.backgroundColor = NSColor(Extreme.core).withAlphaComponent(1 - CGFloat(i) / 5).cgColor
+                    piece.backgroundColor = NSColor(Tellurion.core).withAlphaComponent(1 - CGFloat(i) / 5).cgColor
                     glow(piece, shadow, 0.5 * (1 - CGFloat(i) / 5), 3)
                     fall.addSublayer(piece)
                     let ys = (0..<steps).map { step -> NSValue in

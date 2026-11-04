@@ -135,7 +135,7 @@ class UpdateViewModel: ObservableObject {
         case .checking:
             return .secondary
         case .updateAvailable:
-            return Extreme.ink
+            return Tellurion.ink
         case .downloading, .extracting, .installing:
             return .secondary
         case .notFound:
@@ -151,7 +151,7 @@ class UpdateViewModel: ObservableObject {
         case .permissionRequest:
             return Color(nsColor: NSColor.systemBlue.blended(withFraction: 0.3, of: .black) ?? .systemBlue)
         case .updateAvailable:
-            return Extreme.gold
+            return Tellurion.gold
         case .notFound:
             return Color(nsColor: NSColor.systemBlue.blended(withFraction: 0.5, of: .black) ?? .systemBlue)
         case .error:
@@ -167,7 +167,7 @@ class UpdateViewModel: ObservableObject {
         case .permissionRequest:
             return .white
         case .updateAvailable:
-            return Extreme.ink
+            return Tellurion.ink
         case .notFound:
             return .white
         case .error:

@@ -166,11 +166,11 @@ LEAKS=$(LC_ALL=C grep -rl -a "/Users/$USER" $APP | wc -l | xargs)
 [[ $LEAKS == 0 ]] || { LC_ALL=C grep -rl -a "/Users/$USER" $APP | head -5; fail "$LEAKS files in the app contain your home path"; }
 pass "no home-folder paths in the app"
 # The test and demo switches were compiled out above; the binary shows whether that held.
-# GHOSTTY_EXTREME_TEST_HOME is the one that stays: the launch test below and test copies need it.
+# TELLURION_TEST_HOME is the one that stays: the launch test below and test copies need it.
 BIN=$APP/Contents/MacOS/ghostty
 ! LC_ALL=C grep -a -q -E 'GHOSTTY_EXTREME_(TEST_TABS|TEST_BOARD|TEST_LOG|TEST_VENICE|DEMO)' $BIN || fail "the app contains test hooks (built with TELLURION_TEST_HOOKS set)"
-LC_ALL=C grep -a -q 'GHOSTTY_EXTREME_TEST_HOME' $BIN || fail "the app lost GHOSTTY_EXTREME_TEST_HOME, which test copies and the launch test need"
-pass "no test or demo switches in the app (GHOSTTY_EXTREME_TEST_HOME kept)"
+LC_ALL=C grep -a -q 'TELLURION_TEST_HOME' $BIN || fail "the app lost TELLURION_TEST_HOME, which test copies and the launch test need"
+pass "no test or demo switches in the app (TELLURION_TEST_HOME kept)"
 # Ghostty's icons are its trademark; the only icon file in the app is Tellurion's.
 ICONS=$(cd $APP/Contents/Resources && ls *.icns(N) | grep -vx Tellurion.icns | xargs)
 [[ -z $ICONS ]] || fail "the app contains other icons: $ICONS"
@@ -248,7 +248,7 @@ CRASHES_BEFORE=$(ls ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -ci ghos
 # Its boards, prompts and hooks go to a folder of its own, not yours.
 TEST_HOME=$OUT/launch-test-home
 rm -rf $TEST_HOME && mkdir -p $TEST_HOME
-env -i HOME=$HOME USER=$USER PATH=/usr/bin:/bin:/usr/sbin:/sbin GHOSTTY_EXTREME_TEST_HOME=$TEST_HOME \
+env -i HOME=$HOME USER=$USER PATH=/usr/bin:/bin:/usr/sbin:/sbin TELLURION_TEST_HOME=$TEST_HOME \
   /usr/bin/open -gna $TEST --args --window-save-state=never
 sleep 12
 PID=$(pgrep -f "^$TEST/Contents/MacOS/ghostty" | head -1)

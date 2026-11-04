@@ -98,19 +98,19 @@ struct AboutView: View {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 96, height: 96)
-                .shadow(color: Extreme.core.opacity(0.25), radius: 18)
+                .shadow(color: Tellurion.core.opacity(0.25), radius: 18)
                 .accessibilityLabel("Tellurion")
             Text("TELLURION")
-                .font(Extreme.font(13, weight: .semibold))
+                .font(Tellurion.font(13, weight: .semibold))
                 .kerning(5)
-                .foregroundColor(Extreme.gold)
+                .foregroundColor(Tellurion.gold)
             Text("Mission control for your AI coding agents.")
                 .font(.system(size: 22, weight: .bold))
-                .foregroundColor(Extreme.text)
+                .foregroundColor(Tellurion.text)
                 .multilineTextAlignment(.center)
             Text("Run as many agents as you like and see everything they do, live.\nOne terminal, every agent, nothing hidden.")
-                .font(Extreme.font(12.5))
-                .foregroundColor(Extreme.muted)
+                .font(Tellurion.font(12.5))
+                .foregroundColor(Tellurion.muted)
                 .multilineTextAlignment(.center)
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -123,13 +123,13 @@ struct AboutView: View {
         VStack(spacing: 14) {
             HStack(spacing: 8) {
                 if let url = whatsNewURL {
-                    Button("What's new") { openURL(url) }.buttonStyle(ExtremeButtonStyle(prominent: true))
+                    Button("What's new") { openURL(url) }.buttonStyle(TellurionButtonStyle(prominent: true))
                 }
                 if let url = websiteURL {
-                    Button("Website") { openURL(url) }.buttonStyle(ExtremeButtonStyle())
+                    Button("Website") { openURL(url) }.buttonStyle(TellurionButtonStyle())
                 }
                 if let url = githubURL {
-                    Button("GitHub") { openURL(url) }.buttonStyle(ExtremeButtonStyle())
+                    Button("GitHub") { openURL(url) }.buttonStyle(TellurionButtonStyle())
                 }
             }
             versionLine
@@ -137,8 +137,8 @@ struct AboutView: View {
                 Text("Built on Ghostty by Mitchell Hashimoto and its contributors.")
                 if let copyright { Text(copyright) }
             }
-            .font(Extreme.font(10.5))
-            .foregroundColor(Extreme.dim)
+            .font(Tellurion.font(10.5))
+            .foregroundColor(Tellurion.dim)
             .multilineTextAlignment(.center)
             .textSelection(.enabled)
         }
@@ -151,20 +151,20 @@ struct AboutView: View {
             if let build, build != version { Text("·"); Text("build \(build)") }
             if let commit, !commit.isEmpty, let url = githubURL?.appendingPathComponent("commits/\(commit)") {
                 Text("·")
-                Link(destination: url) { Text(String(commit.prefix(9))).font(Extreme.mono(10.5)) }
+                Link(destination: url) { Text(String(commit.prefix(9))).font(Tellurion.mono(10.5)) }
             }
         }
-        .font(Extreme.font(11))
-        .foregroundColor(Extreme.muted)
+        .font(Tellurion.font(11))
+        .foregroundColor(Tellurion.muted)
         .textSelection(.enabled)
     }
 
     private var background: some View {
         ZStack {
-            Extreme.ink
+            Tellurion.ink
             // A soft glow behind the icon, in the core's cyan.
-            RadialGradient(colors: [Extreme.core.opacity(0.10), .clear], center: .top, startRadius: 10, endRadius: 320)
-            LinearGradient(colors: [.clear, Extreme.gold.opacity(0.05)], startPoint: .top, endPoint: .bottom)
+            RadialGradient(colors: [Tellurion.core.opacity(0.10), .clear], center: .top, startRadius: 10, endRadius: 320)
+            LinearGradient(colors: [.clear, Tellurion.gold.opacity(0.05)], startPoint: .top, endPoint: .bottom)
         }
         .ignoresSafeArea()
     }
@@ -177,17 +177,17 @@ struct AboutView: View {
             HStack(alignment: .top, spacing: 11) {
                 Image(systemName: highlight.symbol)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(Extreme.gold)
+                    .foregroundColor(Tellurion.gold)
                     .frame(width: 30, height: 30)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Extreme.ink))
-                    .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Extreme.line, lineWidth: 1))
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Tellurion.ink))
+                    .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Tellurion.line, lineWidth: 1))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(highlight.title)
-                        .font(Extreme.font(12.5, weight: .semibold))
-                        .foregroundColor(Extreme.text)
+                        .font(Tellurion.font(12.5, weight: .semibold))
+                        .foregroundColor(Tellurion.text)
                     Text(highlight.detail)
-                        .font(Extreme.font(11))
-                        .foregroundColor(Extreme.muted)
+                        .font(Tellurion.font(11))
+                        .foregroundColor(Tellurion.muted)
                         .lineSpacing(1.5)
                         .lineLimit(3)
                 }
@@ -196,8 +196,8 @@ struct AboutView: View {
             .padding(12)
             // One height for every card, so the grid lines up.
             .frame(maxWidth: .infinity, minHeight: 88, maxHeight: 88, alignment: .topLeading)
-            .background(shape.fill(Extreme.panel))
-            .overlay(shape.strokeBorder(Extreme.line, lineWidth: 1))
+            .background(shape.fill(Tellurion.panel))
+            .overlay(shape.strokeBorder(Tellurion.line, lineWidth: 1))
         }
     }
 }

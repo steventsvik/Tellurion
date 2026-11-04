@@ -63,20 +63,20 @@ struct AgentMessagesLine: View {
                     .accessibilityLabel("Dismiss the finished review loop")
                 }
             }
-            .font(Extreme.font(10))
-            .foregroundColor(pipeline.isActive ? Extreme.core : Extreme.muted)
+            .font(Tellurion.font(10))
+            .foregroundColor(pipeline.isActive ? Tellurion.core : Tellurion.muted)
             if let pending = pipeline.pending, let target = pending.to == .writer ? pipeline.writer : pipeline.reviewer {
                 HStack(spacing: 6) {
                     Button { AgentPipelines.shared.sendPending(pipeline.id) } label: {
                         Text(pending.to == .reviewer ? "Send for review" : "Send feedback")
                     }
-                    .buttonStyle(ExtremeButtonStyle(prominent: true))
+                    .buttonStyle(TellurionButtonStyle(prominent: true))
                     .controlSize(.small)
                     .help("Types it into \(VerticalTabsAgents.shared.info(for: target)?.kind.displayName ?? "the agent") once it's between turns")
                     Button("Auto") { AgentPipelines.shared.setAutoSend(true, for: pipeline.id) }
                         .buttonStyle(.plain)
-                        .font(Extreme.font(10))
-                        .foregroundColor(Extreme.muted)
+                        .font(Tellurion.font(10))
+                        .foregroundColor(Tellurion.muted)
                         .help("Send this and every later round without asking")
                 }
             }
@@ -110,8 +110,8 @@ struct AgentMessagesLine: View {
             .help("Don't send it")
             .accessibilityLabel("Don't send \(delivery.label)")
         }
-        .font(Extreme.font(10))
-        .foregroundColor(delivery.state == .blockedByTypedText ? Extreme.warn : Extreme.muted)
+        .font(Tellurion.font(10))
+        .foregroundColor(delivery.state == .blockedByTypedText ? Tellurion.warn : Tellurion.muted)
     }
 }
 
@@ -156,16 +156,16 @@ private struct PipelineSetupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                ExtremeWindowTitle(icon: .restart, title: "Review Loop",
+                TellurionWindowTitle(icon: .restart, title: "Review Loop",
                                    subtitle: "\(writerName) writes, another agent reviews, in rounds")
                 Spacer()
             }
             .padding(.horizontal, 16).padding(.top, 30).padding(.bottom, 12)
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
-                        ExtremeSectionLabel("Reviewer")
+                        TellurionSectionLabel("Reviewer")
                         ForEach(AgentHandoff.targets, id: \.self) { kind in
                             radio("New \(kind.displayName) beside this pane", selected: existing == nil && newReviewer == kind) {
                                 existing = nil
@@ -179,7 +179,7 @@ private struct PipelineSetupView: View {
                         }
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                        ExtremeSectionLabel("How it runs")
+                        TellurionSectionLabel("How it runs")
                         Toggle(isOn: $reviewNow) {
                             labelled("Review the current changes now", "Otherwise the first review follows \(writerName)'s next turn")
                         }
@@ -197,23 +197,23 @@ private struct PipelineSetupView: View {
                     CHANGES NEEDED. Its findings go back to \(writerName). Messages are only typed into an agent between \
                     turns, into an empty input box.
                     """)
-                    .font(Extreme.font(11)).foregroundColor(Extreme.muted)
+                    .font(Tellurion.font(11)).foregroundColor(Tellurion.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(16)
             }
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             HStack {
                 Spacer()
                 Button("Cancel") { AgentToolWindows.close(id: "pipeline") }
                 Button("Start") { start() }
-                    .buttonStyle(ExtremeButtonStyle(prominent: true))
+                    .buttonStyle(TellurionButtonStyle(prominent: true))
                     .keyboardShortcut(.defaultAction)
                     .disabled(writer == nil)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
         }
-        .extremeWindow()
+        .tellurionWindow()
     }
 
     private func start() {
@@ -234,8 +234,8 @@ private struct PipelineSetupView: View {
 
     private func labelled(_ title: String, _ detail: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(title).font(Extreme.font(12, weight: .semibold)).foregroundColor(Extreme.text)
-            Text(detail).font(Extreme.font(10.5)).foregroundColor(Extreme.muted).fixedSize(horizontal: false, vertical: true)
+            Text(title).font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text)
+            Text(detail).font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -243,8 +243,8 @@ private struct PipelineSetupView: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: selected ? "largecircle.fill.circle" : "circle")
-                    .foregroundColor(selected ? Extreme.gold : Extreme.dim)
-                Text(title).font(Extreme.font(12)).foregroundColor(Extreme.text)
+                    .foregroundColor(selected ? Tellurion.gold : Tellurion.dim)
+                Text(title).font(Tellurion.font(12)).foregroundColor(Tellurion.text)
                 Spacer(minLength: 0)
             }
             .contentShape(Rectangle())

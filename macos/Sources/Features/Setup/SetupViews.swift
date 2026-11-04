@@ -19,10 +19,10 @@ enum SetupCheckWindow {
 extension SetupCheck.Status {
     var color: Color {
         switch self {
-        case .ok: return Extreme.live
-        case .info: return Extreme.muted
-        case .warning: return Extreme.warn
-        case .problem: return Extreme.danger
+        case .ok: return Tellurion.live
+        case .info: return Tellurion.muted
+        case .warning: return Tellurion.warn
+        case .problem: return Tellurion.danger
         }
     }
 
@@ -43,39 +43,39 @@ private struct SetupCheckView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     if store.checks.isEmpty {
-                        Text("Checking…").font(Extreme.font(12)).foregroundColor(Extreme.muted)
+                        Text("Checking…").font(Tellurion.font(12)).foregroundColor(Tellurion.muted)
                     }
                     ForEach(SetupCheck.Section.allCases, id: \.self) { section in
                         let checks = store.checks.filter { $0.section == section }
                         if !checks.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
-                                ExtremeSectionLabel(section.rawValue)
+                                TellurionSectionLabel(section.rawValue)
                                 ForEach(checks) { SetupCheckRow(check: $0) }
                             }
                         }
                     }
                     if let error = store.fixError {
                         Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .font(Extreme.font(11.5)).foregroundColor(Extreme.danger)
+                            .font(Tellurion.font(11.5)).foregroundColor(Tellurion.danger)
                             .textSelection(.enabled)
                     }
                 }
                 .padding(16)
             }
-            Rectangle().fill(Extreme.line).frame(height: 1)
+            Rectangle().fill(Tellurion.line).frame(height: 1)
             footer
         }
-        .extremeWindow()
+        .tellurionWindow()
         .onAppear { store.refresh() }
     }
 
     private var header: some View {
         HStack(spacing: 14) {
-            ExtremeWindowTitle(icon: .bolt, title: "Setup Check", subtitle: summary)
+            TellurionWindowTitle(icon: .bolt, title: "Setup Check", subtitle: summary)
             Spacer()
             Button { store.refresh() } label: {
                 Label(store.running ? "Checking…" : "Check again", systemImage: "arrow.clockwise")
@@ -99,7 +99,7 @@ private struct SetupCheckView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             Text("In a terminal: tellurion doctor")
-                .font(Extreme.mono(11)).foregroundColor(Extreme.dim)
+                .font(Tellurion.mono(11)).foregroundColor(Tellurion.dim)
                 .textSelection(.enabled)
             Spacer()
             Button(copied ? "Copied" : "Copy report") { copyReport() }
@@ -147,11 +147,11 @@ struct SetupCheckRow: View {
                 .frame(width: 16)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
-                Text(check.title).font(Extreme.font(12.5, weight: .semibold)).foregroundColor(Extreme.text)
+                Text(check.title).font(Tellurion.font(12.5, weight: .semibold)).foregroundColor(Tellurion.text)
                 if !check.detail.isEmpty {
                     Text(check.detail)
-                        .font(Extreme.font(11.5, weight: .regular))
-                        .foregroundColor(Extreme.muted)
+                        .font(Tellurion.font(11.5, weight: .regular))
+                        .foregroundColor(Tellurion.muted)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                 }
@@ -159,15 +159,15 @@ struct SetupCheckRow: View {
             Spacer(minLength: 8)
             if let alternative = check.alternative {
                 Button(alternative.title) { SetupChecks.shared.apply(alternative) }
-                    .buttonStyle(ExtremeButtonStyle())
+                    .buttonStyle(TellurionButtonStyle())
             }
             if let fix = check.fix {
                 Button(fix.title) { SetupChecks.shared.apply(fix) }
-                    .buttonStyle(ExtremeButtonStyle(prominent: check.status >= .warning && fix != .liveTest))
+                    .buttonStyle(TellurionButtonStyle(prominent: check.status >= .warning && fix != .liveTest))
             }
         }
         .padding(compact ? 8 : 10)
-        .extremePanel(fill: compact ? Extreme.raised : Extreme.panel)
+        .tellurionPanel(fill: compact ? Tellurion.raised : Tellurion.panel)
     }
 }
 
@@ -179,10 +179,10 @@ struct SetupSidebarChip: View {
 
     var body: some View {
         if store.showLivePass {
-            chip(color: Extreme.live, text: "Agent status works · test event arrived", symbol: "checkmark")
+            chip(color: Tellurion.live, text: "Agent status works · test event arrived", symbol: "checkmark")
         } else if let first = store.problems.first {
             let count = store.problems.count
-            chip(color: Extreme.danger,
+            chip(color: Tellurion.danger,
                  text: count == 1 ? first.title : "Agent status: \(count) things to fix",
                  symbol: "chevron.right")
         }
@@ -193,13 +193,13 @@ struct SetupSidebarChip: View {
             HStack(spacing: 6) {
                 PixelDot(color: color, size: 5)
                 Text(text)
-                    .font(Extreme.font(11, weight: .medium))
+                    .font(Tellurion.font(11, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Spacer(minLength: 0)
                 Image(systemName: symbol).font(.system(size: 9, weight: .semibold))
             }
-            .foregroundColor(hovering ? Extreme.gold : color)
+            .foregroundColor(hovering ? Tellurion.gold : color)
             .padding(.horizontal, 10).padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(color.opacity(hovering ? 0.16 : 0.1)))
             .contentShape(Rectangle())

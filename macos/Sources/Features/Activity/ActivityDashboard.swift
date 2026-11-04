@@ -8,7 +8,7 @@ enum ActivityDashboard {
     static let windowID = "activity"
 
     static func toggle() {
-        guard ExtremeSettings.isOn(.activity) || AgentToolWindows.isOpen(windowID) else { return }
+        guard TellurionSettings.isOn(.activity) || AgentToolWindows.isOpen(windowID) else { return }
         if AgentToolWindows.isOpen(windowID) {
             AgentToolWindows.close(id: windowID)
         } else {
@@ -309,7 +309,7 @@ private struct ActivityDashboardView: View {
     private var header: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                ExtremeWindowTitle(icon: nil, title: "Agent Activity",
+                TellurionWindowTitle(icon: nil, title: "Agent Activity",
                                    subtitle: "From Claude Code and Codex session history on this Mac", sigil: true)
                 Spacer()
                 if model.loading { ProgressView().controlSize(.small) }
@@ -347,11 +347,11 @@ private struct ActivityDashboardView: View {
             } else if model.range.days > 1 {
                 Text(model.range.start.formatted(date: .abbreviated, time: .omitted) + " – "
                      + model.range.end.formatted(date: .abbreviated, time: .omitted))
-                    .font(Extreme.font(11)).foregroundColor(Extreme.muted)
+                    .font(Tellurion.font(11)).foregroundColor(Tellurion.muted)
             }
         }
         .datePickerStyle(.compact)
-        .font(Extreme.font(11.5))
+        .font(Tellurion.font(11.5))
         .padding(.horizontal, 18)
         .padding(.bottom, 10)
     }
@@ -365,18 +365,18 @@ private struct ActivityDashboardView: View {
                 } label: {
                     Text(model.unpricedCodexModels.isEmpty ? "Codex prices" : "Set Codex prices")
                 }
-                .buttonStyle(ExtremeButtonStyle(prominent: !model.unpricedCodexModels.isEmpty))
+                .buttonStyle(TellurionButtonStyle(prominent: !model.unpricedCodexModels.isEmpty))
                 .popover(isPresented: $editingRates, arrowEdge: .bottom) {
                     CodexRatesEditor(models: model.codexModels, rates: $model.codexRates)
                 }
                 .transition(.opacity.combined(with: .move(edge: .trailing)))
             }
             Toggle(isOn: $showDollars.animation(.spring(response: 0.4, dampingFraction: 0.85))) {
-                Text("API value").font(Extreme.font(11.5, weight: .semibold))
-                    .foregroundColor(showDollars ? Extreme.gold : Extreme.muted)
+                Text("API value").font(Tellurion.font(11.5, weight: .semibold))
+                    .foregroundColor(showDollars ? Tellurion.gold : Tellurion.muted)
             }
             .toggleStyle(.switch)
-            .tint(Extreme.gold)
+            .tint(Tellurion.gold)
             .help("Show what this usage would cost at API prices instead of time")
         }
     }
@@ -427,16 +427,16 @@ private struct ActivityDashboardView: View {
         return LazyVGrid(columns: [GridItem(.adaptive(minimum: showDollars ? 138 : 160), spacing: 12)], spacing: 12) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(item.title.uppercased()).font(Extreme.font(10, weight: .semibold)).kerning(0.8).foregroundColor(Extreme.muted)
-                    Text(item.value).font(Extreme.font(showDollars ? 23 : 26)).foregroundColor(index == 0 ? Extreme.core : Extreme.gold)
+                    Text(item.title.uppercased()).font(Tellurion.font(10, weight: .semibold)).kerning(0.8).foregroundColor(Tellurion.muted)
+                    Text(item.value).font(Tellurion.font(showDollars ? 23 : 26)).foregroundColor(index == 0 ? Tellurion.core : Tellurion.gold)
                         .lineLimit(1).minimumScaleFactor(0.7)
-                    Text(item.detail).font(Extreme.font(10)).foregroundColor(showDollars && item.title.hasPrefix("Tokens") ? Extreme.gold.opacity(0.8) : Extreme.dim)
+                    Text(item.detail).font(Tellurion.font(10)).foregroundColor(showDollars && item.title.hasPrefix("Tokens") ? Tellurion.gold.opacity(0.8) : Tellurion.dim)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
                 .padding(showDollars ? 12 : 14)
-                .extremePanel(active: index == 0)
+                .tellurionPanel(active: index == 0)
                 .transition(.scale(scale: 0.9).combined(with: .opacity))
             }
         }
@@ -444,12 +444,12 @@ private struct ActivityDashboardView: View {
 
     private func card<Content: View>(_ title: String, _ symbol: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            ExtremeSectionLabel(title)
+            TellurionSectionLabel(title)
             content()
         }
         .padding(14)
-        .background(Rectangle().fill(Extreme.panel.opacity(0.75)))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Extreme.text.opacity(0.08)))
+        .background(Rectangle().fill(Tellurion.panel.opacity(0.75)))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Tellurion.text.opacity(0.08)))
     }
 
     private var dailyChart: some View {
@@ -465,7 +465,7 @@ private struct ActivityDashboardView: View {
             .chartForegroundStyleScale(["Claude Code": ActivityColors.claude, "Codex": ActivityColors.codex])
             .chartYAxis {
                 AxisMarks { value in
-                    AxisGridLine().foregroundStyle(Extreme.text.opacity(0.08))
+                    AxisGridLine().foregroundStyle(Tellurion.text.opacity(0.08))
                     AxisValueLabel {
                         if let amount = value.as(Double.self) {
                             Text(showDollars ? formatMoney(amount) : formatDuration(amount * 60))
@@ -514,13 +514,13 @@ private struct ActivityDashboardView: View {
                     HStack(spacing: 10) {
                         AgentBadge(kind: kind, size: 28)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(kind.displayName).font(Extreme.font(12.5))
+                            Text(kind.displayName).font(Tellurion.font(12.5))
                             Text("\(list.count) sessions · \(list.map(\.prompts).reduce(0, +)) prompts")
-                                .font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+                                .font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
                         }
                         Spacer()
                         Text(showDollars ? (agent == "codex" ? codexValue : formatMoney(seconds)) : formatDuration(seconds))
-                            .font(Extreme.font(14))
+                            .font(Tellurion.font(14))
                             .foregroundColor(ActivityColors.agent(agent))
                     }
                 }
@@ -539,7 +539,7 @@ private struct ActivityDashboardView: View {
                     ForEach(0..<24, id: \.self) { hour in
                         let level = hours[hour] / peak
                         Rectangle()
-                            .fill(level == 0 ? Extreme.line : Extreme.gold.opacity(0.2 + level * 0.8))
+                            .fill(level == 0 ? Tellurion.line : Tellurion.gold.opacity(0.2 + level * 0.8))
                             .frame(height: 34)
                             .help("\(hour):00 · \(formatDuration(hours[hour]))")
                     }
@@ -547,7 +547,7 @@ private struct ActivityDashboardView: View {
                 HStack {
                     ForEach([0, 6, 12, 18, 23], id: \.self) { hour in
                         Text(hour == 0 ? "12am" : hour == 12 ? "12pm" : hour < 12 ? "\(hour)am" : "\(hour - 12)pm")
-                            .font(Extreme.font(9.5)).foregroundColor(Extreme.muted)
+                            .font(Tellurion.font(9.5)).foregroundColor(Tellurion.muted)
                         if hour != 23 { Spacer() }
                     }
                 }
@@ -559,7 +559,7 @@ private struct ActivityDashboardView: View {
         let projects = model.projects(dollars: showDollars)
         return card("Projects", "folder.fill") {
             if projects.isEmpty {
-                Text("No agent activity in this period.").font(Extreme.font(12)).foregroundColor(Extreme.muted)
+                Text("No agent activity in this period.").font(Tellurion.font(12)).foregroundColor(Tellurion.muted)
             }
             let peak = max(projects.first?.total ?? 1, showDollars ? 0.01 : 1)
             VStack(spacing: 10) {
@@ -567,13 +567,13 @@ private struct ActivityDashboardView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Rectangle().fill(LocalhostProject(folder: project.name).color).frame(width: 6, height: 6)
-                            Text(project.name).font(Extreme.font(12.5)).lineLimit(1)
+                            Text(project.name).font(Tellurion.font(12.5)).lineLimit(1)
                             Spacer()
                             Text("\(project.prompts) prompts · \(project.files) files · \(formatCount(project.lines)) lines")
-                                .font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+                                .font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
                             Text(showDollars ? formatMoney(project.total) : formatDuration(project.total))
-                                .font(Extreme.font(12))
-                                .foregroundColor(showDollars ? Extreme.gold : Extreme.text)
+                                .font(Tellurion.font(12))
+                                .foregroundColor(showDollars ? Tellurion.gold : Tellurion.text)
                                 .frame(width: 64, alignment: .trailing)
                         }
                         GeometryReader { geometry in
@@ -593,7 +593,7 @@ private struct ActivityDashboardView: View {
     private var recentSessions: some View {
         card("Recent sessions", "list.bullet.rectangle.fill") {
             if model.sessions.isEmpty {
-                Text("No sessions in this period.").font(Extreme.font(12)).foregroundColor(Extreme.muted)
+                Text("No sessions in this period.").font(Tellurion.font(12)).foregroundColor(Tellurion.muted)
             }
             VStack(spacing: 6) {
                 ForEach(model.sessions.prefix(14)) { session in
@@ -613,9 +613,9 @@ private struct CodexRatesEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Codex prices").font(Extreme.font(14, weight: .semibold)).foregroundColor(Extreme.gold)
+            Text("Codex prices").font(Tellurion.font(14, weight: .semibold)).foregroundColor(Tellurion.gold)
             Text("Dollars per million tokens. Filled in from OpenAI's API pricing (Standard tier); change any of them, or price a model that isn't listed.")
-                .font(Extreme.font(10.5)).foregroundColor(Extreme.muted)
+                .font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted)
                 .fixedSize(horizontal: false, vertical: true)
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 GridRow {
@@ -624,13 +624,13 @@ private struct CodexRatesEditor: View {
                     Text("CACHED")
                     Text("OUTPUT")
                 }
-                .font(Extreme.font(9)).kerning(1.2).foregroundColor(Extreme.dim)
+                .font(Tellurion.font(9)).kerning(1.2).foregroundColor(Tellurion.dim)
                 ForEach(models, id: \.model) { entry in
                     GridRow {
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(entry.model).font(Extreme.font(11.5)).foregroundColor(Extreme.text)
+                            Text(entry.model).font(Tellurion.font(11.5)).foregroundColor(Tellurion.text)
                             Text("\(formatCount(entry.tokens[0])) in · \(formatCount(entry.tokens[2])) out")
-                                .font(Extreme.font(9.5)).foregroundColor(Extreme.dim)
+                                .font(Tellurion.font(9.5)).foregroundColor(Tellurion.dim)
                         }
                         field(entry.model, \.input)
                         field(entry.model, \.cached)
@@ -641,7 +641,7 @@ private struct CodexRatesEditor: View {
         }
         .padding(16)
         .frame(width: 460)
-        .background(Extreme.panel)
+        .background(Tellurion.panel)
     }
 
     private func field(_ model: String, _ key: WritableKeyPath<APIPricing.CodexRates, Double>) -> some View {
@@ -653,11 +653,11 @@ private struct CodexRatesEditor: View {
                 if rate.input == 0 && rate.cached == 0 && rate.output == 0 { rates[model] = nil } else { rates[model] = rate }
             }), format: .number.precision(.fractionLength(0...3)))
             .textFieldStyle(.plain)
-            .font(Extreme.font(11.5))
-            .foregroundColor(Extreme.gold)
+            .font(Tellurion.font(11.5))
+            .foregroundColor(Tellurion.gold)
             .padding(.horizontal, 6).frame(width: 64, height: 24)
-            .background(Extreme.ink)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Extreme.lineStrong, lineWidth: 1))
+            .background(Tellurion.ink)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Tellurion.lineStrong, lineWidth: 1))
     }
 }
 
@@ -672,7 +672,7 @@ private struct ActivitySessionRow: View {
         HStack(spacing: 10) {
             AgentBadge(kind: session.kind, size: 24)
             VStack(alignment: .leading, spacing: 1) {
-                Text(session.label).font(Extreme.font(12)).lineLimit(1)
+                Text(session.label).font(Tellurion.font(12)).lineLimit(1)
                 HStack(spacing: 6) {
                     Text(session.project)
                     if let end = session.end {
@@ -680,7 +680,7 @@ private struct ActivitySessionRow: View {
                     }
                     if !session.files.isEmpty { Text("· \(session.files.count) files") }
                 }
-                .font(Extreme.font(10.5)).foregroundColor(Extreme.muted).lineLimit(1)
+                .font(Tellurion.font(10.5)).foregroundColor(Tellurion.muted).lineLimit(1)
             }
             Spacer(minLength: 6)
             if hovering, session.cwd != nil {
@@ -688,13 +688,13 @@ private struct ActivitySessionRow: View {
                     .controlSize(.small)
                     .help("Continue this session in a new tab")
             } else {
-                Text(dollars.map(formatMoney) ?? formatDuration(active)).font(Extreme.font(11.5))
-                    .foregroundColor(dollars == nil ? ActivityColors.agent(session.agent) : Extreme.gold)
+                Text(dollars.map(formatMoney) ?? formatDuration(active)).font(Tellurion.font(11.5))
+                    .foregroundColor(dollars == nil ? ActivityColors.agent(session.agent) : Tellurion.gold)
             }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(Rectangle().fill(Extreme.text.opacity(hovering ? 0.07 : 0.03)))
+        .background(Rectangle().fill(Tellurion.text.opacity(hovering ? 0.07 : 0.03)))
         .onHover { hovering = $0 }
     }
 
