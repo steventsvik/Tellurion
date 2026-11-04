@@ -8,6 +8,7 @@
 #                             MLX or Apple's own), where nothing leaves it; with
 #                             --provider venice, on your Venice account
 #   tellurion venice codex …  Codex, with its usual setup, on your Venice account
+#   tellurion venice search … SearXNG, the fallback for its web search: status, setup, use, stop
 #
 # Installed to ~/.ghostty-extreme/bin/ by the app (Setup Check, or the welcome window).
 # Paste `tellurion doctor` output into GitHub issues: it contains no personal data
@@ -308,6 +309,82 @@ venice_stop() {
 # skills, MCP servers and sessions. Only where its model requests go changes, through command-line
 # settings for this run; its config file isn't touched. It talks to the proxy inside Tellurion
 # with a token, set for this one command, so it never has the account's key.
+venice_toml() {
+  local text=${1//\\/\\\\}
+  printf '%s' "${text//\"/\\\"}"
+}
+
+# The fallback for web search: a SearXNG of the user's own, by default in Docker on this Mac only.
+VENICE_SEARXNG_IMAGE=docker.io/searxng/searxng:2026.11.2-cccbc9e15
+VENICE_SEARXNG_NAME=tellurion-searxng
+VENICE_SEARXNG_URL=http://127.0.0.1:8899
+
+venice_search_address() {
+  local folder="$1" address=""
+  [ -r "$folder/searxng-url" ] && address=$(cat "$folder/searxng-url")
+  printf '%s' "${address:-$VENICE_SEARXNG_URL}"
+}
+
+venice_search_setup() {
+  local folder="$1" settings="$1/searxng" tries=0
+  type -P docker >/dev/null || venice_stop "SearXNG runs in Docker here, and Docker isn't installed. To use a SearXNG you already have: tellurion venice search use <address>"
+  docker info >/dev/null 2>&1 || venice_stop "Docker isn't running. Start it, then try again."
+  mkdir -p "$settings" || venice_stop "Couldn't create $settings"
+  if [ ! -f "$settings/settings.yml" ]; then
+    # The secret only signs this SearXNG's own cookies.
+    printf 'use_default_settings: true\nserver:\n  secret_key: "%s"\n  limiter: false\n  image_proxy: false\nsearch:\n  formats:\n    - html\n    - json\n' \
+      "$(openssl rand -hex 32)" > "$settings/settings.yml" || venice_stop "Couldn't write its settings"
+  fi
+  if docker inspect "$VENICE_SEARXNG_NAME" >/dev/null 2>&1; then
+    docker start "$VENICE_SEARXNG_NAME" >/dev/null || venice_stop "Couldn't start SearXNG"
+  else
+    # On 127.0.0.1 alone, so nothing else on the network can use it.
+    docker run -d --name "$VENICE_SEARXNG_NAME" --restart unless-stopped -p "127.0.0.1:8899:8080" \
+      -v "$settings:/etc/searxng" "$VENICE_SEARXNG_IMAGE" >/dev/null || venice_stop "Couldn't start SearXNG"
+  fi
+  rm -f "$folder/searxng-url"
+  while [ "$tries" -lt 60 ]; do
+    if curl -fsS -m 3 -o /dev/null "$VENICE_SEARXNG_URL/healthz" 2>/dev/null; then
+      printf 'SearXNG is running at %s, for this Mac only. Web search falls back to it when Exa is limited.\n' "$VENICE_SEARXNG_URL"
+      return 0
+    fi
+    tries=$((tries + 1))
+    sleep 1
+  done
+  venice_stop "SearXNG started but isn't answering. See: docker logs $VENICE_SEARXNG_NAME"
+}
+
+venice_search() {
+  local folder="${GHOSTTY_EXTREME_TEST_HOME:-$HOME}/.ghostty-extreme/venice" address
+  case "${1:-status}" in
+    setup) venice_search_setup "$folder" ;;
+    use)
+      case "${2:-}" in
+        http://*|https://*) mkdir -p "$folder" && printf '%s\n' "$2" > "$folder/searxng-url" && printf 'Web search falls back to %s.\n' "$2" ;;
+        *) venice_stop "Usage: tellurion venice search use <http or https address of a SearXNG with JSON turned on>" ;;
+      esac
+      ;;
+    stop)
+      if type -P docker >/dev/null && docker inspect "$VENICE_SEARXNG_NAME" >/dev/null 2>&1; then
+        docker rm -f "$VENICE_SEARXNG_NAME" >/dev/null || venice_stop "Couldn't remove SearXNG"
+        printf 'SearXNG is stopped and removed.\n'
+      else
+        printf "SearXNG isn't set up here.\n"
+      fi
+      ;;
+    status)
+      address=$(venice_search_address "$folder")
+      if [ -e "$folder/use-web-search" ]; then printf 'Web search: on\n'; else printf 'Web search: off (Tools → Local models)\n'; fi
+      if curl -fsS -m 10 -o /dev/null "$address/search?q=test&format=json" 2>/dev/null; then
+        printf 'SearXNG: answering at %s\n' "$address"
+      else
+        printf "SearXNG: not answering at %s (set it up with: tellurion venice search setup)\n" "$address"
+      fi
+      ;;
+    *) printf 'Usage: tellurion venice search [status|setup|use <address>|stop]\n' >&2; exit 2 ;;
+  esac
+}
+
 # Codex's table of paths a Venice session can't read: logins, keys and history in the home folder, and
 # secret files in any project, under the home folder or the one it's working in.
 venice_denied_reads() {
@@ -396,6 +473,14 @@ venice_codex() {
   # What it reads goes to Venice, so secret files stay out of its reach unless that's switched on.
   # The sandbox enforces this for commands and edits; MCP servers and hooks run outside it, which is
   # why the proxy also takes known key formats out of what it sends.
+  # Commands have no network and Codex's own search runs on OpenAI's servers, so a session can only
+  # search through an MCP server, which runs outside the sandbox: this one tries Exa, then SearXNG.
+  if [ -e "$folder/use-web-search" ] && [ -n "$(type -P python3)" ]; then
+    local search="$root/agent-hooks/venice-search.py"
+    [ -f "$search" ] || search="$here/venice-search.py"
+    options+=(-c "mcp_servers.tellurion_search={command=\"$(venice_toml "$(type -P python3)")\",args=[\"-I\",\"$(venice_toml "$search")\",\"--folder\",\"$(venice_toml "$folder")\"],startup_timeout_sec=10}")
+  fi
+
   # A --sandbox flag would replace that protection without saying so, so the flag becomes the profile's
   # base instead, and anything that would take the protection away is refused.
   if [ ! -e "$folder/allow-secret-files" ]; then
@@ -460,7 +545,8 @@ venice_codex() {
 venice() {
   case "${1:-}" in
     codex) shift; venice_codex "$@" ;;
-    *) printf 'Usage: tellurion venice codex [codex options]\n' >&2; exit 2 ;;
+    search) shift; venice_search "$@" ;;
+    *) printf 'Usage: tellurion venice codex [codex options]\n       tellurion venice search [status|setup|use <address>|stop]\n' >&2; exit 2 ;;
   esac
 }
 

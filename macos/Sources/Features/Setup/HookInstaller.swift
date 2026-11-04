@@ -40,6 +40,7 @@ enum HookInstaller {
             ("amp-plugin.ts", hooksFolder),
             ("local-chat.py", hooksFolder),
             ("venice-catalog.py", hooksFolder),
+            ("venice-search.py", hooksFolder),
             ("localhost", binFolder),
             ("localhost-run", binFolder),
             ("tellurion", binFolder),
