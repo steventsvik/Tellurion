@@ -168,7 +168,7 @@ pass "no home-folder paths in the app"
 # The test and demo switches were compiled out above; the binary shows whether that held.
 # TELLURION_TEST_HOME is the one that stays: the launch test below and test copies need it.
 BIN=$APP/Contents/MacOS/ghostty
-! LC_ALL=C grep -a -q -E 'GHOSTTY_EXTREME_(TEST_TABS|TEST_BOARD|TEST_LOG|TEST_VENICE|DEMO)' $BIN || fail "the app contains test hooks (built with TELLURION_TEST_HOOKS set)"
+SWITCHES=$(./release-checks.sh test-switches $BIN macos/Sources 2>&1) || fail "the app contains test hooks (built with TELLURION_TEST_HOOKS set), or the check couldn't run: ${SWITCHES//$'\n'/ }"
 LC_ALL=C grep -a -q 'TELLURION_TEST_HOME' $BIN || fail "the app lost TELLURION_TEST_HOME, which test copies and the launch test need"
 pass "no test or demo switches in the app (TELLURION_TEST_HOME kept)"
 # Ghostty's icons are its trademark; the only icon file in the app is Tellurion's.
@@ -334,7 +334,7 @@ APPCAST
 [[ $NOTES_BODY != *']]>'* ]] || fail "the release notes contain ]]>, which would break the feed"
 xmllint --noout $OUT/appcast.xml || fail "appcast.xml isn't valid XML"
 pass "appcast.xml (the updater's feed, signed)"
-UPSTREAM=$(git tag --merged HEAD --sort=-v:refname | grep -E '^v[0-9]' | head -1 | sed 's/^v//')
+UPSTREAM=$(./release-checks.sh ghostty-version build.zig.zon) || fail "couldn't read Ghostty's version for the notes"
 cat > $OUT/notes.md <<NOTES
 $NOTES_BODY
 
