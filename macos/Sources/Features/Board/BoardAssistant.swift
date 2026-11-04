@@ -105,7 +105,7 @@ final class BoardAssistant: ObservableObject {
         let run = HeadlessAgent.Run()
         self.run = run
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = HeadlessAgent.run(run, tool: tool, arguments: arguments, input: prompt)
+            let result = HeadlessAgent.run(run, tool: tool, arguments: arguments, input: Data(prompt.utf8))
             DispatchQueue.main.async {
                 guard let self, self.run === run else { return }
                 self.run = nil

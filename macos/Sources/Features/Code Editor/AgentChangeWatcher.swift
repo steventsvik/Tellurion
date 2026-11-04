@@ -162,10 +162,7 @@ final class AgentChangeWatcher {
 
     /// The ignored ones among `relatives`, or nil if git failed.
     private static func checkIgnore(_ relatives: [String], in repoRoot: String) -> Set<String>? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", repoRoot] + AgentTools.gitGuards + ["check-ignore", "--stdin", "-z"]
-        process.environment = AgentTools.gitEnvironment(in: repoRoot)
+        let process = AgentTools.gitProcess(["check-ignore", "--stdin", "-z"], in: repoRoot)
         let input = Pipe(), output = Pipe()
         process.standardInput = input
         process.standardOutput = output
@@ -189,9 +186,7 @@ final class AgentChangeWatcher {
     private static func isInteresting(_ path: String, root: String?) -> Bool {
         guard let root, path.hasPrefix(root) else { return false }
         let relative = path.dropFirst(root.count)
-        for part in relative.split(separator: "/") {
-            if skipped.contains(String(part)) { return false }
-        }
+        for part in relative.split(separator: "/") where skipped.contains(String(part)) { return false }
         let name = (path as NSString).lastPathComponent
         // Editor swap/backup files and atomic-save temporaries.
         if name == ".DS_Store" || name.hasSuffix("~") || name.hasSuffix(".swp") || name.hasPrefix(".#") || name.hasPrefix(".!")

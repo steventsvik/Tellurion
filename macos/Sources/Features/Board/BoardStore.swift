@@ -26,6 +26,11 @@ struct BoardTile: Codable, Identifiable, Equatable {
             BoardAccount.Provider(rawValue: key).map { ($0, value) }
         })
     }
+
+    /// `chosenAccounts` the way it's saved, by the provider's name; nil for none.
+    static func savedAccounts(_ chosen: [BoardAccount.Provider: UUID]?) -> [String: UUID]? {
+        chosen.map { Dictionary(uniqueKeysWithValues: $0.map { ($0.key.rawValue, $0.value) }) }
+    }
 }
 
 /// A board: its tiles, where you were looking, and its window. Saved as versioned JSON in
@@ -98,7 +103,8 @@ struct BoardWorkspace: Codable, Identifiable, Equatable {
 }
 
 enum BoardStore {
-    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "Board")
+    /// The boards' logger, shared by the board files that save things.
+    static let log = StoredFile.logger("Board")
 
     static var folder: URL { AgentTools.root.appendingPathComponent("boards", isDirectory: true) }
 
@@ -116,17 +122,10 @@ enum BoardStore {
     }
 
     static func save(_ workspace: BoardWorkspace) {
-        let encoder = JSONEncoder()
+        let encoder = StoredFile.encoder
         encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        do {
-            let data = try encoder.encode(workspace)
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try data.write(to: file(workspace.id), options: .atomic)
-        } catch {
-            // The board stays open with its last saved state on disk; the next change tries again.
-            log.error("Couldn't save board \(workspace.id.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
-        }
+        // If this fails the board stays open with its last saved state on disk; the next change tries again.
+        StoredFile.write(json: workspace, to: file(workspace.id), what: "board \(workspace.id.uuidString)", log: log, encoder: encoder)
     }
 
     static func delete(_ id: UUID) {

@@ -66,6 +66,7 @@ enum TestHooks {
     static var isTestLaunch: Bool { home != nil }
     static var log: String? { nil }
     static var updateFeed: String? { nil }
+    static var veniceServer: String? { nil }
     static var welcome: Bool { false }
     static var tool: String? { nil }
     static var showsBackgroundSample: Bool { false }

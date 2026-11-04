@@ -369,8 +369,7 @@ extension BoardController {
         let card = BoardCard.Kind.orchestrator.size
         let width = max(card.width, CGFloat(columns) * size.width + CGFloat(columns - 1) * Self.gap)
         let block = CGSize(width: width, height: card.height + Self.gap * 4 + CGFloat(rows) * (size.height + Self.gap))
-        let existing = model.surfaces.compactMap { model.frames[$0.id] }
-        let area = freeSpot(size: block, near: existing.first.map { first in existing.dropFirst().reduce(first) { $0.union($1) } })
+        let area = freeSpot(size: block, near: model.surfaces.compactMap { model.frames[$0.id] }.boundingRect)
         var views: [Ghostty.SurfaceView] = []
         var wired: [(tile: UUID, role: String)] = []
         for (index, member) in members.enumerated() {

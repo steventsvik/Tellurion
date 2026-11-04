@@ -242,7 +242,7 @@ class AppDelegate: NSObject,
 
         // After an update's restart, reopen the agents and servers that were running.
         // Before anything is resumed, so agents on Venice find it.
-        VeniceAccount.shared.startAtLaunch()
+        VeniceAccount.shared.startProxyIfConnected()
         ResumeAfterUpdate.resumeIfNeeded()
 
         // Register our service provider. This must happen after everything is initialized.

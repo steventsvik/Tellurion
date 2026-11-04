@@ -542,9 +542,7 @@ enum BoardSketchImages {
         guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
               let data = rep.representation(using: .png, properties: [:]) else { return nil }
         let name = UUID().uuidString + ".png"
-        guard StoredFile.write(data, to: folder.appendingPathComponent(name), what: "a sketch's image", log: StoredFile.logger("Board")) else {
-            return nil
-        }
+        guard StoredFile.write(data, to: folder.appendingPathComponent(name), what: "a sketch's image", log: BoardStore.log) else { return nil }
         cache[name] = image
         return name
     }

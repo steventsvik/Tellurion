@@ -97,9 +97,7 @@ extension BoardController {
 
     /// Around a group's tiles.
     func groupFrame(_ group: BoardGroupNode) -> CGRect? {
-        let frames = group.tiles.compactMap { model.frames[$0] }
-        guard let first = frames.first else { return nil }
-        return frames.dropFirst().reduce(first) { $0.union($1) }
+        group.tiles.compactMap { model.frames[$0] }.boundingRect
     }
 
     func namedGroupDisplays() -> [BoardNamedGroupDisplay] {

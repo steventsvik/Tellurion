@@ -29,11 +29,10 @@ enum DemoDirector {
     private static var started = false
 
     static func startIfRequested(from controller: TerminalController) {
-        let env = ProcessInfo.processInfo.environment
-        guard !started, let path = env["GHOSTTY_EXTREME_DEMO"],
+        guard !started, let path = TestHooks.value("GHOSTTY_EXTREME_DEMO"),
               let script = try? String(contentsOfFile: path, encoding: .utf8) else { return }
         started = true
-        let marks = env["GHOSTTY_EXTREME_DEMO_MARKS"]
+        let marks = TestHooks.value("GHOSTTY_EXTREME_DEMO_MARKS")
         for raw in script.split(separator: "\n") {
             let line = raw.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0]
                 .trimmingCharacters(in: .whitespaces)

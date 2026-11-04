@@ -208,7 +208,7 @@ struct LocalhostFramework: Equatable {
 }
 
 final class LocalhostSessions: ObservableObject {
-    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "Localhost")
+    private static let log = StoredFile.logger("Localhost")
 
     static let shared = LocalhostSessions()
 
@@ -773,8 +773,11 @@ final class LocalhostSessions: ObservableObject {
         var result: [Int32: String] = [:]
         var current: Int32?
         for line in output.split(separator: "\n") {
-            if line.hasPrefix("p") { current = Int32(line.dropFirst()) }
-            else if line.hasPrefix("n"), let pid = current { result[pid] = String(line.dropFirst()) }
+            if line.hasPrefix("p") {
+                current = Int32(line.dropFirst())
+            } else if line.hasPrefix("n"), let pid = current {
+                result[pid] = String(line.dropFirst())
+            }
         }
         return result
     }

@@ -84,10 +84,6 @@ enum HeadlessAgent {
     /// Runs in its own folder, so its sessions stay out of your projects' histories. Gets your
     /// login shell's PATH and nothing else from Tellurion's environment (no event token).
     /// Call it off the main thread; `handle` stops it.
-    static func run(_ handle: Run, tool: String, arguments: [String], input: String) -> AgentTools.Result {
-        run(handle, tool: tool, arguments: arguments, input: Data(input.utf8))
-    }
-
     static func run(_ handle: Run, tool: String, arguments: [String], input: Data) -> AgentTools.Result {
         let folder = AgentTools.root.appendingPathComponent("board-agent", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

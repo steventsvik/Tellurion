@@ -100,11 +100,6 @@ enum VerticalTabAgentKind: String, CaseIterable {
     /// Single-color logos are tinted; Hermes's pixel-art knight keeps its own colors.
     var logoIsTemplate: Bool { self != .hermes }
 
-    /// Logo color on top of `brandColor`: dark on light brands, white otherwise.
-    var glyphOnBrand: Color {
-        self == .droid ? .black : .white
-    }
-
     /// Logo color when drawn on its own next to the name. Near-black brands would
     /// vanish on a dark sidebar, so those fall back to the text color.
     var standaloneLogoColor: Color {

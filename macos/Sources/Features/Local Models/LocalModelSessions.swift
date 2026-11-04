@@ -56,7 +56,7 @@ enum LocalModelSessions {
         guard let folder = VeniceCodex.projectFolder(owner.focusedSurface?.pwd) else { return }
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = folder
-        config.environmentVariables.merge(VeniceCodex.environment(model: model.name)) { _, new in new }
+        config.environmentVariables.merge(VeniceCodex.environment(model: model.name)) { $1 }
         config.initialInput = " " + VeniceCodex.command() + "\n"
         TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config)
     }

@@ -342,9 +342,7 @@ extension BoardController {
 
     /// Fits what the board's agent added in view, clear of the bar at the bottom.
     private func showAdded(_ ids: [UUID]) {
-        let frames = ids.compactMap { model.frames[$0] }
-        guard let first = frames.first else { return }
-        var rect = frames.dropFirst().reduce(first) { $0.union($1) }.insetBy(dx: -40, dy: -40)
+        guard var rect = ids.compactMap({ model.frames[$0] }).boundingRect?.insetBy(dx: -40, dy: -40) else { return }
         rect.size.height += 160
         // Zooms out only when it doesn't fit as it is.
         if let visible = canvas?.documentVisibleRect, rect.width <= visible.width, rect.height <= visible.height {

@@ -179,6 +179,20 @@ private struct LocalModelSidebarRow: View {
     let owner: BaseTerminalController
     @State private var hovering = false
 
+    /// Always says which app serves it: the same model can be in Ollama and LM Studio.
+    private var hostLine: String {
+        switch item.host {
+        case .venice:
+            return "Venice · " + (item.isPrivate ? "Private" : "Anonymized") + (item.uncensored ? " · Uncensored" : "")
+        case .ollama:
+            return "Ollama · " + (item.loaded ? "Loaded" + (item.memory.map { " · " + Housekeeping.bytes($0) } ?? "") : item.detail)
+        case .lmStudio:
+            return item.host.rawValue + (item.loaded ? " · Loaded" : "")
+        case .llamaCpp, .mlx, .apple:
+            return item.host.rawValue
+        }
+    }
+
     var body: some View {
         HStack(spacing: 7) {
             Image(systemName: item.host == .venice ? "cloud" : "cpu")
@@ -191,10 +205,7 @@ private struct LocalModelSidebarRow: View {
                     .foregroundColor(Extreme.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                // Always says which app serves it: the same model can be in Ollama and LM Studio.
-                Text(item.host == .venice ? "Venice · " + (item.isPrivate ? "Private" : "Anonymized") + (item.uncensored ? " · Uncensored" : "") : item.host == .ollama
-                     ? "Ollama · " + (item.loaded ? "Loaded" + (item.memory.map { " · " + Housekeeping.bytes($0) } ?? "") : item.detail)
-                     : item.host.rawValue + (item.loaded && item.host == .lmStudio ? " · Loaded" : ""))
+                Text(hostLine)
                     .font(Extreme.font(9.5))
                     .foregroundColor(item.loaded ? Extreme.live.opacity(0.85) : Extreme.dim)
                     .lineLimit(1)

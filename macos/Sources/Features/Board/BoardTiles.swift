@@ -201,8 +201,7 @@ final class BoardTiles {
             let tiles = byProject[project] ?? []
             let frames = Dictionary(uniqueKeysWithValues: tiles.map { ($0.id, $0.frame) })
             return BoardProjects.clusters(tiles).compactMap { ids in
-                guard let first = frames[ids[0]] else { return nil }
-                let all = ids.dropFirst().compactMap { frames[$0] }.reduce(first) { $0.union($1) }
+                guard let all = ids.compactMap({ frames[$0] }).boundingRect else { return nil }
                 return BoardGroup(project: project, color: model.colors[project] ?? 0, tiles: ids, frame: all)
             }
         }
@@ -386,8 +385,9 @@ final class BoardTileView: BoardNodeView {
         let color = waiting ? Extreme.chrome.warn.nsColor.cgColor : Extreme.chrome.core.nsColor.withAlphaComponent(0.85).cgColor
         let length: CGFloat = waiting ? 22 : 18
         let pulse = waiting && motion, breathe = working && motion
-        if let old = lights.config, old.0 == color, old.1 == length, old.2 == pulse, old.3 == breathe { return }
-        lights.config = (color, length, pulse, breathe)
+        let next = FrameLights.View.Config(color: color, length: length, pulse: pulse, breathe: breathe)
+        if let old = lights.config, old.matches(next) { return }
+        lights.config = next
         lights.rebuild()
     }
 

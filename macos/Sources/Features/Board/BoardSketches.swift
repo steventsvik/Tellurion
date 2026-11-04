@@ -100,7 +100,7 @@ extension BoardController {
         let folder = AgentTools.root.appendingPathComponent("sketches", isDirectory: true)
         let safe = sketch.title.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }.joined(separator: "-")
         let file = folder.appendingPathComponent("\(safe.isEmpty ? "sketch" : safe)-\(AgentTools.timestamp()).png")
-        return StoredFile.write(data, to: file, what: "a sketch's picture", log: StoredFile.logger("Board")) ? file : nil
+        return StoredFile.write(data, to: file, what: "a sketch's picture", log: BoardStore.log) ? file : nil
     }
 
     func copySketch(_ id: UUID) {

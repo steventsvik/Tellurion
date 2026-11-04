@@ -203,41 +203,19 @@ final class VerticalTabsGit: ObservableObject {
     }
 
     /// Lines added/removed across staged and unstaged changes, via `git diff --shortstat HEAD`.
-    /// `--no-optional-locks` keeps us from contending with the user's own git commands.
+    /// The guarded environment sets `GIT_OPTIONAL_LOCKS=0`, so this never contends with the
+    /// user's own git commands.
     private static func diffStats(repo: String, gitPath: String) -> (Int, Int) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: gitPath)
-        process.arguments = ["-C", repo, "--no-optional-locks"] + AgentTools.gitGuards + ["diff"] + AgentTools.diffGuards + ["--shortstat", "HEAD"]
-        process.environment = AgentTools.gitEnvironment(in: repo)
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-        } catch {
-            return (0, 0)
-        }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0,
-              let output = String(data: data, encoding: .utf8) else { return (0, 0) }
-        return (number(before: "insertion", in: output), number(before: "deletion", in: output))
+        let result = AgentTools.git(["diff"] + AgentTools.diffGuards + ["--shortstat", "HEAD"], in: repo, gitPath: gitPath)
+        guard result.ok else { return (0, 0) }
+        return (number(before: "insertion", in: result.output), number(before: "deletion", in: result.output))
     }
 
     /// Commits ahead of and behind the upstream branch (`git rev-list --left-right --count`).
     private static func aheadBehind(repo: String, gitPath: String) -> (ahead: Int, behind: Int)? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: gitPath)
-        process.arguments = ["-C", repo, "--no-optional-locks"] + AgentTools.gitGuards + ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"]
-        process.environment = AgentTools.gitEnvironment(in: repo)
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return nil }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        let parts = String(decoding: data, as: UTF8.self).split(whereSeparator: { $0 == "\t" || $0 == " " || $0 == "\n" })
-        guard process.terminationStatus == 0, parts.count == 2, let behind = Int(parts[0]), let ahead = Int(parts[1]) else { return nil }
+        let result = AgentTools.git(["rev-list", "--left-right", "--count", "@{upstream}...HEAD"], in: repo, gitPath: gitPath)
+        let parts = result.output.split(whereSeparator: { $0 == "\t" || $0 == " " || $0 == "\n" })
+        guard result.ok, parts.count == 2, let behind = Int(parts[0]), let ahead = Int(parts[1]) else { return nil }
         return (ahead, behind)
     }
 

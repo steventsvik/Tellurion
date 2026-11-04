@@ -11,7 +11,7 @@ enum HookInstaller {
         var errorDescription: String? { message }
     }
 
-    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "Setup")
+    private static let log = StoredFile.logger("Setup")
 
     /// The home folder. Test-only: `GHOSTTY_EXTREME_TEST_HOME` points the installer and the
     /// setup check at a scratch folder instead of the user's real configs.
@@ -40,6 +40,7 @@ enum HookInstaller {
             ("amp-plugin.ts", hooksFolder),
             ("local-chat.py", hooksFolder),
             ("venice-catalog.py", hooksFolder),
+            ("venice-search.py", hooksFolder),
             ("localhost", binFolder),
             ("localhost-run", binFolder),
             ("tellurion", binFolder),

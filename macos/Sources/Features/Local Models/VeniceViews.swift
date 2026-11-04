@@ -32,7 +32,7 @@ struct VeniceSection: View {
             }
             if account.connected { list } else { connect }
         }
-        .onAppear { if account.connected, account.models.isEmpty { account.refresh() } }
+        .onAppear { if account.connected { account.refreshIfEmpty() } }
     }
 
     private var connect: some View {
@@ -95,11 +95,14 @@ private struct VeniceOptions: View {
     @State private var memory = VeniceCodexOption.memory.isOn
     @State private var computerUse = VeniceCodexOption.computerUse.isOn
     @State private var secretFiles = VeniceCodexOption.secretFiles.isOn
+    @State private var webSearch = VeniceCodexOption.webSearch.isOn
     @State private var limit = VeniceSpendMeter.shared.limit
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Codex sessions you start from now on").font(Extreme.font(11, weight: .medium)).foregroundColor(Extreme.dim)
+            option("Search the web", "Sends what it searches for to Exa, free for about 50 searches a day. For more, run tellurion venice search setup, which needs Docker. Results count as tokens on Venice.",
+                   .webSearch, $webSearch)
             option("Use my Codex memory", "Sends what Codex remembers about you and your projects to Venice. Venice sessions never add to it.",
                    .memory, $memory)
             option("Allow computer use", "Lets the model control apps and your browser on this Mac, outside Codex's sandbox.",
@@ -196,10 +199,7 @@ private struct VeniceRow: View {
         .padding(.vertical, 3)
     }
 
-    private var item: LocalModel {
-        LocalModel(host: .venice, name: model.id, size: nil, detail: "Cloud", loaded: false, memory: nil, gpuShare: nil,
-                   uncensored: model.uncensored, isPrivate: model.isPrivate)
-    }
+    private var item: LocalModel { .venice(model.id, uncensored: model.uncensored, isPrivate: model.isPrivate) }
 
     private func tag(_ text: String, _ color: Color) -> some View {
         Text(text).font(Extreme.font(8.5, weight: .bold)).foregroundColor(color)

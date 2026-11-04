@@ -47,7 +47,7 @@ enum BoardTest {
     private static var started = false
 
     static func startIfRequested(_ controller: BoardController) {
-        guard !started, let path = ProcessInfo.processInfo.environment["GHOSTTY_EXTREME_TEST_BOARD"],
+        guard !started, let path = TestHooks.value("GHOSTTY_EXTREME_TEST_BOARD"),
               let script = try? String(contentsOfFile: path, encoding: .utf8) else { return }
         started = true
         for raw in script.split(separator: "\n") {

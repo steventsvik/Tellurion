@@ -74,9 +74,7 @@ final class AgentMapContent: CardContent {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    deinit {
-        stop()
-    }
+    deinit { stop() }
 
     // MARK: Card
 

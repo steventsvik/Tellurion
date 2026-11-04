@@ -369,8 +369,11 @@ final class VisualFixSession: NSObject, ObservableObject {
             "Element: <\(element.tag)\(attributes)>" + (element.text.isEmpty ? "" : " \"\(element.text)\""),
             "CSS selector: \(element.selector)",
         ]
-        if let path = element.componentPath { lines.append("Rendered by: \(path)" + (element.source.map { " (\($0))" } ?? "")) }
-        else if let source = element.source { lines.append("Source: \(source)") }
+        if let path = element.componentPath {
+            lines.append("Rendered by: \(path)" + (element.source.map { " (\($0))" } ?? ""))
+        } else if let source = element.source {
+            lines.append("Source: \(source)")
+        }
         let styles = ["size", "font", "color", "background", "padding", "radius"]
             .compactMap { key in element.styles[key].map { "\(key) \($0)" } }
         if !styles.isEmpty { lines.append("Looks like: " + styles.joined(separator: "; ")) }

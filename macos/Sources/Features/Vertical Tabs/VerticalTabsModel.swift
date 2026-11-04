@@ -151,8 +151,7 @@ final class VerticalTabsModel: ObservableObject {
 
 extension UserDefaults {
     /// KVO-observable accessor; the key path name must match `VerticalTabs.visibleKey`.
-    // swiftlint:disable:next identifier_name
-    @objc dynamic var VerticalTabsVisible: Bool {
+    @objc dynamic var VerticalTabsVisible: Bool { // swiftlint:disable:this identifier_name
         object(forKey: VerticalTabs.visibleKey) as? Bool ?? true
     }
 

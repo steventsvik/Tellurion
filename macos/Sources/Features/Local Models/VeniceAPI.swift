@@ -19,9 +19,14 @@ enum VeniceAPI {
     /// A name fit to put on a command line and in a window title: names come from the server.
     static func isValidSlug(_ slug: String) -> Bool {
         guard let first = slug.utf8.first, first != UInt8(ascii: "-"), slug.utf8.count <= 200 else { return false }
-        return slug.utf8.allSatisfy { byte in
-            (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
-                || [UInt8(ascii: "."), UInt8(ascii: "-"), UInt8(ascii: "_"), UInt8(ascii: ":")].contains(byte)
+        return isPlain(slug, allowing: ".-_:")
+    }
+
+    /// Whether `text` is ASCII letters and digits, plus the bytes in `extra`.
+    private static func isPlain(_ text: some StringProtocol, allowing extra: String) -> Bool {
+        let allowed = Set(extra.utf8)
+        return text.utf8.allSatisfy { byte in
+            (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte) || allowed.contains(byte)
         }
     }
 
@@ -36,10 +41,7 @@ enum VeniceAPI {
         case ("GET", _):
             let prefix = "/api/v1/models?"
             guard target.hasPrefix(prefix) else { return false }
-            return target.dropFirst(prefix.count).utf8.allSatisfy { byte in
-                (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
-                    || [UInt8(ascii: "="), UInt8(ascii: "&"), UInt8(ascii: "_"), UInt8(ascii: "-"), UInt8(ascii: ".")].contains(byte)
-            }
+            return isPlain(target.dropFirst(prefix.count), allowing: "=&_-.")
         default:
             return false
         }

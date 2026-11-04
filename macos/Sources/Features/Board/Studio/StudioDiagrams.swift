@@ -118,9 +118,8 @@ enum StudioDiagram {
         var elements: [SketchElement] = []
         // Group frames first, so they sit behind their boxes.
         for group in groups {
-            let members = nodes.filter { $0.group == group.id }.compactMap { frames[$0.id] }
-            guard let first = members.first else { continue }
-            let area = shifted(members.dropFirst().reduce(first) { $0.union($1) }.insetBy(dx: -24, dy: -22))
+            guard let members = nodes.filter({ $0.group == group.id }).compactMap({ frames[$0.id] }).boundingRect else { continue }
+            let area = shifted(members.insetBy(dx: -24, dy: -22))
             let outline = CGRect(x: area.minX, y: area.minY - 28, width: area.width, height: area.height + 28)
             elements.append(SketchElement(kind: .rectangle, frame: outline, color: ink ? 7 : groupColor[group.id] ?? 7, width: 1.5,
                                           opacity: 0.8, dashed: true, hand: ink ? true : nil))

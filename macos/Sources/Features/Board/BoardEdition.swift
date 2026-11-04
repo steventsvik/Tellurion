@@ -90,39 +90,43 @@ enum Board {
             + "Agents keep running. Keep Windows opens the board beside them instead."
         alert.addButton(withTitle: "Move to Board")
         alert.addButton(withTitle: "Keep Windows")
-        let decide: (NSApplication.ModalResponse) -> Void = { response in
+        ask(alert) { response in
             let board = show(ghostty)
             guard response == .alertFirstButtonReturn else { return }
-            let ids = Set(views.map(\.id))
-            // A terminal that left a board with the switch to Classic goes back to it, reopening
-            // the board when it isn't open; the rest go onto the front board.
-            for workspace in BoardStore.all()
-            where workspace.released?.contains(where: { ids.contains($0.id) }) == true
-                && !BoardController.all.contains(where: { $0.workspace.id == workspace.id }) {
-                reopen(ghostty, workspace)
-            }
-            var homes: [(board: BoardController, views: [Ghostty.SurfaceView])] = []
-            for view in views {
-                let home = BoardController.all.first { $0.model.released.contains { $0.id == view.id } } ?? board
-                if let index = homes.firstIndex(where: { $0.board === home }) {
-                    homes[index].views.append(view)
-                } else {
-                    homes.append((home, [view]))
-                }
-            }
-            // The first adoption empties every window; the others get terminals already out of theirs.
-            for (index, home) in homes.enumerated() { home.board.adopt(home.views, from: index == 0 ? terminals : []) }
-            // Every classic terminal is on a board now: a tile still away was closed in a window,
-            // so its ink, group and wires go with it.
-            for open in BoardController.all { open.forgetReleased() }
-            // A board that isn't open can't do that itself: its file is pruned in place.
-            for workspace in BoardStore.all()
-            where workspace.released?.isEmpty == false && !BoardController.all.contains(where: { $0.workspace.id == workspace.id }) {
-                BoardStore.save(workspace.forgettingReleased())
-            }
-            homes.max { $0.views.count < $1.views.count }?.board.show()
+            adopt(views, from: terminals, orElse: board, ghostty)
         }
-        ask(alert, then: decide)
+    }
+
+    /// Classic terminals onto boards. A terminal that left a board with the switch to Classic
+    /// goes back to it, reopening the board when it isn't open; the rest go onto `board`.
+    private static func adopt(_ views: [Ghostty.SurfaceView], from terminals: [TerminalController],
+                              orElse board: BoardController, _ ghostty: Ghostty.App) {
+        let ids = Set(views.map(\.id))
+        for workspace in BoardStore.all()
+        where workspace.released?.contains(where: { ids.contains($0.id) }) == true
+            && !BoardController.all.contains(where: { $0.workspace.id == workspace.id }) {
+            reopen(ghostty, workspace)
+        }
+        var homes: [(board: BoardController, views: [Ghostty.SurfaceView])] = []
+        for view in views {
+            let home = BoardController.all.first { $0.model.released.contains { $0.id == view.id } } ?? board
+            if let index = homes.firstIndex(where: { $0.board === home }) {
+                homes[index].views.append(view)
+            } else {
+                homes.append((home, [view]))
+            }
+        }
+        // The first adoption empties every window; the others get terminals already out of theirs.
+        for (index, home) in homes.enumerated() { home.board.adopt(home.views, from: index == 0 ? terminals : []) }
+        // Every classic terminal is on a board now: a tile still away was closed in a window,
+        // so its ink, group and wires go with it.
+        for open in BoardController.all { open.forgetReleased() }
+        // A board that isn't open can't do that itself: its file is pruned in place.
+        for workspace in BoardStore.all()
+        where workspace.released?.isEmpty == false && !BoardController.all.contains(where: { $0.workspace.id == workspace.id }) {
+            BoardStore.save(workspace.forgettingReleased())
+        }
+        homes.max { $0.views.count < $1.views.count }?.board.show()
     }
 
     /// Switching to Classic from Settings or the welcome window. With tiles on the open boards,
