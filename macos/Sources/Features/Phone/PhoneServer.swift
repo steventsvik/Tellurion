@@ -21,7 +21,8 @@ final class PhoneServer: ObservableObject {
     /// The local port `tailscale serve` forwards to.
     static let localPort: UInt16 = 47_811
     /// Test copies can talk to it from this Mac without Tailscale (TELLURION_PHONE_DEV=1).
-    static let devMode = ProcessInfo.processInfo.environment["TELLURION_PHONE_DEV"] == "1"
+    /// Always false in a release: the switch only exists in builds with the test hooks.
+    static let devMode = TestHooks.phoneDev
 
     @Published private(set) var running = false
     /// The HTTPS port `tailscale serve` uses for it, once set up.
@@ -71,14 +72,14 @@ final class PhoneServer: ObservableObject {
             start()
             servePort = Int(Self.localPort)
             // Tests pair without the window: TELLURION_PHONE_DEV_CODE is the pairing code.
-            if let code = ProcessInfo.processInfo.environment["TELLURION_PHONE_DEV_CODE"], !code.isEmpty {
+            if let code = TestHooks.phonePairingCode {
                 PhoneDevices.shared.useTestPairingCode(code)
             }
             return
         }
         // Test copies only: TELLURION_PHONE_TEST=on|off presses Turn on / Turn off at launch.
         if Bundle.main.bundleIdentifier == "com.steventsvik.ghostty-extreme.test",
-           let test = ProcessInfo.processInfo.environment["TELLURION_PHONE_TEST"] {
+           let test = TestHooks.phoneSwitch {
             if test == "on" { turnOn() } else if test == "off" { turnOff() }
             return
         }
