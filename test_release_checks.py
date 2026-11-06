@@ -156,7 +156,7 @@ class TestSwitches(Folder):
             ["grep", "-rhoE", r'(value|flag)\("[A-Z][A-Z0-9_]*"\)', "--include=*.swift", str(HERE / "macos" / "Sources")],
             capture_output=True, text=True).stdout.split()
         for name in {line.split('"')[1] for line in names}:
-            self.assertRegex(name, r"^TELLURION_(TEST|DEMO)")
+            self.assertRegex(name, r"^TELLURION_(TEST|DEMO|PHONE)_?")
             self.assertNotEqual(name, "TELLURION_TEST_HOME", "the release keeps this one")
 
 

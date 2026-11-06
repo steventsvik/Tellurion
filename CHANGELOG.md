@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Phone access has no test switches in the shipped app.** Three switches for testing phone access were still read by the release, and one of them let requests from this Mac in without a Tailscale login if the app was started with it set. They now exist only in test builds, like the others.
+
 ## 1.9.1
 
 Venice models in Codex can search the web and read pages, if you turn it on.

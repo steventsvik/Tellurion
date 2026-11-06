@@ -1,8 +1,8 @@
 #if os(macOS)
 import Foundation
 
-/// The switches that drive test copies and recordings: the `TELLURION_TEST_*` and
-/// `TELLURION_DEMO*` environment variables. Every reader goes through here, and all of
+/// The switches that drive test copies and recordings: the `TELLURION_TEST_*`,
+/// `TELLURION_DEMO*` and `TELLURION_PHONE_*` environment variables. Every reader goes through here, and all of
 /// it except `home` exists only in builds made with `TELLURION_TEST_HOOKS` (Debug, and
 /// ReleaseLocal as the Xcode project builds it). `release.sh` builds without that flag and
 /// checks the app for leftovers, so a shipped app has none of these.
@@ -52,6 +52,15 @@ enum TestHooks {
     /// off, to measure what each costs the window server.
     static let motionOff = Set((value("TELLURION_TEST_NOANIM") ?? "").split(separator: ",").map(String.init))
 
+    /// `TELLURION_PHONE_DEV=1`: the phone server serves on this Mac only, without Tailscale,
+    /// and lets in local requests that carry no login. Its paired phones are a separate list.
+    static var phoneDev: Bool { flag("TELLURION_PHONE_DEV") }
+    /// `TELLURION_PHONE_DEV_CODE=<code>`: in phone dev mode, the pairing code, so a test pairs
+    /// without the window.
+    static var phonePairingCode: String? { value("TELLURION_PHONE_DEV_CODE") }
+    /// `TELLURION_PHONE_TEST=on|off`: presses Turn on or Turn off at launch (test bundle id only).
+    static var phoneSwitch: String? { value("TELLURION_PHONE_TEST") }
+
     /// Appends a line to the test log, if there is one. The line is only built when it is.
     static func note(_ line: @autoclosure () -> String) {
         guard let path = log else { return }
@@ -71,6 +80,9 @@ enum TestHooks {
     static var tool: String? { nil }
     static var showsBackgroundSample: Bool { false }
     static let motionOff: Set<String> = []
+    static var phoneDev: Bool { false }
+    static var phonePairingCode: String? { nil }
+    static var phoneSwitch: String? { nil }
     static func note(_ line: @autoclosure () -> String) {}
 #endif
 }
