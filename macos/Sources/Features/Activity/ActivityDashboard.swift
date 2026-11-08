@@ -712,6 +712,10 @@ private struct ActivitySessionRow: View {
             guard venice.prepareUseOrShowProblem(modelName: model, isPrivate: isPrivate) else { return }
             config.environmentVariables.merge(VeniceCodex.environment(model: model)) { $1 }
             config.initialInput = VeniceCodex.resumeLine(id)
+        } else if session.onLocal, let provider = session.codexProvider {
+            // Back on the model on this Mac, or at least on its host: never on another provider.
+            config.environmentVariables.merge(LocalCodex.environment(model: session.codexModel ?? "", provider: provider)) { $1 }
+            config.initialInput = LocalCodex.resumeLine(id, provider: provider, model: session.codexModel)
         } else {
             config.initialInput = (session.agent == "codex" ? "codex resume \(id)" : "claude --resume \(id)") + "\n"
         }

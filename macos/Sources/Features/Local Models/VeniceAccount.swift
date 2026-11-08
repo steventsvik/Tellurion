@@ -328,9 +328,9 @@ enum VeniceCodex {
         cli + " venice codex" + (arguments.isEmpty ? "" : " " + arguments)
     }
 
-    /// A line typed into a new pane on Venice: anything that starts plain Codex goes through
-    /// Tellurion instead, whichever shell it lands in.
-    static func adapted(_ line: String) -> String {
+    /// A line typed into a new pane on Venice (or, with `command`, on a model on this Mac):
+    /// anything that starts plain Codex goes through Tellurion instead, whichever shell it lands in.
+    static func adapted(_ line: String, command: (String) -> String = VeniceCodex.command) -> String {
         let trimmed = line.drop { $0 == " " }
         guard trimmed == "codex\n" || trimmed.hasPrefix("codex ") else { return line }
         let arguments = trimmed.dropFirst("codex".count).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -338,8 +338,12 @@ enum VeniceCodex {
     }
 
     static func adapt(_ config: inout Ghostty.SurfaceConfiguration) {
-        guard config.environmentVariables[backendVariable] == "venice", let line = config.initialInput else { return }
-        config.initialInput = adapted(line)
+        guard let backend = config.environmentVariables[backendVariable], let line = config.initialInput else { return }
+        switch backend {
+        case "venice": config.initialInput = adapted(line)
+        case LocalCodex.backend: config.initialInput = adapted(line, command: LocalCodex.command)
+        default: break
+        }
     }
 
     /// What's typed to take a running pane's shell to an account: it clears what the last one

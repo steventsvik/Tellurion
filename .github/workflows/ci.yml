@@ -60,6 +60,7 @@ jobs:
           python3 agent-hooks/test_codex_hook.py
           python3 agent-hooks/test_venice.py
           python3 agent-hooks/test_venice_search.py
+          python3 agent-hooks/test_local_codex.py
           python3 test_release_checks.py
 
   build-and-test:

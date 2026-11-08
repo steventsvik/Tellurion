@@ -19,16 +19,20 @@ typeset -g _gc_running_agent=""
 # The shared Codex daemon does not inherit this terminal's environment. Keep local
 # terminal sessions attached to this pane so their hooks inherit the correct TTY.
 codex() {
-  # A pane on Venice (TELLURION_CODEX_BACKEND comes with the pane): Codex with its usual setup,
-  # its model requests going through Tellurion. This must never fall through to plain Codex,
-  # which would send the same work to another provider.
-  if [[ ${TELLURION_CODEX_BACKEND:-} == venice ]]; then
+  # A pane on Venice or on a model on this Mac (TELLURION_CODEX_BACKEND comes with the pane):
+  # Codex with its usual setup, its model requests going where the pane says. This must never
+  # fall through to plain Codex, which would send the same work to another provider.
+  if [[ ${TELLURION_CODEX_BACKEND:-} == (venice|local) ]]; then
     local _gc_cli="${TELLURION_TEST_HOME:-$HOME}/.ghostty-extreme/bin/tellurion"
     if [[ ! -x $_gc_cli ]]; then
-      print -u2 "Tellurion's command isn't installed, so Codex can't reach Venice. Run Tellurion > Check Setup…"
+      if [[ $TELLURION_CODEX_BACKEND == venice ]]; then
+        print -u2 "Tellurion's command isn't installed, so Codex can't reach Venice. Run Tellurion > Check Setup…"
+      else
+        print -u2 "Tellurion's command isn't installed, so Codex can't run on the model on this Mac. Run Tellurion > Check Setup…"
+      fi
       return 1
     fi
-    GHOSTTY_EXTREME_CODEX_TTY="${TTY:-}" "$_gc_cli" venice codex "$@"
+    GHOSTTY_EXTREME_CODEX_TTY="${TTY:-}" "$_gc_cli" "$TELLURION_CODEX_BACKEND" codex "$@"
     return
   fi
   if [[ -n $TTY && -t 1 ]]; then
@@ -70,9 +74,9 @@ _gc_agent_preexec() {
   local word venice=""
   for word in ${(z)3}; do
     [[ $word == *=* || $word == (command|exec|env|noglob|nocorrect|time|nohup) ]] && continue
-    # `tellurion venice codex …` is Codex.
+    # `tellurion venice codex …` and `tellurion local codex …` are Codex.
     if [[ ${${(Q)word}:t} == tellurion && $venice != done ]]; then venice=tellurion; continue; fi
-    if [[ $venice == tellurion && $word == venice ]]; then venice=done; continue; fi
+    if [[ $venice == tellurion && $word == (venice|local) ]]; then venice=done; continue; fi
     break
   done
   [[ $venice == tellurion ]] && return 0

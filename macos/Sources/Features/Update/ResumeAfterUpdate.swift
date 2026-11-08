@@ -20,6 +20,10 @@ enum ResumeAfterUpdate {
         /// The Venice model a Codex pane ran on, so it comes back on Venice and not on another
         /// provider ("" if it was given on its command line).
         var venice: String?
+        /// The model on this Mac a Codex pane ran on, and Codex's name for its host ("ollama"),
+        /// so it comes back there and not on another provider.
+        var localModel: String?
+        var localProvider: String?
     }
 
     private struct Plan: Codable {
@@ -46,7 +50,8 @@ enum ResumeAfterUpdate {
             for surface in controller.surfaceTree {
                 guard let info = VerticalTabsAgents.shared.info(for: surface), let id = session(for: info) else { continue }
                 let kind: Entry.Kind = info.kind == .claude ? .claude : .codex
-                result.append(Entry(kind: kind, surface: surface.id.uuidString, cwd: surface.pwd, value: id, venice: info.veniceModel))
+                result.append(Entry(kind: kind, surface: surface.id.uuidString, cwd: surface.pwd, value: id, venice: info.veniceModel,
+                                    localModel: info.localCodex?.model, localProvider: info.localCodex?.provider))
             }
         }
         return result
@@ -156,8 +161,12 @@ enum ResumeAfterUpdate {
         switch entry.kind {
         case .claude: return "claude --resume \(entry.value)"
         case .codex:
+            if entry.localModel != nil || entry.localProvider != nil {
+                // The file this comes from is plain JSON, so no value is typed unchecked.
+                guard UUID(uuidString: entry.value) != nil else { return "true" }
+                return LocalCodex.resumeLine(entry.value, provider: entry.localProvider, model: entry.localModel).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
             guard let model = entry.venice else { return "codex resume \(entry.value)" }
-            // The file this comes from is plain JSON, so neither value is typed unchecked.
             guard UUID(uuidString: entry.value) != nil else { return "true" }
             let chosen = VeniceAPI.isValidSlug(model) ? "\(VeniceCodex.modelVariable)=\(AgentTools.shellQuote(model)) " : ""
             return chosen + VeniceCodex.command("resume \(entry.value)")

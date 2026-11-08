@@ -46,6 +46,9 @@ struct LocalModelsWindowView: View {
                             TellurionSectionLabel("On this Mac")
                             ForEach(installed) { LocalModelWindowRow(item: $0) }
                         }
+                        if installed.contains(where: { $0.host == .ollama || $0.host == .lmStudio }) {
+                            LocalCodexOptions()
+                        }
                     }
                     VeniceSection()
                     if case .running = models.ollama {
@@ -108,6 +111,17 @@ private struct LocalModelWindowRow: View {
                 if item.loaded, item.host.canUnload {
                     Button("Unload") { models.unload(item) }.buttonStyle(TellurionButtonStyle()).help("Free its memory now")
                 }
+                if item.host == .ollama || item.host == .lmStudio {
+                    Button("Open in Codex") {
+                        guard let owner = LocalModelsWindow.frontTerminal else { return }
+                        LocalModelSessions.openCodex(item, from: owner)
+                        owner.window?.makeKeyAndOrderFront(nil)
+                    }
+                    .buttonStyle(TellurionButtonStyle())
+                    .disabled(item.tools == false)
+                    .help(item.tools == false ? "This model can't call tools, which Codex needs"
+                          : "Codex, with its usual tools and setup, on \(item.name). Nothing leaves this Mac.")
+                }
                 Button("Open") {
                     guard let owner = LocalModelsWindow.frontTerminal else { return }
                     LocalModelSessions.open(item, from: owner)
@@ -118,6 +132,33 @@ private struct LocalModelWindowRow: View {
             }
         }
         .padding(.vertical, 3)
+    }
+}
+
+/// What Codex sessions on a model on this Mac may use beyond coding tools, for the ones started
+/// from now on. Nothing else about them leaves the Mac, so this is the one switch.
+private struct LocalCodexOptions: View {
+    @ObservedObject private var models = LocalModelsModel.shared
+    @State private var webSearch = LocalCodexOption.webSearch.isOn
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("Codex sessions on these models").font(Tellurion.font(11, weight: .medium)).foregroundColor(Tellurion.dim)
+                .padding(.bottom, 4)
+            Toggle("Search the web", isOn: $webSearch).toggleStyle(.checkbox).font(Tellurion.font(12))
+                .onChange(of: webSearch) { on in
+                    do {
+                        try LocalCodexOption.webSearch.set(on)
+                    } catch {
+                        models.error = error.localizedDescription
+                        webSearch = LocalCodexOption.webSearch.isOn
+                    }
+                }
+            Text("The one thing that leaves this Mac: what it searches for goes to Exa, free for about 50 searches a day, "
+                 + "or to your own SearXNG if you've set one up (tellurion venice search setup). Off, a session has no web access.")
+                .font(Tellurion.font(11)).foregroundColor(Tellurion.dim)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
