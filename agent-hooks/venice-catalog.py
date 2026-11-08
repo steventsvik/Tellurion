@@ -68,16 +68,16 @@ def rank(row):
             row["id"])
 
 
-def venice_entry(base, row, priority):
-    spec = row.get("model_spec") or {}
-    capabilities = spec.get("capabilities") or {}
+def codex_entry(base, slug, display_name, description, priority, context, vision, levels, default):
+    """An entry for a model Codex doesn't know, built from one of its own: its prompts and format,
+    the ordinary tools (apply_patch among them), and this model's name, context and reasoning
+    levels. Shared with local-catalog.py, so models on this Mac get the same."""
     entry = dict(base)
     entry.pop("tool_mode", None)
-    context = spec.get("availableContextTokens") or row.get("context_length") or base.get("context_window")
     entry.update(
-        slug=row["id"],
-        display_name=text(spec.get("name"), row["id"]) or row["id"],
-        description=("Abliterated or uncensored, on Venice" if spec.get("uncensored") else "On Venice"),
+        slug=slug,
+        display_name=display_name,
+        description=description,
         priority=priority,
         visibility="list",
         context_window=context,
@@ -95,8 +95,17 @@ def venice_entry(base, row, priority):
         use_responses_lite=False,
         supports_reasoning_effort_updates=False,
         default_reasoning_summary="none",
-        input_modalities=["text", "image"] if capabilities.get("supportsVision") else ["text"],
+        input_modalities=["text", "image"] if vision else ["text"],
+        supported_reasoning_levels=[{"effort": o, "description": LEVELS[o]} for o in levels],
+        default_reasoning_level=default,
     )
+    return entry
+
+
+def venice_entry(base, row, priority):
+    spec = row.get("model_spec") or {}
+    capabilities = spec.get("capabilities") or {}
+    context = spec.get("availableContextTokens") or row.get("context_length") or base.get("context_window")
     # Venice's own list of efforts, among those this Codex knows. A model without any still has
     # to name one for the format, and Venice ignores it there.
     options = [o for o in capabilities.get("reasoningEffortOptions") or [] if o in LEVELS]
@@ -105,9 +114,12 @@ def venice_entry(base, row, priority):
     default = capabilities.get("defaultReasoningEffort")
     if not options:
         options, default = ["medium"], "medium"
-    entry["supported_reasoning_levels"] = [{"effort": o, "description": LEVELS[o]} for o in options]
-    entry["default_reasoning_level"] = default if default in options else ("medium" if "medium" in options else options[0])
-    return entry
+    if default not in options:
+        default = "medium" if "medium" in options else options[0]
+    return codex_entry(base, slug=row["id"], display_name=text(spec.get("name"), row["id"]) or row["id"],
+                       description=("Abliterated or uncensored, on Venice" if spec.get("uncensored") else "On Venice"),
+                       priority=priority, context=context, vision=bool(capabilities.get("supportsVision")),
+                       levels=options, default=default)
 
 
 def build(bundled, rows):

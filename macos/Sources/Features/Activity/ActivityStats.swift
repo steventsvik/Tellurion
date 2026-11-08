@@ -12,6 +12,8 @@ struct ActivitySession: Identifiable, Codable, Equatable {
     var codexProvider: String?
     var codexModel: String?
     var onVenice: Bool { agent == "codex" && codexProvider == VeniceCodex.provider }
+    /// On a model on this Mac (Ollama or LM Studio), which it has to resume on too.
+    var onLocal: Bool { agent == "codex" && codexProvider.map(LocalCodex.providers.contains) == true }
     var cwd: String?
     var title: String?
     var firstPrompt: String?

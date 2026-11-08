@@ -73,7 +73,10 @@ struct BoardAgent: Identifiable, Hashable {
         if let session = tile.session, UUID(uuidString: session) != nil {
             switch agent.kind {
             case .claude: return " claude --resume \(session)\n"
-            case .codex: return " codex resume \(session)\n"
+            case .codex:
+                // A session on a model on this Mac stays there too, by what Codex recorded for it.
+                if let local = LocalCodex.session(session) { return LocalCodex.resumeLine(session, provider: local.provider, model: local.model) }
+                return " codex resume \(session)\n"
             default: break
             }
         }

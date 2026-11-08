@@ -948,7 +948,7 @@ private struct VerticalTabPaneRow: View {
     /// The agent's task, or where it runs: a model chat's pane is titled by Claude Code, so it
     /// says where the model is instead.
     private static func doing(_ agent: VerticalTabAgentInfo, title: String) -> String {
-        let prefix = agent.veniceModel != nil ? "Venice · " : ""
+        let prefix = agent.veniceModel != nil ? "Venice · " : agent.localCodex != nil ? "Local · " : ""
         if let task = agent.task { return prefix + task }
         if agent.isCloudChat { return prefix + "Running on Venice" }
         if agent.localModel != nil { return prefix + "Running on this Mac" }
