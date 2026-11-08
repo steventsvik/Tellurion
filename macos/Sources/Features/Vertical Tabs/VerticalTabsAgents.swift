@@ -54,9 +54,17 @@ struct VerticalTabAgentInfo: Equatable {
     var localModel: String?
     /// The agent is on Venice, and the model it was started with ("" if given on its command line).
     var veniceModel: String?
+    /// The agent is Codex on a model on this Mac.
+    var localCodex: LocalCodexBackend?
+
+    /// Codex's name for the model's host ("ollama") and the model it was started with.
+    struct LocalCodexBackend: Equatable {
+        let provider: String
+        let model: String
+    }
 
     /// The local model's name, or the agent's.
-    var name: String { localModel ?? kind.displayName + (veniceModel != nil ? " · Venice" : "") }
+    var name: String { localModel ?? kind.displayName + (veniceModel != nil ? " · Venice" : localCodex != nil ? " · Local" : "") }
     /// A chat on a model that isn't on this Mac: the chat ends its session's name in " · cloud".
     var isCloudChat: Bool { localModel?.hasSuffix(" · cloud") ?? false }
 }
@@ -82,9 +90,10 @@ final class VerticalTabsAgents {
 
     /// Weak keys: a closed pane's agent state disappears with it.
     private let states = NSMapTable<Ghostty.SurfaceView, Box>.weakToStrongObjects()
-    /// Panes whose agent runs on Venice, from the signed event its start sends. Apart from
-    /// `states`, which agents' own events replace (a new session, say).
-    private let veniceModels = NSMapTable<Ghostty.SurfaceView, NSString>.weakToStrongObjects()
+    /// Panes whose agent runs on Venice ("venice:<model>") or on a model on this Mac
+    /// ("local:<provider>:<model>"), from the signed event its start sends. Apart from `states`,
+    /// which agents' own events replace (a new session, say).
+    private let backends = NSMapTable<Ghostty.SurfaceView, NSString>.weakToStrongObjects()
 
     private struct Event: Decodable {
         let agent: String?
@@ -95,7 +104,15 @@ final class VerticalTabsAgents {
 
     func info(for surface: Ghostty.SurfaceView) -> VerticalTabAgentInfo? {
         guard var info = states.object(forKey: surface)?.info else { return nil }
-        info.veniceModel = veniceModels.object(forKey: surface) as String?
+        if let backend = backends.object(forKey: surface) as String? {
+            if backend.hasPrefix("venice:") {
+                info.veniceModel = String(backend.dropFirst("venice:".count))
+            } else if backend.hasPrefix("local:") {
+                let rest = backend.dropFirst("local:".count)
+                let provider = rest.prefix { $0 != ":" }
+                info.localCodex = .init(provider: String(provider), model: String(rest.dropFirst(provider.count + 1)))
+            }
+        }
         return info
     }
 
@@ -186,16 +203,16 @@ final class VerticalTabsAgents {
             Task { @MainActor in LocalModelsModel.shared.load() }
         }
         if event.event == "backend" {
-            if let detail = event.detail, detail.hasPrefix("venice:") {
-                veniceModels.setObject(String(detail.dropFirst("venice:".count)) as NSString, forKey: surface)
+            if let detail = event.detail, detail.hasPrefix("venice:") || detail.hasPrefix("local:") {
+                backends.setObject(detail as NSString, forKey: surface)
             }
             return
         }
         if event.event == "session_end" {
             states.removeObject(forKey: surface)
             // The shell's own event, when the process is gone. Codex's hook also sends one, with
-            // its session, for a session ending in a Codex that keeps running: still on Venice.
-            if event.session == nil { veniceModels.removeObject(forKey: surface) }
+            // its session, for a session ending in a Codex that keeps running: still on its backend.
+            if event.session == nil { backends.removeObject(forKey: surface) }
             return
         }
         if event.event == "transcript" {

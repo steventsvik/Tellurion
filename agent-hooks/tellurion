@@ -7,6 +7,8 @@
 #   tellurion local <model>   chat with a model on this Mac (Ollama, LM Studio, llama.cpp,
 #                             MLX or Apple's own), where nothing leaves it; with
 #                             --provider venice, on your Venice account
+#   tellurion local codex …   Codex, with its usual setup, on a model on this Mac
+#                             (-m <model>; --provider ollama|lmstudio, Ollama by default)
 #   tellurion venice codex …  Codex, with its usual setup, on your Venice account
 #   tellurion venice search … SearXNG, the fallback for its web search: status, setup, use, stop
 #
@@ -291,12 +293,15 @@ phone_setup() {
   phone_status
 }
 
-# A chat with a model: on this Mac, where nothing leaves it, or on Venice.
+# A chat with a model: on this Mac, where nothing leaves it, or on Venice. `local codex` is Codex
+# on a model on this Mac.
 local_model() {
-  if [ -z "${1:-}" ]; then
-    printf 'Usage: tellurion local [--provider ollama|lmstudio|openai|apple|venice] [--base URL] <model>\n' >&2
-    return 2
-  fi
+  case "${1:-}" in
+    codex) shift; local_codex "$@" ;;
+    "")
+      printf 'Usage: tellurion local [--provider ollama|lmstudio|openai|apple|venice] [--base URL] <model>\n       tellurion local codex [-m <model>] [--provider ollama|lmstudio] [codex options]\n' >&2
+      return 2 ;;
+  esac
   exec python3 "$hooks/local-chat.py" "$@"
 }
 
@@ -542,6 +547,109 @@ venice_codex() {
     "$@"
 }
 
+# Codex on a model on this Mac, in Ollama or LM Studio, through Codex's own support for them.
+# Everything of Codex's own stays, as on Venice: its folder, config, hooks, AGENTS.md, skills, MCP
+# servers and sessions; only the model changes, through settings for this run. Nothing leaves this
+# Mac unless web search is switched on in Tools → Local models.
+local_codex() {
+  local root="${TELLURION_TEST_HOME:-$HOME}/.ghostty-extreme"
+  local folder="$root/local" provider="${TELLURION_LOCAL_PROVIDER:-ollama}" model="${TELLURION_LOCAL_MODEL:-}" base=""
+  local chosen=0 codex here python script found status context argument
+  local kept=() settings=() options=()
+
+  # --provider and --base (an LM Studio server that isn't on 127.0.0.1:1234; Ollama's is
+  # OLLAMA_HOST) are ours. A model named for Codex (-m) is checked here first, and stays Codex's.
+  local arguments=("$@") i=0
+  while [ "$i" -lt "${#arguments[@]}" ]; do
+    argument=${arguments[$i]}; i=$((i + 1))
+    case "$argument" in
+      --) kept+=("${arguments[@]:$((i - 1))}"); break ;;
+      --provider) provider=${arguments[$i]:-}; i=$((i + 1)) ;;
+      --provider=*) provider=${argument#--provider=} ;;
+      --base) base=${arguments[$i]:-}; i=$((i + 1)) ;;
+      --base=*) base=${argument#--base=} ;;
+      -m|--model) model=${arguments[$i]:-}; chosen=1; kept+=("$argument" "${arguments[$i]:-}"); i=$((i + 1)) ;;
+      -m?*) model=${argument#-m}; chosen=1; kept+=("$argument") ;;
+      --model=*) model=${argument#--model=}; chosen=1; kept+=("$argument") ;;
+      *) kept+=("$argument") ;;
+    esac
+  done
+  set -- "${kept[@]+"${kept[@]}"}"
+
+  case "$provider" in
+    ollama|lmstudio) ;;
+    *) venice_stop "Codex can run on a model in Ollama or LM Studio (--provider ollama|lmstudio), not \"$provider\"." ;;
+  esac
+  case "$model" in
+    "") ;;
+    -*|*[!A-Za-z0-9_.:/-]*) venice_stop "That model name can't be right: $model" ;;
+  esac
+  codex=$(type -P codex) || venice_stop "Codex isn't installed, or isn't on your PATH."
+  python=$(type -P python3) || venice_stop "python3 is needed to check the model and set Codex up for it."
+
+  # Checks the server and the model, loads the model, and writes Codex's details for it. It
+  # says what's wrong itself (exit 2 and 3); without its details Codex still runs (exit 1).
+  here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  script="$root/agent-hooks/local-catalog.py"
+  [ -f "$script" ] || script="$here/local-catalog.py"
+  case "$base" in
+    ""|http://*|https://*) ;;
+    *) venice_stop "--base needs a web address (http://…), not \"$base\"." ;;
+  esac
+  found=$("$python" -I "$script" --provider "$provider" --codex "$codex" --out "$folder" ${model:+--model "$model"} ${base:+--base "$base"})
+  status=$?
+  case "$status" in
+    0) settings+=(-c "model_catalog_json=\"$folder/codex-catalog.json\"") ;;
+    1) printf 'Codex will start without its details for this model, so it edits files with shell commands instead of apply_patch.\n' >&2 ;;
+    *) exit 1 ;;
+  esac
+  # What the script found, and nothing else: a model name, and a number.
+  model=$(printf '%s' "$found" | sed -n 's/.*"model": *"\([A-Za-z0-9_.:/-]*\)".*/\1/p')
+  context=$(printf '%s' "$found" | sed -n 's/.*"context": *\([0-9]*\).*/\1/p')
+  [ -n "$model" ] || venice_stop "No model was chosen."
+  [ "$chosen" = 1 ] || settings+=(-m "$model")
+  if [ -n "$context" ] && [ "$context" -lt 24000 ]; then
+    local app="LM Studio"
+    [ "$provider" = ollama ] && app=Ollama
+    printf '%s serves %s with %s tokens of context. Codex'"'"'s instructions and tools take about 17,000 of those, leaving little room to work: raise the context length in %s'"'"'s settings.\n' \
+      "$app" "$model" "$context" "$app" >&2
+  fi
+
+  # Tells the sidebar which backend this pane is on, signed like every agent event.
+  if [ "${GHOSTTY_EXTREME_AGENT_EVENTS:-}" = 1 ]; then
+    { printf '\033]777;notify;ghostty-extreme://agent;{"agent":"codex","event":"backend","detail":"local:%s:%s","t":"%s"}\a' \
+      "$provider" "$model" "${GHOSTTY_EXTREME_EVENT_TOKEN:-}" > /dev/tty; } 2>/dev/null
+  fi
+
+  # Local panes stay attached to their own terminal, as the zsh wrapper does for plain Codex.
+  if [ -t 1 ] && [ -t 0 ]; then
+    GHOSTTY_EXTREME_CODEX_TTY="${GHOSTTY_EXTREME_CODEX_TTY:-$(tty)}"
+    export GHOSTTY_EXTREME_CODEX_TTY
+    settings=(--no-daemon "${settings[@]}")
+  fi
+
+  # Codex's memory can be read, since that stays on this Mac, but a session on a small model
+  # doesn't write it: what it remembers reaches every later session, on any provider.
+  options+=(-c 'memories.generate_memories=false')
+  # The one thing that would leave this Mac, so it's off until switched on. The same server as
+  # Venice's, and the same SearXNG if one is set up.
+  if [ -e "$folder/use-web-search" ]; then
+    local search="$root/agent-hooks/venice-search.py"
+    [ -f "$search" ] || search="$here/venice-search.py"
+    options+=(-c "mcp_servers.tellurion_search={command=\"$(venice_toml "$python")\",args=[\"-I\",\"$(venice_toml "$search")\",\"--folder\",\"$(venice_toml "$root/venice")\"],startup_timeout_sec=10}")
+  fi
+
+  # Settings for this run only; Codex's config file isn't touched. ChatGPT's connected apps stay
+  # off: they act through the ChatGPT sign-in, and their tool definitions alone would fill a
+  # small model's context.
+  exec "$codex" "${settings[@]}" \
+    -c "model_provider=\"$provider\"" --oss --local-provider "$provider" \
+    -c 'analytics.enabled=false' \
+    -c 'features.apps=false' \
+    "${options[@]}" \
+    "$@"
+}
+
 venice() {
   case "${1:-}" in
     codex) shift; venice_codex "$@" ;;
@@ -561,11 +669,11 @@ case "${1:-doctor}" in
       *) printf 'Usage: tellurion phone [status|setup]\n' >&2; exit 2 ;;
     esac ;;
   -h|--help|help)
-    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
     ;;
   *)
     printf 'Unknown command: %s\n' "$1" >&2
-    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
     ;;
 esac

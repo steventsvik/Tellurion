@@ -45,6 +45,17 @@ enum LocalModelSessions {
         TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config)
     }
 
+    /// Codex, with its usual setup, on a model on this Mac (Ollama or LM Studio): a tab, or a tile
+    /// on a board. Nothing leaves the Mac, so it starts where the pane is, like a chat.
+    static func openCodex(_ model: LocalModel, from owner: BaseTerminalController) {
+        guard model.host == .ollama || model.host == .lmStudio, prepare(model) else { return }
+        var config = Ghostty.SurfaceConfiguration()
+        config.workingDirectory = owner.focusedSurface?.pwd
+        config.environmentVariables.merge(LocalCodex.environment(model: model.name, provider: model.host.provider)) { $1 }
+        config.initialInput = " " + LocalCodex.command() + "\n"
+        TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config)
+    }
+
     /// Codex, with its usual setup, on a Venice model: a tile that stays on it through restarts
     /// on a board, or a tab in a window.
     static func openCodex(_ model: LocalModel, name: String, from owner: BaseTerminalController) {
@@ -72,6 +83,88 @@ enum LocalModelSessions {
         } catch {
             LocalModelsModel.shared.error = error.localizedDescription
             return false
+        }
+    }
+}
+
+/// Starting Codex on a model on this Mac: the variables a pane carries, and the lines typed into
+/// it. Typed lines name `tellurion local codex` outright, so they work whatever the shell; in zsh a
+/// plain `codex` in such a pane goes the same way (see ghostty-extreme.zsh). The pane's backend
+/// variable is the one Venice panes carry, with "local" in it.
+enum LocalCodex {
+    static let backend = "local"
+    static let modelVariable = "TELLURION_LOCAL_MODEL"
+    static let providerVariable = "TELLURION_LOCAL_PROVIDER"
+    /// What Codex records as the provider in a session on a model here: its own names for them.
+    static let providers: Set<String> = ["ollama", "lmstudio"]
+
+    static func environment(model: String, provider: String) -> [String: String] {
+        [VeniceCodex.backendVariable: backend, modelVariable: model, providerVariable: provider]
+    }
+
+    /// Model names as Ollama and LM Studio write them ("publisher/model:tag"). A name from a
+    /// file isn't typed into a shell unchecked.
+    static func isValidName(_ name: String) -> Bool {
+        name.range(of: #"^[A-Za-z0-9_.][A-Za-z0-9_.:/-]{0,199}$"#, options: .regularExpression) != nil
+    }
+
+    private static var cli: String { AgentTools.shellQuote(HookInstaller.binFolder.appendingPathComponent("tellurion").path) }
+
+    /// The command, with Codex's own arguments after it: "resume <id>".
+    static func command(_ arguments: String = "") -> String {
+        cli + " local codex" + (arguments.isEmpty ? "" : " " + arguments)
+    }
+
+    /// Resumes a session (its id already quoted) on the model and provider it ran on. Without a
+    /// known model, `tellurion local codex` picks one that's here; it never goes to another provider.
+    static func resumeLine(_ id: String, provider: String?, model: String?) -> String {
+        var chosen = ""
+        if let provider, providers.contains(provider) { chosen += "\(providerVariable)=\(provider) " }
+        if let model, isValidName(model) { chosen += "\(modelVariable)=\(AgentTools.shellQuote(model)) " }
+        return " " + chosen + command("resume \(id)") + "\n"
+    }
+
+    /// What Codex recorded for a session, when it ran on a model on this Mac: its host, and the
+    /// model if a turn named one. Nil for a session on any other provider, or one that can't be read.
+    static func session(_ id: String) -> (provider: String, model: String?)? {
+        guard let path = CodexTracking.transcript(session: id), let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        // The start of the file has what's needed; a long session isn't read whole.
+        guard let data = try? handle.read(upToCount: 256 * 1024), let text = String(data: data, encoding: .utf8) else { return nil }
+        var provider: String?
+        var model: String?
+        for line in text.split(separator: "\n") {
+            guard let record = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  let payload = record["payload"] as? [String: Any] else { continue }
+            switch record["type"] as? String {
+            case "session_meta": provider = payload["model_provider"] as? String
+            case "turn_context":
+                if let name = payload["model"] as? String, !name.isEmpty { model = name }
+            default: break
+            }
+            if provider != nil, model != nil { break }
+        }
+        guard let provider, providers.contains(provider) else { return nil }
+        return (provider, model)
+    }
+}
+
+/// What a Codex session on a model on this Mac may use beyond coding tools: a file
+/// `tellurion local codex` looks for, so every way of starting a session agrees.
+enum LocalCodexOption: String {
+    case webSearch = "use-web-search"
+
+    private var file: URL { AgentTools.root.appendingPathComponent("local/\(rawValue)") }
+
+    var isOn: Bool { FileManager.default.fileExists(atPath: file.path) }
+
+    func set(_ on: Bool) throws {
+        guard on != isOn else { return }
+        if on {
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data().write(to: file)
+        } else {
+            try FileManager.default.removeItem(at: file)
         }
     }
 }

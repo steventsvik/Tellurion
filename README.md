@@ -580,7 +580,15 @@ Chat with a model that runs on your Mac: nothing leaves it, and it works offline
 - **Find and download:** Tools → Local models lists the most popular models on Ollama in five
   sizes, Tiny to Huge, opens on the size that suits your Mac and marks the ones too big for
   it. A Hugging Face section adds the most downloaded models Ollama can run.
-- **From a terminal:** `tellurion local <model>`.
+- **Codex on them.** Each Ollama or LM Studio model has **Open in Codex**: Codex with its usual
+  tools and your own setup (config, `AGENTS.md`, skills, MCP servers, hooks, sessions) on a model
+  that runs on your Mac, so nothing leaves it. Models that can't call tools say so. Codex is told
+  the context the model is really served with, and the pane says if that's too small. The sidebar
+  marks these panes **Local**, and their sessions come back on the same model after an update.
+  **Search the web** is a separate switch for them, off by default: the one thing that would leave
+  your Mac.
+- **From a terminal:** `tellurion local <model>`, and `tellurion local codex [-m <model>]
+  [--provider ollama|lmstudio]`.
 
 **Abliterated models on Venice, with Codex's tools.** Connect a [Venice](https://venice.ai/)
 account with an API key in Tools → Local models, and its models are a click away, read live from

@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Codex on the models on your Mac.** Each model in Ollama or LM Studio in **Tools → Local models** has an **Open in Codex** button: Codex with its usual tools and everything you've set up (your config, `AGENTS.md`, skills, MCP servers, hooks and sessions), on a model that runs on this Mac, so nothing leaves it and it works offline. Models that can't call tools say so and can't be opened this way. The model is loaded first, and Codex is told the context Ollama really gives it, so long sessions compact instead of silently losing their start; if that context is small, the pane says how to raise it. The sidebar marks these panes **Local**, a `codex` typed in one stays on the model, and after an update or a board restart the session comes back on it, never on another provider. Codex's memory can be read by these sessions but isn't written by them. **Search the web** is a separate switch for these sessions, off by default, since it's the one thing that would leave your Mac; it uses the same Exa and SearXNG setup as Venice. From a terminal: `tellurion local codex [-m <model>] [--provider ollama|lmstudio]`.
+
 ## 1.9.2
 
 The shipped app no longer carries phone access's test switches.

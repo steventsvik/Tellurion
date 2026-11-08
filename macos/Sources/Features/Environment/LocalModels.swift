@@ -35,6 +35,8 @@ struct LocalModel: Identifiable, Equatable {
     /// Memory it takes while loaded (Ollama), and how much of that is on the GPU.
     var memory: Int64?
     var gpuShare: Double?
+    /// Can call tools, which Codex needs. Nil when its host doesn't say (LM Studio).
+    var tools: Bool?
     /// A cloud model that answers without refusing.
     var uncensored = false
     /// A cloud model whose host says it stores nothing; if not, its own provider may.
@@ -180,6 +182,7 @@ final class LocalModelsModel: ObservableObject {
             guard let name = model["name"] as? String else { continue }
             loaded[name] = (int64(model["size"]), int64(model["size_vram"]))
         }
+        let tools = await ollamaTools(tags)
         let models = tags.compactMap { model -> LocalModel? in
             guard let name = model["name"] as? String else { return nil }
             let details = model["details"] as? [String: Any] ?? [:]
@@ -187,9 +190,37 @@ final class LocalModelsModel: ObservableObject {
                 .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
             let memory = loaded[name]
             return LocalModel(host: .ollama, name: name, size: int64(model["size"]), detail: detail, loaded: memory != nil,
-                              memory: memory?.0, gpuShare: memory.map { $0.0 > 0 ? Double($0.1) / Double($0.0) : 0 })
+                              memory: memory?.0, gpuShare: memory.map { $0.0 > 0 ? Double($0.1) / Double($0.0) : 0 }, tools: tools[name])
         }
         return (.running(version: version["version"] as? String), models.sorted { ($0.loaded ? 0 : 1, $0.name) < ($1.loaded ? 0 : 1, $1.name) })
+    }
+
+    /// Whether each model can call tools, by name. Ollama says so per model (`/api/show`, which
+    /// reads the model's file), so each is asked once and remembered by its digest.
+    nonisolated private static let toolsByDigest = ToolsCache()
+
+    nonisolated private static func ollamaTools(_ tags: [[String: Any]]) async -> [String: Bool] {
+        var tools: [String: Bool] = [:]
+        await withTaskGroup(of: (String, String, Bool?).self) { group in
+            for model in tags {
+                guard let name = model["name"] as? String else { continue }
+                let digest = model["digest"] as? String ?? name
+                if let known = toolsByDigest[digest] {
+                    tools[name] = known
+                    continue
+                }
+                group.addTask {
+                    let shown = await postJSON(ollamaBase.appendingPathComponent("api/show"), body: ["model": name])
+                    return (name, digest, (shown?["capabilities"] as? [String]).map { $0.contains("tools") })
+                }
+            }
+            for await (name, digest, can) in group {
+                guard let can else { continue }
+                tools[name] = can
+                toolsByDigest[digest] = can
+            }
+        }
+        return tools
     }
 
     // MARK: LM Studio
@@ -368,8 +399,29 @@ final class LocalModelsModel: ObservableObject {
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
+    nonisolated private static func postJSON(_ url: URL, body: [String: String]) async -> [String: Any]? {
+        var request = URLRequest(url: url, timeoutInterval: 5)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+
     nonisolated private static func int64(_ value: Any?) -> Int64 {
         (value as? NSNumber)?.int64Value ?? 0
+    }
+}
+
+/// Which model files can call tools, read from any thread.
+private final class ToolsCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String: Bool] = [:]
+
+    subscript(digest: String) -> Bool? {
+        get { lock.withLock { values[digest] } }
+        set { lock.withLock { values[digest] = newValue } }
     }
 }
 #endif
