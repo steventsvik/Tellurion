@@ -12,6 +12,7 @@ enum TellurionLaunch {
         // The hooks read feature switches from files.
         TellurionSettings.writeFlags()
         SetupChecks.writeSkipFlags()
+        AgentBudgets.shared.start()
         DispatchQueue.global(qos: .utility).async {
             // A rebuilt app brings already-installed hooks up to date.
             HookInstaller.refreshIfInstalled()

@@ -278,6 +278,7 @@ private struct ReviewItemView: View {
                 .frame(width: 340, height: 90)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Tellurion.text.opacity(0.15)))
             HStack {
+                CommitSuggestButton(item: item, message: $commitMessage)
                 Spacer()
                 Button("Cancel") { showCommit = false }
                 Button("Commit") {

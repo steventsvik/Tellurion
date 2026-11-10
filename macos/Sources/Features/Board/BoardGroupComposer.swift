@@ -19,6 +19,7 @@ struct BoardGroupComposer: View {
     @State private var folder = ""
     @State private var task = ""
     @State private var skip = false
+    @StateObject private var worktrees = WorktreeChoice()
 
     private struct Slot: Identifiable, Equatable {
         let id = UUID()
@@ -190,6 +191,8 @@ struct BoardGroupComposer: View {
             }
             .toggleStyle(.switch)
             .controlSize(.mini)
+            WorktreeOptionRow(choice: worktrees, folder: folder.isEmpty ? controller.workspace.folder : folder,
+                              agents: slots.filter { $0.agent != "shell" }.count)
         }
     }
 
@@ -262,9 +265,13 @@ struct BoardGroupComposer: View {
 
     private func spawn() {
         let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        controller.spawnGroup(name: title.isEmpty ? role.title : title, role: role, slots: slots.map(\.agent),
-                              folder: folder, task: task, skip: skip)
-        done()
+        let group = title.isEmpty ? role.title : title
+        let kinds = slots.map(\.agent)
+        // With a worktree each, they're made first; if that fails, nothing starts and the composer says why.
+        let request = WorktreeChoice.Request(group: group, kinds: kinds, folder: folder.isEmpty ? controller.workspace.folder : folder)
+        worktrees.start(request, on: controller, launch: { folders in
+            controller.spawnGroup(name: group, role: role, slots: kinds, folder: folder, task: task, skip: skip, folders: folders)
+        }, done: done)
     }
 
     private func savePreset() {

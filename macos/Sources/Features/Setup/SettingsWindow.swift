@@ -42,6 +42,7 @@ private struct TellurionSettingsView: View {
                         FeaturePresetPicker()
                         FeatureToggleList()
                     }
+                    SmallJobsSettingsBlock()
                     VStack(alignment: .leading, spacing: 10) {
                         TellurionSectionLabel("Look")
                         settingRow("Design", designDetail) {

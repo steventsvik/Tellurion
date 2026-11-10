@@ -147,6 +147,8 @@ final class BoardController: BaseTerminalController {
     weak var groupsView: BoardGroupsView?
     /// The board's own agent, in the bar at the bottom (see BoardAssistant).
     private(set) lazy var assistant = BoardAssistant(controller: self)
+    /// Items sent to agents and the To Do columns being worked through (see BoardTasks).
+    private(set) lazy var tasks = BoardTaskRunner(board: self)
     /// The bar's text field, for ⌘L.
     weak var assistantField: NSTextField?
     /// What orchestrators have yet to hear from their agents (see BoardTeams).
@@ -596,7 +598,7 @@ final class BoardController: BaseTerminalController {
     /// `adopt`: the folder becomes the board's (the composer); off, it's only these tiles'.
     @discardableResult
     func launch(_ lines: [(agent: BoardAgent?, command: String)], folder: String?, skip: Bool = false,
-                adopt: Bool = true) -> [Ghostty.SurfaceView] {
+                adopt: Bool = true, folders: [String]? = nil) -> [Ghostty.SurfaceView] {
         guard let app = ghostty.app, !lines.isEmpty else { return [] }
         if let folder, adopt { workspace.folder = folder }
         let n = lines.count
@@ -610,7 +612,8 @@ final class BoardController: BaseTerminalController {
         var views: [Ghostty.SurfaceView] = []
         for (index, line) in lines.enumerated() {
             var config = Ghostty.SurfaceConfiguration()
-            config.workingDirectory = folder ?? workspace.folder
+            // `folders`: a folder of its own per tile (a worktree each, see AgentWorktrees).
+            config.workingDirectory = folders.flatMap { index < $0.count ? $0[index] : nil } ?? folder ?? workspace.folder
             config.initialInput = line.command.isEmpty ? nil : line.command
             let accounts = applyAccounts(&config)
             VeniceCodex.adapt(&config)
@@ -624,6 +627,7 @@ final class BoardController: BaseTerminalController {
             commands[view.id] = line.agent.map { agent in
                 agent.binary + (skip ? agent.skipFlag.map { " " + $0 } ?? "" : "") + "\n"
             } ?? nil
+            if skip, line.agent?.skipFlag != nil { BoardSkippedPrompts.tiles.insert(view.id) }
             views.append(view)
         }
         insert(views, undoAction: n == 1 ? "Launch Agent" : "Launch Agents")

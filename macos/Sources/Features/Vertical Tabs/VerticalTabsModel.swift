@@ -208,6 +208,7 @@ final class VerticalTabsMenu: NSObject {
             Extra(title: "Review Changes", action: #selector(showReview(_:)), key: "i", feature: .review),
             Extra(title: "Command History", action: #selector(toggleCommandBlocks(_:)), key: "b", feature: .commandHistory),
             Extra(title: "Agent Activity", action: #selector(showActivity(_:)), key: "a", feature: .activity),
+            Extra(title: "Search Sessions", action: #selector(showSessionSearch(_:)), key: "", feature: .sessionSearch),
             Extra(title: "Visual Fix", action: #selector(toggleVisualFix(_:)), key: "v", feature: .visualFix),
             Extra(title: "Background Processes", action: #selector(showHousekeeping(_:)), key: "k", feature: .background),
             Extra(title: "Project Memory", action: #selector(showMemory(_:)), key: "y", feature: .memory),
@@ -301,6 +302,10 @@ final class VerticalTabsMenu: NSObject {
 
     @objc func showActivity(_ sender: Any?) {
         ActivityDashboard.toggle()
+    }
+
+    @objc func showSessionSearch(_ sender: Any?) {
+        SessionSearch.toggle()
     }
 
     @objc func showHousekeeping(_ sender: Any?) {

@@ -358,7 +358,8 @@ extension BoardController {
 
     /// Starts an orchestrator with its agents as one block, the card above them, and gives it
     /// the goal as its first command.
-    func launchOrchestrator(members: [(agent: BoardAgent?, role: String)], folder: String?, goal: String?) {
+    func launchOrchestrator(members: [(agent: BoardAgent?, role: String)], folder: String?, goal: String?,
+                            folders: [String]? = nil) {
         guard let app = ghostty.app else { return }
         undoManager?.beginUndoGrouping()
         if let folder { setFolder(folder) }
@@ -375,7 +376,8 @@ extension BoardController {
         for (index, member) in members.enumerated() {
             let col = index % columns, row = index / columns
             var config = Ghostty.SurfaceConfiguration()
-            config.workingDirectory = start
+            // `folders`: a folder of its own per agent (a worktree each, see AgentWorktrees).
+            config.workingDirectory = folders.flatMap { index < $0.count ? $0[index] : nil } ?? start
             config.initialInput = member.agent.map { $0.binary + "\n" }
             let accounts = applyAccounts(&config)
             VeniceCodex.adapt(&config)

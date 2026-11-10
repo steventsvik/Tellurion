@@ -2,8 +2,9 @@
 import AppKit
 
 /// Notes, checklists and kanban boards beside the terminals. A checklist item or a kanban
-/// card can be handed to an agent: it's typed into one on the board (or a new Claude Code or
-/// Codex tile), and then follows that agent: Doing while it works, Done when it finishes.
+/// card can be sent to an agent: it's typed into one on the board (or a new Claude Code or
+/// Codex tile), and then follows that agent: In Progress while it works, Done when it finishes
+/// (see BoardTasks).
 struct BoardCard: Codable, Identifiable, Equatable {
     enum Kind: String, Codable, CaseIterable {
         case note, checklist, kanban, map, orchestrator, web, document, media
@@ -81,6 +82,14 @@ struct CardItem: Codable, Identifiable, Equatable {
     var column = CardItem.todo
     /// The tile whose agent is working on it.
     var agent: UUID?
+    /// That agent's name when the item was sent, for when its tile is gone.
+    var agentName: String?
+    /// When it was typed into the agent (nil for an item from an older version).
+    var sent: Date?
+    /// True until it's typed in: the agent was busy, and the message waits for it.
+    var waiting: Bool?
+    /// True once it was moved by hand after being sent: nothing moves it after that.
+    var manual: Bool?
     /// When it's due, and how much it matters (0 low, 1 medium, 2 high).
     var due: Date?
     var priority: Int?
@@ -217,7 +226,7 @@ extension BoardController {
         }
     }
 
-    /// A submenu for handing an item to an agent: one on the board, or a new tile.
+    /// A submenu for sending an item to an agent: one on the board, or a new tile.
     func agentMenu(for item: UUID, in card: UUID) -> NSMenu {
         let menu = NSMenu()
         for agent in boardAgents {
@@ -227,7 +236,7 @@ extension BoardController {
             })
         }
         if !boardAgents.isEmpty { menu.addItem(.separator()) }
-        for (title, kind) in [("New Claude Code Tile", VerticalTabAgentKind.claude), ("New Codex Tile", .codex)] {
+        for (title, kind) in [("New Claude Code Agent", VerticalTabAgentKind.claude), ("New Codex Agent", .codex)] {
             menu.addItem(ClosureMenuItem(title, image: NSImage(systemSymbolName: "plus", accessibilityDescription: nil)) { [weak self] in
                 self?.hand(item, in: card, newAgent: kind)
             })
@@ -243,49 +252,71 @@ extension BoardController {
         return text
     }
 
-    func hand(_ itemID: UUID, in cardID: UUID, to surface: Ghostty.SurfaceView) {
+    /// Sends an item to the agent in a tile as its task, and links the two. A busy Claude Code
+    /// or Codex gets it when its turn ends (the item says "queued" until then). False when
+    /// nothing was sent: a tile with no agent running is never typed into, since a shell would
+    /// run the words as a command.
+    @discardableResult
+    func hand(_ itemID: UUID, in cardID: UUID, to surface: Ghostty.SurfaceView) -> Bool {
         guard let card = model.cards.first(where: { $0.id == cardID }),
-              let item = card.items.first(where: { $0.id == itemID }), !item.text.isEmpty else { return }
-        deliver(prompt(for: item, in: card), to: surface)
-        link(itemID, in: cardID, to: surface.id)
+              let item = card.items.first(where: { $0.id == itemID }), !item.text.isEmpty,
+              let info = VerticalTabsAgents.shared.info(for: surface) else { return false }
+        let text = prompt(for: item, in: card)
+        let name = BoardTileTitle.title(surface, info, name: model.titles[surface.id])
+        // Sent somewhere else before, and still waiting there: that message is taken back.
+        tasks.cancel(itemID)
+        if info.kind == .claude || info.kind == .codex {
+            let delivery = AgentInbox.shared.deliver(text, to: surface, label: "Task from \(card.title)")
+            link(itemID, in: cardID, to: surface.id, name: name, at: nil)
+            tasks.track(itemID, on: cardID, delivery: delivery)
+        } else {
+            deliver(text, to: surface, show: false)
+            link(itemID, in: cardID, to: surface.id, name: name, at: Date())
+        }
+        return true
     }
 
     func hand(_ itemID: UUID, in cardID: UUID, newAgent kind: VerticalTabAgentKind) {
         guard let card = model.cards.first(where: { $0.id == cardID }),
               let item = card.items.first(where: { $0.id == itemID }), !item.text.isEmpty,
               let surface = startAgent(kind, prompt: prompt(for: item, in: card), near: model.frames[cardID]) else { return }
-        link(itemID, in: cardID, to: surface.id)
+        tasks.cancel(itemID)
+        tasks.started(surface.id)
+        link(itemID, in: cardID, to: surface.id, name: kind.displayName, at: Date())
     }
 
-    private func link(_ itemID: UUID, in cardID: UUID, to surface: UUID) {
+    /// Starts an agent of a kind the board can launch on an item, in a new tile beside the
+    /// card, without taking the keyboard (a queue starts several). Nil when the agent can't be
+    /// given a first task.
+    @discardableResult
+    func hand(_ itemID: UUID, in cardID: UUID, starting agent: BoardAgent) -> Ghostty.SurfaceView? {
+        guard let card = model.cards.first(where: { $0.id == cardID }),
+              let item = card.items.first(where: { $0.id == itemID }), !item.text.isEmpty else { return nil }
+        let line = agent.command(prompt: prompt(for: item, in: card))
+        // Without the task in it, the line would only start the agent.
+        guard line != agent.command(prompt: nil) else { return nil }
+        var config = Ghostty.SurfaceConfiguration()
+        config.workingDirectory = workspace.folder ?? (focusedSurface ?? model.focused?.value)?.pwd
+        guard let surface = addTile(config: config, command: line, frame: freeSpot(size: Self.tileSize, near: model.frames[cardID]),
+                                    focus: false) else { return nil }
+        tasks.cancel(itemID)
+        tasks.started(surface.id)
+        link(itemID, in: cardID, to: surface.id, name: agent.kind.displayName, at: Date())
+        return surface
+    }
+
+    /// The item remembers its tile and moves to In Progress. `at` nil: it waits for the agent.
+    private func link(_ itemID: UUID, in cardID: UUID, to surface: UUID, name: String, at: Date?) {
         updateCard(cardID) { card in
             guard let index = card.items.firstIndex(where: { $0.id == itemID }) else { return }
-            card.items[index].agent = surface
-            card.items[index].done = false
-            if card.kind == .kanban { Self.move(&card.items, index, toColumn: CardItem.doing) }
+            BoardTasks.link(&card.items[index], to: surface, name: name, at: at)
+            if card.kind == .kanban, card.items[index].column != CardItem.doing { Self.move(&card.items, index, toColumn: CardItem.doing) }
         }
     }
 
     /// An agent's status changed: items it's working on follow it.
     func cardsAgentChanged(_ surface: Ghostty.SurfaceView) {
-        guard let activity = VerticalTabsAgents.shared.info(for: surface)?.activity else { return }
-        for card in model.cards where card.items.contains(where: { $0.agent == surface.id }) {
-            updateCard(card.id) { card in
-                // By id: a move puts an item at the end and shifts the ones after it.
-                for itemID in card.items.filter({ $0.agent == surface.id }).map(\.id) {
-                    guard let index = card.items.firstIndex(where: { $0.id == itemID }) else { continue }
-                    switch activity {
-                    case .working:
-                        if card.kind == .kanban, card.items[index].column != CardItem.doing { Self.move(&card.items, index, toColumn: CardItem.doing) }
-                    case .done:
-                        card.items[index].done = true
-                        if card.kind == .kanban, card.items[index].column != CardItem.done { Self.move(&card.items, index, toColumn: CardItem.done) }
-                    default:
-                        break
-                    }
-                }
-            }
-        }
+        tasks.agentChanged(surface)
     }
 
     /// Kanbans from before Backlog: To Do, Doing and Done move one column right.

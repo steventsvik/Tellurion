@@ -506,6 +506,7 @@ private struct BoardTileHeader: View {
                     .foregroundColor(state.color.map(Color.init(nsColor:)) ?? Tellurion.dim).lineLimit(1)
             }
             Spacer(minLength: 4)
+            AgentBudgetMeter(surface: surface)
             if state.paused {
                 BoardPausedPill()
             } else if let info = state.info {
@@ -518,6 +519,7 @@ private struct BoardTileHeader: View {
                     .help("Signed in with another account")
             }
             if state.skipsPermissions { BoardSkipPill() }
+            AgentConflictMark(surface: surface)
             glyph("arrow.clockwise").help("Restart")
             glyph("plus.square.on.square").help("Duplicate")
             glyph("ellipsis")
