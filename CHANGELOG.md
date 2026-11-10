@@ -4,7 +4,9 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
-## Unreleased
+## 1.9.3
+
+The orchestrator comes to tabs, with checks that make done mean verified, conflict radar, budgets, task cards and session search, and a round of fixes for crashes, lost files and the release checks.
 
 - **The orchestrator comes to tabs.** Give a project's agents one command from the sidebar's new Orchestrator section or its own window (⌃⌘O), without a board: wire the tabs you have, new agents open as named tabs while you stay where you are, and it's told when an agent's project check fails so it can send the work back.
 - **Done means verified.** Give a project a check command (`npm test`, `swift build`, `make lint`) in the new Checks window, and when an agent finishes a turn that changed files, Tellurion runs it and the agent's card says Verified or Check failed beside Done. Click a failure for its log, send it back to the agent, or have failures sent back automatically (up to three in a row). Only a command you save ever runs.
