@@ -50,6 +50,7 @@ struct TerminalFrameOverlay: View {
 struct NewTabSplash: View {
     @State private var start = Date()
     @State private var visible = true
+    @Environment(\.tellurionMotion) private var motion
 
     private static let duration: TimeInterval = 1.5
     /// The logo's pixels in a fixed shuffled order, so they appear scattered.
@@ -65,7 +66,7 @@ struct NewTabSplash: View {
 
     var body: some View {
         if visible {
-            TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !motion)) { context in
                 // The timeline can tick a moment before `start` is reset on appear.
                 let t = max(0, context.date.timeIntervalSince(start))
                 let build = min(1, t / 0.75)
@@ -120,11 +121,12 @@ struct AgentLinkSweep: View {
     @State private var linkedAt: Date?
     @State private var kind: VerticalTabAgentKind?
     @State private var hadAgent = false
+    @Environment(\.tellurionMotion) private var motion
 
     var body: some View {
         GeometryReader { geometry in
             if let linkedAt {
-                TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !motion)) { context in
                     let t = max(0, context.date.timeIntervalSince(linkedAt))
                     let sweep = min(1, t / 0.7)
                     // Step the band down in 16 moves, like a pixel scanline.

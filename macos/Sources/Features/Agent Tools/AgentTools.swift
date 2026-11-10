@@ -10,6 +10,14 @@ enum AgentTools {
     /// NSHomeDirectory ignores HOME).
     static let root = URL(fileURLWithPath: HookInstaller.home).appendingPathComponent(".ghostty-extreme", isDirectory: true)
 
+    /// The app's folder in Application Support (`GhosttyEXTREME`). Test-only:
+    /// `TELLURION_TEST_HOME` moves it under that folder, like `root`.
+    static var supportFolder: URL {
+        let library = TestHooks.home.map { URL(fileURLWithPath: $0).appendingPathComponent("Library/Application Support", isDirectory: true) }
+            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return library.appendingPathComponent("GhosttyEXTREME", isDirectory: true)
+    }
+
     struct Result {
         let status: Int32
         let output: String
@@ -122,19 +130,13 @@ enum AgentTools {
         return run(process)
     }
 
-    /// Runs a process to the end and collects what it wrote.
-    private static func run(_ process: Process) -> Result {
-        let out = Pipe(), err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        do { try process.run() } catch { return Result(status: -1, output: "", error: "\(error)") }
-        // Read before waiting so large output can't fill the pipe and block git.
-        let outData = out.fileHandleForReading.readDataToEndOfFile()
-        let errData = err.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return Result(status: process.terminationStatus,
-                      output: String(decoding: outData, as: UTF8.self),
-                      error: String(decoding: errData, as: UTF8.self))
+    /// Runs a process to the end and collects what it wrote. Git's own commands here are
+    /// local, so one that's still going after `timeout` seconds is stuck, and is stopped.
+    private static func run(_ process: Process, timeout: TimeInterval = 300) -> Result {
+        let result = ProcessRunner.run(process, timeout: timeout)
+        if let failure = result.launchError { return Result(status: -1, output: "", error: failure) }
+        return Result(status: result.status, output: result.text,
+                      error: result.timedOut && result.stderr.isEmpty ? "Timed out after \(Int(timeout)) seconds" : result.errorText)
     }
 
     /// The repository containing `folder`, if any.
@@ -144,8 +146,19 @@ enum AgentTools {
         return result.ok && !root.isEmpty ? root : nil
     }
 
+    /// `s` as one shell argument. Control characters are left out: these lines are typed
+    /// into a terminal, where one acts as a key (Ctrl-U erases the line, Return runs it)
+    /// before the shell reads any quotes.
     static func shellQuote(_ s: String) -> String {
-        "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let plain = String(String.UnicodeScalarView(s.unicodeScalars.filter { $0.properties.generalCategory != .control }))
+        return "'" + plain.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// `line` if it's safe to type into a shell as it is: no control characters apart from
+    /// one newline at the end. Nil otherwise, and then nothing should be typed.
+    static func typedLine(_ line: String) -> String? {
+        let body = line.hasSuffix("\n") ? String(line.dropLast()) : line
+        return Ghostty.Shell.containsControlCharacters(body) ? nil : line
     }
 
     /// The shell line that starts `agent` with the prompt stored in `promptFile`. The prompt

@@ -302,6 +302,141 @@ struct SpinnerLayer: NSViewRepresentable {
     }
 }
 
+/// A soft glow that breathes (dim and tight, then bright and wide) behind whatever it's the
+/// background of.
+struct BreathingGlowLayer: NSViewRepresentable {
+    let color: Color
+    var period: Double = 1.6
+
+    final class View: MotionLayerView {
+        let glow = CALayer()
+        var period = 1.6
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            glow.shadowOffset = .zero
+            glow.shadowOpacity = 0.2
+            glow.shadowRadius = 4
+            layer?.addSublayer(glow)
+        }
+
+        override func layout() {
+            super.layout()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            glow.frame = bounds
+            // The glow of a known shape: no offscreen pass, and nothing else is drawn.
+            glow.shadowPath = CGPath(ellipseIn: bounds.insetBy(dx: bounds.width * 0.2, dy: bounds.height * 0.2), transform: nil)
+            CATransaction.commit()
+            if glow.animation(forKey: "breathe") == nil { restartAnimations() }
+        }
+
+        override func restartAnimations() {
+            glow.removeAnimation(forKey: "breathe")
+            guard bounds.width > 0, !MotionTest.off.contains("glow") else { return }
+            let brighten = CABasicAnimation(keyPath: "shadowOpacity")
+            brighten.fromValue = 0.2
+            brighten.toValue = 0.6
+            let widen = CABasicAnimation(keyPath: "shadowRadius")
+            widen.fromValue = 4
+            widen.toValue = 14
+            let group = CAAnimationGroup()
+            group.animations = [brighten, widen]
+            group.duration = period
+            group.autoreverses = true
+            group.repeatCount = .infinity
+            group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            group.preferredFrameRateRange = Motion.chromeRate
+            glow.add(group, forKey: "breathe")
+        }
+    }
+
+    func makeNSView(context: Context) -> View { View(frame: .zero) }
+
+    func updateNSView(_ view: View, context: Context) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        view.glow.shadowColor = color.cg
+        CATransaction.commit()
+        if view.period != period {
+            view.period = period
+            view.restartAnimations()
+        }
+    }
+}
+
+/// An SF Symbol turning steadily: "checking".
+struct TurningSymbolLayer: NSViewRepresentable {
+    let symbol: String
+    let color: Color
+    var period: Double = 2.5
+
+    final class View: MotionLayerView {
+        let icon = CALayer()
+        var period = 2.5
+        var symbol = ""
+        var color = NSColor.labelColor
+        private var drawn: (symbol: String, color: NSColor, scale: CGFloat)?
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            // At its own size, like the symbol as an image: not stretched to the frame.
+            icon.contentsGravity = .center
+            layer?.addSublayer(icon)
+        }
+
+        override func layout() {
+            super.layout()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            icon.frame = bounds
+            CATransaction.commit()
+            redraw()
+            if icon.animation(forKey: "turn") == nil { restartAnimations() }
+        }
+
+        override func restartAnimations() {
+            icon.removeAnimation(forKey: "turn")
+            if MotionTest.off.contains("spinner") { return }
+            let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+            turn.fromValue = 0
+            turn.toValue = Double.pi * 2
+            turn.duration = period
+            turn.repeatCount = .infinity
+            turn.preferredFrameRateRange = Motion.chromeRate
+            icon.add(turn, forKey: "turn")
+        }
+
+        /// Draws the symbol into the layer, once per look.
+        func redraw() {
+            let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+            if let drawn, drawn.symbol == symbol, drawn.color == color, drawn.scale == scale { return }
+            let configuration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+                .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+            guard let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+                .withSymbolConfiguration(configuration) else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            icon.contentsScale = scale
+            icon.contents = image.layerContents(forContentsScale: scale)
+            CATransaction.commit()
+            drawn = (symbol, color, scale)
+        }
+    }
+
+    func makeNSView(context: Context) -> View { View(frame: .zero) }
+
+    func updateNSView(_ view: View, context: Context) {
+        view.symbol = symbol
+        view.color = NSColor(color)
+        view.redraw()
+        if view.period != period {
+            view.period = period
+            view.restartAnimations()
+        }
+    }
+}
+
 /// A thin track with a light sweeping along it: an agent at work.
 struct ActivityBarLayer: NSViewRepresentable {
     let color: Color

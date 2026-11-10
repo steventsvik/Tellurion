@@ -89,6 +89,8 @@ private struct PhoneSetupView: View {
     private enum StepState { case done, current, later }
 
     @State private var showSetup = false
+    /// A phone was removed but the list couldn't be saved.
+    @State private var removeFailed = false
 
     /// Tailscale is ready for phone access: the window leads with pairing and phones.
     private func ready(_ s: TailscaleStatus) -> Bool { s.state == .running && s.magicDNS && s.httpsEnabled }
@@ -315,6 +317,11 @@ private struct PhoneSetupView: View {
                 pairing
                 pairedList
             }
+            if removeFailed {
+                Text("The phone is disconnected, but the list of phones couldn't be saved: it would be paired again the next time Tellurion opens.")
+                    .font(Tellurion.font(11)).foregroundColor(Tellurion.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let error = server.error {
                 Text(error).font(Tellurion.font(11)).foregroundColor(Tellurion.danger).textSelection(.enabled)
             }
@@ -367,11 +374,11 @@ private struct PhoneSetupView: View {
                         Text(online ? "connected" : device.lastSeen.map { "last used " + RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date()) } ?? "")
                             .font(Tellurion.font(11)).foregroundColor(online ? Tellurion.live : Tellurion.dim)
                         Spacer()
-                        Button("Remove") { phones.remove(device.id) }
+                        Button("Remove") { removeFailed = !phones.remove(device.id) }
                     }
                 }
                 if phones.devices.count > 1 {
-                    Button("Remove all phones") { phones.removeAll() }
+                    Button("Remove all phones") { removeFailed = !phones.removeAll() }
                 }
             }
         }

@@ -20,8 +20,17 @@ Only the latest release gets security fixes. Tellurion updates itself through
 
 ## What Tellurion does and doesn't do
 
-- **Nothing leaves your Mac.** No account, telemetry or server. Agent tracking reads the
-  session files Claude Code and Codex already write.
+- **Nothing leaves your Mac unless you ask.** There's no account of ours, telemetry or server.
+  What goes elsewhere is what your agents send through their own sign-ins, and what a feature
+  you turned on sends to the service you chose for it: chats and Codex sessions on a Venice
+  account you connected, web searches (to Exa, or to a SearXNG of your own), downloads of
+  local models, the skills directory when you browse it, web pages you open in a board, and
+  your phone over your own Tailscale network if you set that up. The app also checks this
+  project's releases on GitHub for updates.
+- **Agent activity stays in files on your Mac.** Tracking reads the session files Claude Code
+  and Codex already write, and Tellurion keeps a record of each session's activity of its own
+  (prompts, tool calls) in its folder, `~/.ghostty-extreme/`, readable only by you. Those
+  records are removed after two weeks without use.
 - **Only its own hooks can send it events.** Agent status arrives as terminal escape
   sequences; each launch creates a secret that only its own terminals and hooks know, and
   events without it are ignored.
@@ -30,4 +39,5 @@ Only the latest release gets security fixes. Tellurion updates itself through
 - **The code editor and Visual Fix stay local.** The editor only shows its own pages, and
   Visual Fix only talks to your local dev server.
 - **Releases** are built and checked by `release.sh` (including a scan for keys, tokens and
-  personal paths), and every release lists SHA-256 checksums.
+  personal paths), signed with a Developer ID and notarized by Apple, and every release lists
+  SHA-256 checksums. `install.sh` checks the checksum and the signature before it installs.

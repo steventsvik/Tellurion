@@ -78,8 +78,6 @@ final class BoardCardView: BoardNodeView {
     }
 
     func update(card: BoardCard, zoom: CGFloat) {
-        // Statuses of linked agents change without the card changing.
-        content.refreshAgents()
         if card != self.card {
             self.card = card
             content.apply(card)
@@ -90,6 +88,8 @@ final class BoardCardView: BoardNodeView {
         overview.isHidden = zoom >= 0.45
         // Zoomed out, the overview stands in: the content underneath (a page, a video) rests.
         if content.isHidden == overview.isHidden { content.isHidden = !overview.isHidden }
+        // Statuses of linked agents change without the card changing (nothing to show zoomed out).
+        if !content.isHidden { content.refreshAgents() }
         // A note's color, or an Agent Map's project color.
         let tint = card.kind == .note ? SketchStyle.color(card.color)
             : card.folder.flatMap { controller?.model.colors[$0] }.map(BoardProjects.nsColor)
@@ -146,6 +146,11 @@ final class BoardCardView: BoardNodeView {
             })
         }
         if card.kind == .kanban {
+            if controller.tasks.isRunning(id) {
+                menu.addItem(ClosureMenuItem("Stop the Queue", image: nil) { [weak controller] in controller?.tasks.stop(id) })
+            } else {
+                menu.addItem(ClosureMenuItem("Run the To Do Column…", image: nil) { [weak controller] in controller?.promptRunQueue(id) })
+            }
             menu.addItem(ClosureMenuItem("Clear Done", image: nil) { [weak controller] in
                 controller?.updateCard(id) { $0.items.removeAll { $0.column == CardItem.done } }
             })
@@ -353,19 +358,16 @@ class CardContent: NSView {
         board?.updateCard(cardID, body)
     }
 
-    /// "● Working · Claude Code" for an item an agent has, or nil.
-    func agentLine(_ item: CardItem) -> (String, NSColor)? {
-        guard let id = item.agent, let board,
-              let surface = board.model.surfaces.first(where: { $0.id == id }) else {
-            return item.agent == nil || item.done ? nil : ("Agent closed", .tertiaryLabelColor)
-        }
-        // Finished work doesn't need to say its agent has gone.
-        guard let info = VerticalTabsAgents.shared.info(for: surface) else {
-            return item.done ? nil : ("Agent not running", .tertiaryLabelColor)
-        }
-        let name = BoardTileTitle.title(surface, info, name: board.model.titles[surface.id])
-        return ("\(info.activity.label) · \(name)", NSColor(AgentStatusPill.color(info.activity)))
+    /// "working · Ada" for an item that was sent to an agent, or nil (see BoardTasks).
+    func chip(_ item: CardItem, in kind: BoardCard.Kind) -> (text: String, color: NSColor)? {
+        guard let board, let outcome = board.taskOutcome(item, in: kind) else { return nil }
+        let text = board.taskName(item).map { "\(outcome.chip.label) · \($0)" } ?? outcome.chip.label
+        return (text, outcome.chip.color)
     }
+
+    /// An item is about to be moved or checked by hand: a message still waiting for its agent
+    /// is taken back.
+    func byHand(_ id: UUID) { board?.tasks.cancel(id) }
 
     func showAgent(_ item: CardItem) {
         guard let id = item.agent, let surface = board?.model.surfaces.first(where: { $0.id == id }) else { return }
@@ -507,7 +509,10 @@ final class ChecklistContent: CardContent, NSTextFieldDelegate {
     }
 
     override func refreshAgents() {
-        for (row, item) in zip(rows, items) { row.showAgent(agentLine(item)) }
+        var changed = false
+        for (row, item) in zip(rows, items) where row.showChip(chip(item, in: .checklist)) { changed = true }
+        // A chip that came or went changes its row's height.
+        if changed { needsLayout = true }
     }
 
     override func beginTyping() {
@@ -524,9 +529,11 @@ final class ChecklistContent: CardContent, NSTextFieldDelegate {
     }
 
     func toggle(_ id: UUID) {
+        byHand(id)
         change { card in
             guard let i = card.items.firstIndex(where: { $0.id == id }) else { return }
             card.items[i].done.toggle()
+            BoardTasks.movedByHand(&card.items[i])
         }
     }
 
@@ -542,7 +549,7 @@ final class ChecklistContent: CardContent, NSTextFieldDelegate {
     func menu(for id: UUID) -> NSMenu? {
         guard let board, let item = items.first(where: { $0.id == id }) else { return nil }
         let menu = NSMenu()
-        let hand = NSMenuItem(title: "Hand to Agent", action: nil, keyEquivalent: "")
+        let hand = NSMenuItem(title: "Send to", action: nil, keyEquivalent: "")
         hand.submenu = board.agentMenu(for: id, in: cardID)
         menu.addItem(hand)
         if item.agent != nil {
@@ -556,13 +563,14 @@ final class ChecklistContent: CardContent, NSTextFieldDelegate {
     }
 }
 
-/// One checklist line: a round check, its words (editable), and the agent on it.
+/// One checklist line: a round check, its words (editable), and a chip for the agent it was
+/// sent to (click it to go to that agent's tile).
 final class ChecklistRow: NSView, NSTextFieldDelegate {
     weak var owner: ChecklistContent?
     private var item: CardItem
     private let check = NSButton()
     private let field = NSTextField(wrappingLabelWithString: "")
-    private let agent = NSTextField(labelWithString: "")
+    private let chip = BoardTaskChip()
 
     init(item: CardItem) {
         self.item = item
@@ -578,9 +586,7 @@ final class ChecklistRow: NSView, NSTextFieldDelegate {
         field.delegate = self
         field.focusRingType = .none
         addSubview(field)
-        agent.font = .systemFont(ofSize: 11, weight: .medium)
-        agent.isHidden = true
-        addSubview(agent)
+        addSubview(chip)
         show(item)
     }
 
@@ -599,18 +605,18 @@ final class ChecklistRow: NSView, NSTextFieldDelegate {
         field.textColor = item.done ? .secondaryLabelColor : .labelColor
     }
 
-    func showAgent(_ line: (String, NSColor)?) {
-        agent.isHidden = line == nil
-        agent.stringValue = line.map { "● " + $0.0 } ?? ""
-        agent.textColor = line?.1 ?? .secondaryLabelColor
-        needsLayout = true
+    /// True when the chip came, went or changed.
+    func showChip(_ line: (text: String, color: NSColor)?) -> Bool {
+        let changed = chip.show(line)
+        if changed { needsLayout = true }
+        return changed
     }
 
     func height(for width: CGFloat) -> CGFloat {
         let textWidth = max(width - 56, 40)
         field.preferredMaxLayoutWidth = textWidth
         let text = field.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: textWidth, height: 1000)).height ?? 18
-        return max(text, 18) + (agent.isHidden ? 12 : 28)
+        return max(text, 18) + (chip.isHidden ? 12 : 16 + BoardTaskChip.height)
     }
 
     override func layout() {
@@ -619,10 +625,19 @@ final class ChecklistRow: NSView, NSTextFieldDelegate {
         let textWidth = max(bounds.width - 56, 40)
         let text = field.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: textWidth, height: 1000)).height ?? 18
         field.frame = CGRect(x: 42, y: 7, width: textWidth, height: max(text, 18))
-        agent.frame = CGRect(x: 42, y: field.frame.maxY + 2, width: textWidth, height: 15)
+        chip.frame = CGRect(x: 42, y: field.frame.maxY + 3, width: chip.width(limit: textWidth), height: BoardTaskChip.height)
     }
 
     @objc private func toggle() { owner?.toggle(item.id) }
+
+    /// A click on the chip goes to the agent's tile.
+    override func mouseDown(with event: NSEvent) {
+        if !chip.isHidden, chip.frame.contains(convert(event.locationInWindow, from: nil)) {
+            owner?.showAgent(item)
+        } else {
+            super.mouseDown(with: event)
+        }
+    }
 
     func controlTextDidEndEditing(_ notification: Notification) {
         guard field.stringValue != item.text else { return }
@@ -634,7 +649,8 @@ final class ChecklistRow: NSView, NSTextFieldDelegate {
 
 // MARK: - Kanban
 
-/// Three columns of cards. Drag a card to move it; double-click to edit; + adds one.
+/// Columns of cards. Drag a card to move it, or onto an agent's tile on the board to send it
+/// there; double-click to edit; + adds one.
 final class KanbanContent: CardContent, NSTextFieldDelegate {
     private var items: [CardItem] = []
     private var cards: [UUID: KanbanCard] = [:]
@@ -650,6 +666,10 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
     private var drag: CardDrag?
     private var dropTarget: (column: Int, index: Int)?
     private let indicator = NSView()
+    /// While a card is dragged off the kanban: what shows on the board, and the agent tile
+    /// under the pointer.
+    private var guide: BoardTaskDropGuide?
+    private weak var dropTile: Ghostty.SurfaceView?
 
     private static let pad: CGFloat = 10
     private static let headerHeight: CGFloat = 30
@@ -767,7 +787,15 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
     }
 
     override func refreshAgents() {
-        for item in items { cards[item.id]?.showAgent(agentLine(item)) }
+        var changed = false
+        for item in items where cards[item.id]?.showChip(chip(item, in: .kanban)) == true { changed = true }
+        // A chip that came or went changes its card's height.
+        if changed { needsLayout = true }
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow == nil { endBoardDrag() }
     }
 
     override func beginTyping() {
@@ -811,6 +839,7 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
             addSubview(view, positioned: .below, relativeTo: indicator)
         }
         view.frame.origin = CGPoint(x: point.x - current.offset.x, y: point.y - current.offset.y)
+        if dragOverBoard(event, card: view) { return }
         // The column under the pointer, and the place among its cards.
         let column = CardItem.columns.indices.min { abs(columnRect($0).midX - point.x) < abs(columnRect($1).midX - point.x) } ?? 0
         let others = items.filter { $0.column == column && $0.id != current.id }.compactMap { cards[$0.id] }
@@ -827,22 +856,72 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
         }
     }
 
-    func cardMouseUp(_ event: NSEvent) {
-        defer {
-            drag = nil
+    /// Off the kanban, a dragged card can be dropped on an agent's tile to send it there: its
+    /// words follow the pointer over the board, and the tile it would go to gets a ring. True
+    /// while the pointer is outside the kanban.
+    private func dragOverBoard(_ event: NSEvent, card view: KanbanCard) -> Bool {
+        guard !bounds.contains(convert(event.locationInWindow, from: nil)), let board,
+              let document = board.canvas?.documentView else {
+            if guide != nil {
+                endBoardDrag()
+                view.isHidden = false
+            }
+            return false
+        }
+        if guide == nil {
+            guide = BoardTaskDropGuide(in: document)
+            // The kanban clips its cards: outside it the ghost stands in.
+            view.isHidden = true
             dropTarget = nil
             needsLayout = true
             needsDisplay = true
         }
+        let point = document.convert(event.locationInWindow, from: nil)
+        let target = board.taskDropTarget(at: point)
+        dropTile = target?.surface
+        guide?.show(at: point, target: target.flatMap { board.model.frames[$0.surface.id] },
+                    text: target.map { "Send to \($0.name)" } ?? view.text, zoom: board.canvas?.magnification ?? 1)
+        return true
+    }
+
+    private func endBoardDrag() {
+        guide?.remove()
+        guide = nil
+        dropTile = nil
+    }
+
+    func cardMouseUp(_ event: NSEvent) {
+        defer {
+            drag = nil
+            dropTarget = nil
+            endBoardDrag()
+            needsLayout = true
+            needsDisplay = true
+        }
         guard let current = drag else { return }
+        if current.moved, guide != nil {
+            // Let go over the board: on an agent's tile it's sent there, anywhere else it goes back.
+            cards[current.id]?.lift(false)
+            cards[current.id]?.isHidden = false
+            if let dropTile, board?.hand(current.id, in: cardID, to: dropTile) != true { NSSound.beep() }
+            return
+        }
         guard current.moved, let target = dropTarget else {
-            if event.clickCount == 2 { cards[current.id]?.beginEditing() }
+            if cards[current.id]?.chipHit(event) == true, let item = items.first(where: { $0.id == current.id }) {
+                showAgent(item)
+            } else if event.clickCount == 2 {
+                cards[current.id]?.beginEditing()
+            }
             return
         }
         cards[current.id]?.lift(false)
+        // Moved to another column by hand: that wins over what its agent does.
+        let moved = items.first { $0.id == current.id }?.column != target.column
+        if moved { byHand(current.id) }
         change { card in
             guard let from = card.items.firstIndex(where: { $0.id == current.id }) else { return }
             var item = card.items.remove(at: from)
+            if moved { BoardTasks.movedByHand(&item) }
             item.column = target.column
             item.done = target.column == CardItem.done
             let inColumn = card.items.enumerated().filter { $0.element.column == target.column }.map(\.offset)
@@ -855,7 +934,7 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
         guard let board, let item = items.first(where: { $0.id == id }) else { return nil }
         let menu = NSMenu()
         menu.addItem(ClosureMenuItem("Edit", image: nil) { [weak self] in self?.cards[id]?.beginEditing() })
-        let hand = NSMenuItem(title: "Hand to Agent", action: nil, keyEquivalent: "")
+        let hand = NSMenuItem(title: "Send to", action: nil, keyEquivalent: "")
         hand.submenu = board.agentMenu(for: id, in: cardID)
         menu.addItem(hand)
         if item.agent != nil {
@@ -865,8 +944,10 @@ final class KanbanContent: CardContent, NSTextFieldDelegate {
         move.submenu = NSMenu()
         for (column, name) in CardItem.columns.enumerated() where column != item.column {
             move.submenu?.addItem(ClosureMenuItem(name, image: nil) { [weak self] in
+                self?.byHand(id)
                 self?.change { card in
                     guard let i = card.items.firstIndex(where: { $0.id == id }) else { return }
+                    BoardTasks.movedByHand(&card.items[i])
                     BoardController.move(&card.items, i, toColumn: column)
                 }
             })
@@ -915,8 +996,9 @@ final class KanbanCard: NSView, NSTextFieldDelegate {
     weak var owner: KanbanContent?
     private var item: CardItem
     var itemID: UUID { item.id }
+    var text: String { item.text }
     private let label = NSTextField(wrappingLabelWithString: "")
-    private let agent = NSTextField(labelWithString: "")
+    private let chip = BoardTaskChip()
     private let tags = NSTextField(labelWithString: "")
 
     init(item: CardItem) {
@@ -932,9 +1014,7 @@ final class KanbanCard: NSView, NSTextFieldDelegate {
         label.delegate = self
         label.focusRingType = .none
         addSubview(label)
-        agent.font = .systemFont(ofSize: 11, weight: .medium)
-        agent.isHidden = true
-        addSubview(agent)
+        addSubview(chip)
         tags.isHidden = true
         addSubview(tags)
         show(item)
@@ -977,23 +1057,29 @@ final class KanbanCard: NSView, NSTextFieldDelegate {
         needsLayout = true
     }
 
-    func showAgent(_ line: (String, NSColor)?) {
-        agent.isHidden = line == nil
-        agent.stringValue = line.map { "● " + $0.0 } ?? ""
-        agent.textColor = line?.1 ?? .secondaryLabelColor
+    /// True when the chip came, went or changed.
+    func showChip(_ line: (text: String, color: NSColor)?) -> Bool {
+        let changed = chip.show(line)
+        if changed { needsLayout = true }
+        return changed
+    }
+
+    /// Whether a click landed on the chip (it goes to the agent's tile).
+    func chipHit(_ event: NSEvent) -> Bool {
+        !chip.isHidden && chip.frame.contains(convert(event.locationInWindow, from: nil))
     }
 
     func height(for width: CGFloat) -> CGFloat {
         let text = label.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: width - 20, height: 1000)).height ?? 17
-        return max(text, 17) + 20 + (agent.isHidden ? 0 : 17) + (tags.isHidden ? 0 : 17)
+        return max(text, 17) + 20 + (chip.isHidden ? 0 : BoardTaskChip.height + 4) + (tags.isHidden ? 0 : 17)
     }
 
     override func layout() {
         super.layout()
         let text = label.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: bounds.width - 20, height: 1000)).height ?? 17
         label.frame = CGRect(x: 10, y: 10, width: bounds.width - 20, height: max(text, 17))
-        agent.frame = CGRect(x: 10, y: label.frame.maxY + 3, width: bounds.width - 20, height: 14)
-        tags.frame = CGRect(x: 10, y: (agent.isHidden ? label.frame.maxY : agent.frame.maxY) + 3, width: bounds.width - 20, height: 14)
+        chip.frame = CGRect(x: 10, y: label.frame.maxY + 4, width: chip.width(limit: bounds.width - 20), height: BoardTaskChip.height)
+        tags.frame = CGRect(x: 10, y: (chip.isHidden ? label.frame.maxY : chip.frame.maxY) + 3, width: bounds.width - 20, height: 14)
     }
 
     func beginEditing() {

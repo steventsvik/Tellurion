@@ -10,9 +10,6 @@ struct UpdateBadge: View {
     /// The update view model that provides the current state and progress
     @ObservedObject var model: UpdateViewModel
 
-    /// Current rotation angle for animated icon states
-    @State private var rotationAngle: Double = 0
-
     var body: some View {
         badgeContent
             .accessibilityLabel(model.text)
@@ -34,16 +31,8 @@ struct UpdateBadge: View {
 
         case .checking:
             if let iconName = model.iconName {
-                Image(systemName: iconName)
-                    .rotationEffect(.degrees(rotationAngle))
-                    .onAppear {
-                        withAnimation(.linear(duration: 2.5).repeatForever(autoreverses: false)) {
-                            rotationAngle = 360
-                        }
-                    }
-                    .onDisappear {
-                        rotationAngle = 0
-                    }
+                // Turns as a layer animation: the pill is in every window's chrome.
+                TurningSymbolLayer(symbol: iconName, color: model.foregroundColor)
             } else {
                 EmptyView()
             }

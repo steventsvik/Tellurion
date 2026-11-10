@@ -55,12 +55,17 @@ final class ActivityStats {
 
     private var cache: [String: CacheEntry] = [:]
     private let lock = NSLock()
-    // v2 added per-day API costs; older summaries are rebuilt once.
-    private static let cacheFile = AgentTools.root.appendingPathComponent("activity-cache-v3.json")
+    // v2 added per-day API costs; v4 prices Fable 5.2 and Mythos 5.2. Older summaries are
+    // rebuilt once, and the files they were kept in are removed.
+    private static let cacheFile = AgentTools.root.appendingPathComponent("activity-cache-v4.json")
+    private static let oldCacheFiles = ["activity-cache-v3.json", "activity-cache-v2.json", "activity-cache.json"]
     /// Gaps longer than this between events aren't counted as active time.
     private static let idleGap: TimeInterval = 300
 
     private init() {
+        for name in Self.oldCacheFiles {
+            try? FileManager.default.removeItem(at: AgentTools.root.appendingPathComponent(name))
+        }
         if let data = try? Data(contentsOf: Self.cacheFile),
            let decoded = try? JSONDecoder().decode([String: CacheEntry].self, from: data) {
             cache = decoded

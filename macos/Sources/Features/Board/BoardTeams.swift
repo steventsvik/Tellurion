@@ -61,16 +61,6 @@ enum BoardTeams {
     }
 }
 
-/// What orchestrators have yet to hear from their agents, sent together a moment after the
-/// last of it.
-final class BoardTeamRelay {
-    /// Each tile's agent status when last seen.
-    var last: [UUID: VerticalTabAgentActivity] = [:]
-    /// Per orchestrator: the agents to report on, and what happened.
-    var pending: [UUID: [(tile: UUID, activity: VerticalTabAgentActivity, detail: String?)]] = [:]
-    var flush: [UUID: DispatchWorkItem] = [:]
-}
-
 extension BoardController {
     // MARK: Looking up
 
@@ -358,7 +348,8 @@ extension BoardController {
 
     /// Starts an orchestrator with its agents as one block, the card above them, and gives it
     /// the goal as its first command.
-    func launchOrchestrator(members: [(agent: BoardAgent?, role: String)], folder: String?, goal: String?) {
+    func launchOrchestrator(members: [(agent: BoardAgent?, role: String)], folder: String?, goal: String?,
+                            folders: [String]? = nil) {
         guard let app = ghostty.app else { return }
         undoManager?.beginUndoGrouping()
         if let folder { setFolder(folder) }
@@ -375,7 +366,8 @@ extension BoardController {
         for (index, member) in members.enumerated() {
             let col = index % columns, row = index / columns
             var config = Ghostty.SurfaceConfiguration()
-            config.workingDirectory = start
+            // `folders`: a folder of its own per agent (a worktree each, see AgentWorktrees).
+            config.workingDirectory = folders.flatMap { index < $0.count ? $0[index] : nil } ?? start
             config.initialInput = member.agent.map { $0.binary + "\n" }
             let accounts = applyAccounts(&config)
             VeniceCodex.adapt(&config)
@@ -409,9 +401,7 @@ extension BoardController {
 
     /// What an agent the orchestrator starts is told first.
     static func memberIntro(role: String?, orchestrator: String) -> String {
-        "You're " + (role.map { "the \($0)" } ?? "an agent") + " working for \(orchestrator), which coordinates several coding "
-            + "agents on the user's Tellurion board. It sees your final answer each turn, so end each turn with a short "
-            + "summary of what you did and anything you need."
+        OrchestratorPrompt.memberIntro(role: role, orchestrator: orchestrator, place: .board)
     }
 
     /// Typed to an agent once it's ready (Claude Code and Codex), or straight into a terminal.
@@ -428,7 +418,7 @@ extension BoardController {
     /// The brain behind an orchestrator card (made on first use, kept while the board is open).
     func orchestratorBrain(_ id: UUID) -> OrchestratorBrain {
         if let brain = orchestratorBrains[id] { return brain }
-        let brain = OrchestratorBrain(controller: self, id: id)
+        let brain = OrchestratorBrain(host: self, id: id)
         orchestratorBrains[id] = brain
         return brain
     }
@@ -436,62 +426,72 @@ extension BoardController {
     /// An agent's status changed: its orchestrators hear about it when a turn ends or it
     /// needs someone.
     func teamMemberChanged(_ surface: Ghostty.SurfaceView) {
-        let info = VerticalTabsAgents.shared.info(for: surface)
-        let before = teamRelay.last[surface.id]
-        teamRelay.last[surface.id] = info?.activity
-        guard let info, info.activity != before else { return }
-        let finished = before == .working || before == .needsPermission
-        switch info.activity {
-        case .done where finished, .ready where finished: break
-        case .needsInput, .needsPermission, .failed: break
-        default: return
-        }
+        guard let event = teamRelay.note(surface.id, info: VerticalTabsAgents.shared.info(for: surface)) else { return }
         for team in orchestrators(of: surface.id) {
-            teamRelay.pending[team.id, default: []].append((surface.id, info.activity, info.detail))
-            scheduleTeamUpdate(team.id)
+            let id = team.id
+            teamRelay.schedule(event, for: id) { [weak self] events in self?.sendTeamUpdate(id, events) }
         }
     }
 
-    private func scheduleTeamUpdate(_ id: UUID) {
-        teamRelay.flush[id]?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.sendTeamUpdate(id) }
-        teamRelay.flush[id] = work
-        // A few seconds, so agents finishing together arrive as one update, and their
-        // transcripts are written.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
-    }
-
-    private func sendTeamUpdate(_ id: UUID) {
-        let events = teamRelay.pending.removeValue(forKey: id) ?? []
-        teamRelay.flush[id] = nil
-        guard let team = orchestrator(id), !events.isEmpty else { return }
-        let wired = wiredAgents(team)
-        var updates: [OrchestratorBrain.Update] = []
-        // The latest event per agent.
-        var seen = Set<UUID>()
-        for event in events.reversed() where seen.insert(event.tile).inserted {
-            guard let agent = wired.first(where: { $0.surface.id == event.tile }) else { continue }
-            let answer = event.activity == .needsPermission || event.activity == .failed ? nil : lastAnswer(agent.surface)
-            updates.append(OrchestratorBrain.Update(tile: event.tile, name: tileLabel(agent.surface), activity: event.activity,
-                                                    detail: event.detail, answer: answer))
-        }
+    private func sendTeamUpdate(_ id: UUID, _ events: [OrchestratorRelay.Event]) {
+        guard orchestrator(id) != nil else { return }
+        let updates = orchestratorUpdates(id, events: events)
         guard !updates.isEmpty else { return }
-        orchestratorBrain(id).agentsChanged(updates.reversed())
+        orchestratorBrain(id).agentsChanged(updates)
     }
 
-    /// The agent's last answer, from the transcript it reported. Never guessed from its
-    /// folder: that could be another session there (yours, or another agent's).
-    /// Read again only when the transcript has changed.
+    /// The agent's last answer, from the transcript it reported (see OrchestratorAnswers).
     func lastAnswer(_ surface: Ghostty.SurfaceView) -> String? {
-        guard let transcript = VerticalTabsAgents.shared.info(for: surface)?.transcriptPath,
-              let attributes = try? FileManager.default.attributesOfItem(atPath: transcript) else { return nil }
-        let stamp = "\((attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)-\(attributes[.size] as? Int ?? 0)"
-        if let cached = Self.answers[transcript], cached.stamp == stamp { return cached.answer }
-        let answer = AgentTools.lastAssistantMessage(transcript: transcript)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        Self.answers[transcript] = (stamp, answer)
-        return answer
+        OrchestratorAnswers.last(surface)
+    }
+}
+
+/// A board hosts its orchestrator cards: the brain reaches the tiles through here.
+extension BoardController: OrchestratorHost {
+    var orchestratorPlace: OrchestratorPlace { .board }
+    var orchestratorUndo: UndoManager? { undoManager }
+
+    func setGoal(_ goal: String, for id: UUID) {
+        model.teams = model.teams.map { team in
+            var team = team
+            if team.id == id { team.goal = goal }
+            return team
+        }
+        scheduleSave()
     }
 
-    private static var answers: [String: (stamp: String, answer: String?)] = [:]
+    func orchestratorAgents(_ id: UUID) -> [OrchestratorAgent] {
+        guard let team = orchestrator(id) else { return [] }
+        return wiredAgents(team).map {
+            OrchestratorAgent(pane: $0.surface.id, surface: $0.surface, role: $0.role, group: $0.group.map(groupTitle))
+        }
+    }
+
+    func surface(of pane: UUID) -> Ghostty.SurfaceView? { model.surfaces.first { $0.id == pane } }
+
+    func paneLabel(_ pane: UUID) -> String { surface(of: pane).map(tileLabel) ?? "Terminal" }
+
+    func paneFolder(_ pane: UUID) -> String? { surface(of: pane).flatMap(folder(of:)) }
+
+    func isPaused(_ pane: UUID) -> Bool { model.paused.contains(pane) }
+
+    func mentionedPanes(in text: String, for id: UUID) -> (panes: [UUID], rest: String) {
+        let found = mentions(in: text)
+        return (found.tiles.map(\.id), found.rest)
+    }
+
+    func deliver(_ text: String, toAgentIn pane: UUID, label: String) {
+        guard let surface = surface(of: pane) else { return }
+        deliverToAgent(text, to: surface, label: label)
+    }
+
+    func typeLine(_ line: String, into pane: UUID) {
+        guard let surface = surface(of: pane) else { return }
+        deliver(line, to: surface)
+    }
+
+    func spawnWired(_ agent: BoardAgent?, role: String?, task: String?, folder: String?, for id: UUID) -> UUID? {
+        spawnAgent(agent, role: role, task: task, folder: folder, for: id)?.id
+    }
 }
 #endif

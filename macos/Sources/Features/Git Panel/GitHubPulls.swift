@@ -205,19 +205,9 @@ final class GitHubPulls: ObservableObject {
         // gh needs git; the app's PATH is short.
         environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (environment["PATH"] ?? "")
         process.environment = EventToken.scrubbed(environment)
-        let out = Pipe(), err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        process.standardInput = FileHandle.nullDevice
-        do { try process.run() } catch { return AgentTools.Result(status: -1, output: "", error: "\(error)") }
-        let timer = DispatchWorkItem { if process.isRunning { process.terminate() } }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 15, execute: timer)
-        let outData = out.fileHandleForReading.readDataToEndOfFile()
-        let errData = err.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        timer.cancel()
-        return AgentTools.Result(status: process.terminationStatus, output: String(decoding: outData, as: UTF8.self),
-                                 error: String(decoding: errData, as: UTF8.self))
+        let result = ProcessRunner.run(process, timeout: 15)
+        if let failure = result.launchError { return AgentTools.Result(status: -1, output: "", error: failure) }
+        return AgentTools.Result(status: result.status, output: result.text, error: result.errorText)
     }
 }
 #endif

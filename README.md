@@ -21,9 +21,9 @@
 <p align="center">
   <b><a href="https://github.com/steventsvik/Tellurion/releases/latest">Download</a></b> ·
   <b><a href="https://steventsvik.github.io/Tellurion/">Website</a></b> ·
-  <a href="#boards">Boards</a> ·
   <a href="#watch-your-agents-work-live">Live agents</a> ·
   <a href="#features">Features</a> ·
+  <a href="#boards">Boards</a> ·
   <a href="#how-it-compares">Compare</a> ·
   <a href="#install">Install</a> ·
   <a href="#keyboard-shortcuts">Shortcuts</a> ·
@@ -42,12 +42,12 @@ like Claude Code, Codex, Gemini CLI and Copilot CLI, across several projects at 
 doing, live: the code it's writing as it writes it, where it is in your project, what part
 of your backend it touches, and when it needs you. Agents share what they learn about each
 project, hand work to each other, and leave their changes in a review inbox you can undo
-from. Run them in tabs, or on a [board](#boards) where every terminal is a tile and one card
-can run a whole team of agents. Answer them from your phone, and chat with models that run
-on your own Mac.
+from. Answer them from your phone, and chat with models that run on your own Mac.
 
 Everything Ghostty does still works, and your Ghostty config works as-is. This fork tracks
 official Ghostty releases and adds its features on top.
+
+There's also a [board layout](#boards) if you'd rather see every terminal on one canvas.
 
 > **Tellurion was called GhosttyEXTREME.** Same app, same features; if you have
 > GhosttyEXTREME installed, Check for Updates… brings you to Tellurion.
@@ -60,180 +60,6 @@ curl -fsSL https://raw.githubusercontent.com/steventsvik/Tellurion/custom/instal
 ```
 
 <sub>Apple silicon, macOS 13 or newer. Free and open source (AGPL-3.0). No account, no telemetry.</sub>
-
-<br>
-
-## Boards
-
-New in 1.8: put your terminals on a board instead of in tabs. Pick **Board** when you first
-open Tellurion, or any time in **Settings → Edition**. Classic stays the default, and nothing
-changes unless you switch.
-
-<p align="center">
-  <a href="images/readme/boards.mp4"><img src="images/readme/boards.gif" alt="A 54-second tour of Tellurion Boards: a board of twelve agent tiles in four projects, flying in to a tile and back out, answering a Claude Code permission prompt from the list, spawning a team from a preset, wiring agents to an orchestrator card, the Mission Map, a web tile, the Agent Map and a kanban card moving to Done" width="100%"></a>
-</p>
-
-<p align="center"><sub>Real app, demo projects. Claude Code and Codex are real; most of the background tiles are stand-ins. <a href="images/readme/boards.mp4">Watch it in higher quality</a>.</sub></p>
-
-### Every terminal is a tile
-
-- **A full terminal in each tile,** so Vim, full-screen apps and every agent work as they do
-  in a tab. Drag a tile by its title bar, resize it from its corner; tiles snap into line
-  with their neighbors (hold ⌘ not to snap).
-- **Pan and zoom:** pinch, or hold ⌘ and scroll, to zoom; drag empty space to move around.
-  ⌥⌘9 shows everything, ⌥⌘0 goes back to actual size, and double-clicking a title bar flies
-  to that tile. Zooming never resizes a terminal, so agents aren't interrupted.
-- **Switching moves your terminals:** pick Board with classic windows open and Tellurion
-  offers to move them. Every tab and split becomes a tile, grouped by project, with agents
-  still running. **Keep Windows** leaves them where they are.
-- **Tiles in one project share a color,** with a tinted area labelled with its name.
-  **Arrange by project** tidies the whole board (⌘Z puts it back).
-- **Tools at the edges:** Select, Agent, Group, Terminal, Text, Pen, Eraser, Web and Image on
-  the left, each with a single key; Layers, Tasks, files and changes, and review loops on the
-  right. Right-click empty board for a ring of quick actions.
-- **Saved as you go:** tiles, where you were looking and the window come back when Tellurion
-  starts, and Claude Code and Codex pick up their last conversation. The **Boards** list in
-  the sidebar switches between boards; the one you leave keeps running.
-
-### See who needs you
-
-<p align="center">
-  <img src="images/readme/board-board.webp" alt="A board of twelve agent tiles in four colored project groups, zoomed out, with the agent list beside it and one agent waiting for permission" width="100%">
-</p>
-
-- **Every tile's edge shows its agent's status:** it breathes while the agent works and
-  pulses when it needs you. Zoomed out, each tile shows its agent and status in big type.
-- **The list beside the board** puts agents that need you first, with **Allow** and
-  **Deny** on the row. Click a row to fly to its tile.
-- **Agent names:** agent tiles get short names (Ada, Otto, Cy…) so you can tell them apart
-  and @mention them. Every title bar has **Restart** and **Duplicate**.
-- **Everywhere else too:** notifications, the menu bar item, your phone and the command
-  palette all include agents on boards.
-
-### Groups and presets
-
-<p align="center">
-  <img src="images/readme/board-team.webp" alt="Four agents just started from the Ship a feature preset: two Claude Code and two Codex tiles in a new group" width="100%">
-</p>
-
-- **The Group composer** (the bar's **Group** chip): a name, a role, up to 12 agent slots, a
-  folder, one first task for all of them, and **Skip permission prompts** (off unless you
-  turn it on; those tiles wear a red **No prompts** badge). **Spawn** starts them as a grid.
-- **Presets:** save a setup and start it again from the **Presets** chip, which has a few
-  ready-made ones. **Spawn 4** starts four of your default agent in one click.
-- **Groups have roles** (Frontend, Backend, Testers, Reviewers, Design, Docs, Security,
-  General), each framed in its color with how many tiles are working. Collapse a group into a
-  list; its agents keep running. Its header menu messages, pauses, tidies or closes them all.
-- **Talk to a group:** type **@** in the bar and pick a group to message every tile in it.
-
-### Orchestrator
-
-<p align="center">
-  <img src="images/readme/board-orchestrator.webp" alt="An orchestrator card wiring a group of two agents, with a glowing wire running down to the group" width="100%">
-</p>
-
-A card that runs a group of agents for you.
-
-- **Wire it up:** tap **Connect** and click terminals, or a group's **Click to wire group**
-  pill. Glowing wires show what's connected, with a dot running along each wire while that
-  agent works.
-- **Give it a command:** your own Claude Code (or Codex) splits the work, sends each agent its
-  part, reads what they answer when they finish, and hands out the next steps until it's
-  done, up to a turn limit you set. **@name** sends straight to one agent, and it can start
-  new agents too ("start two reviewers").
-- **It only messages agents.** A wired terminal with no agent running is never typed into,
-  and permission prompts still come to you.
-
-### Mission Map
-
-<p align="center">
-  <img src="images/readme/board-mission-map.webp" alt="Mission Map: an orchestrator and the command bar on the left, a group in the middle, nine agents on the right with their status, and one agent selected" width="100%">
-</p>
-
-Who runs whom on a board: orchestrators, the groups they (or you) run, and every agent, joined
-by wires (dashed for agents you reach only with @). Filter by status (Working, Needs you,
-Idle, Done), search, hover to follow a node's wires, and select anything to see how long it's
-been in its state, go there, pause it or stop it.
-
-### The board's agent
-
-A bar at the bottom of every board takes plain requests, typed or spoken (hold Space):
-"start three Claude agents, one per kanban card", "sketch the backend: API, queue, Postgres".
-It starts agents and terminals, adds notes, checklists, kanban boards and diagrams, hands
-cards to agents, groups tiles and zooms to what you ask for.
-
-It runs your own Claude Code (or Codex) with no tools of its own, so all it can do is
-arrange the board. Closing tiles, typing into an agent that's already running and running a
-command wait for you to confirm, and ⌘Z undoes what it added. ⌘L jumps to it.
-
-### Agent Map
-
-<p align="center">
-  <img src="images/readme/board-agent-map.webp" alt="The Agent Map of a project: files as blocks grouped by folder, with two agent dots and the trails of files they visited" width="80%">
-</p>
-
-Boards have an Agent Map instead of the code editor: the project's files as a map, grouped by
-folder, with every agent working in the project as a dot that moves to the file it's reading
-or changing, trailing the files it came through. Files it changed stay in its color for a
-while. Hover a file to see who touched it, click an agent to go to its terminal. ⌃⌘M, or
-**Show on Agent Map** from a tile's menu.
-
-### Web tiles
-
-<p align="center">
-  <img src="images/readme/board-web-tiles.webp" alt="A web tile laid out at iPhone 14 Pro size showing a local shop page, above the dev server terminal it comes from" width="80%">
-</p>
-
-A browser on the board, next to the agents building the page: tabs, back and forward, an
-address bar that also searches, and a start page listing the localhost servers running now.
-Size it to a real screen (24", 27" or 32" 4K) or a phone (iPhone SE to Galaxy S8+) and the
-page lays out at that size; **{}** opens Web Inspector. Web tiles keep their cookies and
-storage apart, get no bridge into Tellurion, and refuse downloads.
-
-### Notes, checklists and kanban
-
-<p align="center">
-  <img src="images/readme/board-kanban.webp" alt="A kanban board with Backlog, To Do, In Progress and Done columns, one card just moved to Done" width="80%">
-</p>
-
-Add them from the **+** menu or by right-clicking the board. Hand a checklist item or a kanban
-card to an agent on the board, or to a new Claude Code or Codex tile: the card moves to In
-Progress while the agent works and to Done when it finishes. Kanban boards have Backlog, To Do,
-In Progress and Done, with due dates and priorities.
-
-### Sketches, diagrams and documents
-
-- **Sketches:** a scratchpad tile with pen, boxes, decision diamonds, databases and arrows
-  that stay attached when you move things. Drop or paste pictures, or bring one in from your
-  iPhone with Continuity Camera. **Send to Agent** hands the sketch, with what you want
-  built, to an agent on the board or a new Claude Code or Codex tile.
-- **Diagrams:** have your Claude Code or Codex draw one of a project (architecture, user
-  flow, data flow, components, request lifecycle or anything you describe), hand-drawn and
-  fully editable.
-- **Documents:** a project overview, onboarding guide, architecture, API reference or
-  security overview, written from the project. It only reads the project; documents stay in
-  Tellurion's folder, not your repo, and export as Markdown or PDF.
-- **Draw on the board itself** with the pen, in 8 colors and 5 widths, and name areas with
-  big labels.
-
-### Accounts, projects and more
-
-- **Accounts:** use more than one Claude Code or Codex sign-in, choose which one new tiles
-  use, and restart a tile's agent on another. Tellurion only points the agent at each
-  account's folder and never reads sign-in details.
-- **Projects and Home:** a board's top bar shows its project, the project's other boards as
-  tabs (with how many agents need you on each) and when your usage limit resets. **Home**
-  lists every project with its boards.
-- **Pause all** freezes every tile's agent and everything it started, mid-turn, so they stop
-  using CPU and tokens; **Resume all** carries on where they left off.
-- **Media tiles:** drop video or music on the board to play it in a tile. They pause when the
-  window is hidden.
-- **Shortcuts, Spotlight and Siri:** Open Board, New Board, Launch Agents on a Board, New
-  Sketch and Arrange Board by Project. "Launch agents in Tellurion" works from Siri.
-- **Settings → Features** switches off Web tiles, drawing, Documents, Diagrams, Accounts,
-  Mission Map and Media tiles; a feature that's off leaves the palettes and menus.
-
-The full list is in the [1.8.0 notes](CHANGELOG.md#180).
 
 <br>
 
@@ -274,19 +100,14 @@ and logo when you start them.
 
 <table>
 <tr>
-<td width="33%" valign="top"><b><a href="#boards">Boards</a></b><br><sub>Every terminal a tile, on a board you can zoom</sub></td>
-<td width="33%" valign="top"><b><a href="#orchestrator">Orchestrator</a></b><br><sub>One card runs a group of agents for you</sub></td>
-<td width="33%" valign="top"><b><a href="#agent-map">Agent Map</a></b><br><sub>Every agent as a dot on the project's files</sub></td>
+<td width="33%" valign="top"><b><a href="#every-agent-at-a-glance">Agent sidebar</a></b><br><sub>Live status for every agent in every tab</sub></td>
+<td width="33%" valign="top"><b><a href="#mission-control">Mission Control</a></b><br><sub>Every agent in every window on one screen</sub></td>
+<td width="33%" valign="top"><b><a href="#a-code-editor-that-follows-the-agent">Code editor</a></b><br><sub>Opens what the agent reads and animates its edits</sub></td>
 </tr>
 <tr>
 <td valign="top"><b><a href="#your-terminal-on-your-phone">Phone</a></b><br><sub>Every tab on your phone, answer agents from anywhere</sub></td>
 <td valign="top"><b><a href="#local-models">Local models</a></b><br><sub>Chat with a model on your own Mac, offline</sub></td>
 <td valign="top"><b><a href="#layout">Layout</a></b><br><sub>Drag the window's panels where you want them</sub></td>
-</tr>
-<tr>
-<td width="33%" valign="top"><b><a href="#every-agent-at-a-glance">Agent sidebar</a></b><br><sub>Live status for every agent in every tab</sub></td>
-<td width="33%" valign="top"><b><a href="#mission-control">Mission Control</a></b><br><sub>Every agent in every window on one screen</sub></td>
-<td width="33%" valign="top"><b><a href="#a-code-editor-that-follows-the-agent">Code editor</a></b><br><sub>Opens what the agent reads and animates its edits</sub></td>
 </tr>
 <tr>
 <td valign="top"><b><a href="#code-map">Code map</a></b><br><sub>Your project as a map of what the agent touched</sub></td>
@@ -322,6 +143,11 @@ and logo when you start them.
 <td valign="top"><b><a href="#environment">Environment</a></b><br><sub>Tool versions, containers and local models</sub></td>
 <td valign="top"><b><a href="#skills">Skills</a></b><br><sub>Every agent's skills, kept up to date, and what's trending</sub></td>
 <td valign="top"><b><a href="#design">Design</a></b><br><sub>Twenty templates, your own colors, and a logo you draw</sub></td>
+</tr>
+<tr>
+<td valign="top"><b><a href="#boards">Boards</a></b><br><sub>Every terminal a tile, on a board you can zoom</sub></td>
+<td valign="top"><b><a href="#orchestrator-1">Orchestrator card</a></b><br><sub>One card runs a group of agents for you</sub></td>
+<td valign="top"><b><a href="#agent-map">Agent Map</a></b><br><sub>Every agent as a dot on the project's files</sub></td>
 </tr>
 </table>
 
@@ -369,6 +195,16 @@ The **command palette** (⌘P) puts waiting agents at the top too, so you can an
 two keystrokes. It also starts new sessions and opens every tool.
 
 <br>
+
+### Orchestrator
+
+One command for a project's agents, from the sidebar. Your own Claude Code (or Codex) splits the work, sends each agent its part, reads what they answer and hands out the next steps until the command is done, its turn limit is reached, or you stop it.
+
+- **In the sidebar:** the Orchestrator section shows the goal and where it's at ("Turn 3 of 12 · 2 working", or who is waiting on you) and takes a command. The window button, or ⌃⌘O, opens it in full: the wired agents, everything it said and did, and its settings.
+- **Wire the tabs you have:** **Wire…** lists every pane by project, or use **Wire to orchestrator** in a pane's ⋮ menu. Wired panes wear a small link.
+- **New agents open as tabs** in the project's folder, with a short name (Ada, Otto…), and you stay in the tab you're in.
+- **It only messages agents.** A wired terminal with no agent is never typed into, and permission prompts still come to you. When an agent's project check fails, the orchestrator hears about it and can send it back to fix it.
+- One orchestrator per project. On a [board](#orchestrator-1) it's a card you wire terminals to instead.
 
 ### Your terminal on your phone
 
@@ -473,6 +309,41 @@ turn, the reviewer gets its changes and answers APPROVED or CHANGES NEEDED, and 
 findings go back to the writer, until it approves or a round limit. Every message waits for
 your Send unless you turn on Send automatically, and nothing is ever typed into an agent
 mid-turn or over your own typing.
+
+### Done means verified
+
+- **Give a project its check:** `npm test`, `swift build`, `make lint`, whatever proves the work. When an agent finishes a turn that changed files, Tellurion runs it in the project's root and the agent's card says **Checking…**, **Verified** or **Check failed** beside Done, in the sidebar and in Mission Control.
+- **Only what you saved runs.** The command is set in the Checks window and kept in Tellurion's own folder; nothing in a repository can set or change it. Tellurion suggests commands it finds (package.json scripts, Makefile targets, Cargo, Swift packages, Go, pytest) as one-click fills, and nothing runs until you save.
+- **Click a failed check for its log,** then **Send to agent** to queue the command, how it ended and its last 80 lines for the agent's next turn, or **Run again**.
+- **Send failures back automatically** (per project, off by default) does that for you, at most three times in a row; your next prompt starts the count again.
+- Open it from the tools panel, the command palette (**Checks**) or a card's menu (**Project check…**).
+
+### Conflict radar
+
+- **Two agents, one file:** when two agents change the same file in the same folder, both get an amber line on their sidebar card, in Mission Control and on their board tile: "2 files also edited by Otto".
+- **See which files:** click the line for the list; click a file to open it. One notification the first time two agents meet on a file, and no repeats.
+- **Tell Both Agents** sends each a one-line heads-up naming the files and the other agent, typed in once they're between turns. Only when you click it.
+- **Knows what's apart:** agents in separate worktrees never conflict, and a file stops counting once it's committed or nobody has touched it for half an hour.
+- **It only watches.** Nothing is blocked.
+
+### Budgets
+
+Give an agent session a cap, and Tellurion stops it there.
+
+- **A cap per session:** dollars, tokens, or both. Dollars are what the session's usage would cost at API prices, the same API value the Activity window shows; on a subscription plan you aren't billed them.
+- **Three places to set one:** a default for every new session, a default per project, and **Budget…** on an agent's own card, which wins over both.
+- **A meter on the card:** "$1.20 of $5" in the sidebar, Mission Control and a board tile's title bar, with a note once it passes 80%.
+- **At the cap** the agent is paused, frozen mid-turn like a board's Pause all, never killed, or Tellurion just tells you, if you'd rather. **Add $5** or **+50%** lets it carry on; **Remove budget** takes the cap off.
+- **Venice and local models:** Venice sessions use Venice's own prices; a model on this Mac costs nothing, so only a token cap counts there.
+
+### Search sessions
+
+One search box across every Claude Code and Codex session on this Mac (View → Search Sessions, or the command palette). It reads the session history the agents already keep; nothing is indexed and nothing leaves your Mac.
+
+- **Find the line:** where an agent decided something, which session touched a file, what that command was. Results are grouped by session, newest first, with the matching lines marked **You**, **Agent**, **Ran** or **Edited**.
+- **Narrow it down:** by agent, by project, by the last 7 or 30 days, and by what to search: prompts, agent messages, commands, edited files. Tool output is off until you turn it on.
+- **A small search language:** words must all be on the same line, `"quoted words"` stay together, `-word` leaves lines out, and `file:Queue.swift` keeps to edits and commands on that file. All lowercase ignores case; one capital makes it exact.
+- **Then act on it:** **Resume** the session in a new tab, reveal its transcript in Finder, or copy a snippet.
 
 ### Review changes
 
@@ -587,6 +458,7 @@ Chat with a model that runs on your Mac: nothing leaves it, and it works offline
   marks these panes **Local**, and their sessions come back on the same model after an update.
   **Search the web** is a separate switch for them, off by default: the one thing that would leave
   your Mac.
+- **Small jobs on this Mac.** Turn on **Small jobs on this Mac** in Settings and the short texts Tellurion asks a model for, starting with **Suggest** for a commit message in Review, are written by a model on your Mac when one can. A job that doesn't fit, takes too long or comes back wrong goes on to Claude Code or Codex without you doing anything. Automatic never loads a big model by surprise.
 - **From a terminal:** `tellurion local <model>`, and `tellurion local codex [-m <model>]
   [--provider ollama|lmstudio]`.
 
@@ -689,6 +561,9 @@ is installed, it starts Colima and stops it again afterwards.
 ⌃⌘R gives the same task to several agents at once (Claude Code and Codex, or several of
 one), each in its own git worktree so they can't touch each other's work or yours. Compare
 their diffs side by side and apply the one you want.
+
+- **A scoreboard that learns:** every time you keep one agent's work, that's a win for it. The race window shows each agent's track record (wins, win rate, median time to finish) for this project and everywhere, by kind of task (bug fix, new feature, refactor, tests, docs, UI, performance, config).
+- **A suggestion when the record is clear:** "For bug fixes in this project, Codex has won 7 of 9. Race 2 Codex + 1 Claude Code?" It only appears after enough races, and never changes the lineup unless you press Use. **Race Scoreboard** (command palette) lists every decided race; the history keeps a short title and the numbers, not your prompts or the changes.
 
 ### Background processes
 
@@ -834,6 +709,186 @@ ligatures, shell integration, AppleScript and Shortcuts. Your Ghostty config wor
 
 <br>
 
+## Boards
+
+Prefer a canvas? Put your terminals on a board instead of in tabs. Pick **Board** in
+**Settings → Edition**, or when you first open Tellurion. Classic is the default, and nothing
+changes unless you switch.
+
+<p align="center">
+  <a href="images/readme/boards.mp4"><img src="images/readme/boards.gif" alt="A 54-second tour of Tellurion Boards: a board of twelve agent tiles in four projects, flying in to a tile and back out, answering a Claude Code permission prompt from the list, spawning a team from a preset, wiring agents to an orchestrator card, the Mission Map, a web tile, the Agent Map and a kanban card moving to Done" width="100%"></a>
+</p>
+
+<p align="center"><sub>Real app, demo projects. Claude Code and Codex are real; most of the background tiles are stand-ins. <a href="images/readme/boards.mp4">Watch it in higher quality</a>.</sub></p>
+
+### Every terminal is a tile
+
+- **A full terminal in each tile,** so Vim, full-screen apps and every agent work as they do
+  in a tab. Drag a tile by its title bar, resize it from its corner; tiles snap into line
+  with their neighbors (hold ⌘ not to snap).
+- **Pan and zoom:** pinch, or hold ⌘ and scroll, to zoom; drag empty space to move around.
+  ⌥⌘9 shows everything, ⌥⌘0 goes back to actual size, and double-clicking a title bar flies
+  to that tile. Zooming never resizes a terminal, so agents aren't interrupted.
+- **Switching moves your terminals:** pick Board with classic windows open and Tellurion
+  offers to move them. Every tab and split becomes a tile, grouped by project, with agents
+  still running. **Keep Windows** leaves them where they are.
+- **Tiles in one project share a color,** with a tinted area labelled with its name.
+  **Arrange by project** tidies the whole board (⌘Z puts it back).
+- **Tools at the edges:** Select, Agent, Group, Terminal, Text, Pen, Eraser, Web and Image on
+  the left, each with a single key; Layers, Tasks, files and changes, and review loops on the
+  right. Right-click empty board for a ring of quick actions.
+- **Saved as you go:** tiles, where you were looking and the window come back when Tellurion
+  starts, and Claude Code and Codex pick up their last conversation. The **Boards** list in
+  the sidebar switches between boards; the one you leave keeps running.
+
+### See who needs you
+
+<p align="center">
+  <img src="images/readme/board-board.webp" alt="A board of twelve agent tiles in four colored project groups, zoomed out, with the agent list beside it and one agent waiting for permission" width="100%">
+</p>
+
+- **Every tile's edge shows its agent's status:** it breathes while the agent works and
+  pulses when it needs you. Zoomed out, each tile shows its agent and status in big type.
+- **The list beside the board** puts agents that need you first, with **Allow** and
+  **Deny** on the row. Click a row to fly to its tile.
+- **Agent names:** agent tiles get short names (Ada, Otto, Cy…) so you can tell them apart
+  and @mention them. Every title bar has **Restart** and **Duplicate**.
+- **Everywhere else too:** notifications, the menu bar item, your phone and the command
+  palette all include agents on boards.
+
+### Groups and presets
+
+<p align="center">
+  <img src="images/readme/board-team.webp" alt="Four agents just started from the Ship a feature preset: two Claude Code and two Codex tiles in a new group" width="100%">
+</p>
+
+- **The Group composer** (the bar's **Group** chip): a name, a role, up to 12 agent slots, a
+  folder, one first task for all of them, and **Skip permission prompts** (off unless you
+  turn it on; those tiles wear a red **No prompts** badge). **Spawn** starts them as a grid.
+- **Presets:** save a setup and start it again from the **Presets** chip, which has a few
+  ready-made ones. **Spawn 4** starts four of your default agent in one click.
+- **Groups have roles** (Frontend, Backend, Testers, Reviewers, Design, Docs, Security,
+  General), each framed in its color with how many tiles are working. Collapse a group into a
+  list; its agents keep running. Its header menu messages, pauses, tidies or closes them all.
+- **Talk to a group:** type **@** in the bar and pick a group to message every tile in it.
+
+- **A worktree per agent:** the Group composer and the orchestrator composer can give every agent its own copy of the repository on its own new branch (`tellurion/<group>/<agent>`), so they can't overwrite each other. It's on by itself for two or more agents in a git repository with a commit; uncommitted changes aren't copied. **Worktrees** (a group's menu, or the command palette) lists them: open the folder, see what the agent changed, or remove it. Removing always asks first and never throws away unmerged work unless that's the button you press.
+
+### Orchestrator
+
+<p align="center">
+  <img src="images/readme/board-orchestrator.webp" alt="An orchestrator card wiring a group of two agents, with a glowing wire running down to the group" width="100%">
+</p>
+
+A card that runs a group of agents for you.
+
+- **Wire it up:** tap **Connect** and click terminals, or a group's **Click to wire group**
+  pill. Glowing wires show what's connected, with a dot running along each wire while that
+  agent works.
+- **Give it a command:** your own Claude Code (or Codex) splits the work, sends each agent its
+  part, reads what they answer when they finish, and hands out the next steps until it's
+  done, up to a turn limit you set. **@name** sends straight to one agent, and it can start
+  new agents too ("start two reviewers").
+- **It only messages agents.** A wired terminal with no agent running is never typed into,
+  and permission prompts still come to you.
+
+### Mission Map
+
+<p align="center">
+  <img src="images/readme/board-mission-map.webp" alt="Mission Map: an orchestrator and the command bar on the left, a group in the middle, nine agents on the right with their status, and one agent selected" width="100%">
+</p>
+
+Who runs whom on a board: orchestrators, the groups they (or you) run, and every agent, joined
+by wires (dashed for agents you reach only with @). Filter by status (Working, Needs you,
+Idle, Done), search, hover to follow a node's wires, and select anything to see how long it's
+been in its state, go there, pause it or stop it.
+
+### The board's agent
+
+A bar at the bottom of every board takes plain requests, typed or spoken (hold Space):
+"start three Claude agents, one per kanban card", "sketch the backend: API, queue, Postgres".
+It starts agents and terminals, adds notes, checklists, kanban boards and diagrams, hands
+cards to agents, groups tiles and zooms to what you ask for.
+
+It runs your own Claude Code (or Codex) with no tools of its own, so all it can do is
+arrange the board. Closing tiles, typing into an agent that's already running and running a
+command wait for you to confirm, and ⌘Z undoes what it added. ⌘L jumps to it.
+
+### Agent Map
+
+<p align="center">
+  <img src="images/readme/board-agent-map.webp" alt="The Agent Map of a project: files as blocks grouped by folder, with two agent dots and the trails of files they visited" width="80%">
+</p>
+
+Boards have an Agent Map instead of the code editor: the project's files as a map, grouped by
+folder, with every agent working in the project as a dot that moves to the file it's reading
+or changing, trailing the files it came through. Files it changed stay in its color for a
+while. Hover a file to see who touched it, click an agent to go to its terminal. ⌃⌘M, or
+**Show on Agent Map** from a tile's menu.
+
+### Web tiles
+
+<p align="center">
+  <img src="images/readme/board-web-tiles.webp" alt="A web tile laid out at iPhone 14 Pro size showing a local shop page, above the dev server terminal it comes from" width="80%">
+</p>
+
+A browser on the board, next to the agents building the page: tabs, back and forward, an
+address bar that also searches, and a start page listing the localhost servers running now.
+Size it to a real screen (24", 27" or 32" 4K) or a phone (iPhone SE to Galaxy S8+) and the
+page lays out at that size; **{}** opens Web Inspector. Web tiles keep their cookies and
+storage apart, get no bridge into Tellurion, and refuse downloads.
+
+### Notes, checklists and kanban
+
+<p align="center">
+  <img src="images/readme/board-kanban.webp" alt="A kanban board with Backlog, To Do, In Progress and Done columns, one card just moved to Done" width="80%">
+</p>
+
+Add them from the **+** menu or by right-clicking the board. Hand a checklist item or a kanban
+card to an agent on the board, or to a new Claude Code or Codex tile: the card moves to In
+Progress while the agent works and to Done when it finishes. Kanban boards have Backlog, To Do,
+In Progress and Done, with due dates and priorities.
+
+- **Drag a card onto an agent:** drop a kanban card on any agent's tile and it becomes that agent's task. Right-click a card or a checklist item and pick **Send to** for an agent on the board or a new Claude Code or Codex agent.
+- **Cards follow their agent:** a sent card moves to In Progress and wears a small status: queued, working, needs you, checking…, check failed, done or failed, with the agent's name. Click it to jump to that tile. It moves to Done when its agent finishes the turn; if the project has a check, only once the check passes.
+- **Run the To Do column:** from a kanban's menu, pick an agent and how many at once (1–6). Agents start beside the kanban and each takes the next card from the top when it's free. **Stop the Queue** ends it; agents finish what they have.
+
+### Sketches, diagrams and documents
+
+- **Sketches:** a scratchpad tile with pen, boxes, decision diamonds, databases and arrows
+  that stay attached when you move things. Drop or paste pictures, or bring one in from your
+  iPhone with Continuity Camera. **Send to Agent** hands the sketch, with what you want
+  built, to an agent on the board or a new Claude Code or Codex tile.
+- **Diagrams:** have your Claude Code or Codex draw one of a project (architecture, user
+  flow, data flow, components, request lifecycle or anything you describe), hand-drawn and
+  fully editable.
+- **Documents:** a project overview, onboarding guide, architecture, API reference or
+  security overview, written from the project. It only reads the project; documents stay in
+  Tellurion's folder, not your repo, and export as Markdown or PDF.
+- **Draw on the board itself** with the pen, in 8 colors and 5 widths, and name areas with
+  big labels.
+
+### Accounts, projects and more
+
+- **Accounts:** use more than one Claude Code or Codex sign-in, choose which one new tiles
+  use, and restart a tile's agent on another. Tellurion only points the agent at each
+  account's folder and never reads sign-in details.
+- **Projects and Home:** a board's top bar shows its project, the project's other boards as
+  tabs (with how many agents need you on each) and when your usage limit resets. **Home**
+  lists every project with its boards.
+- **Pause all** freezes every tile's agent and everything it started, mid-turn, so they stop
+  using CPU and tokens; **Resume all** carries on where they left off.
+- **Media tiles:** drop video or music on the board to play it in a tile. They pause when the
+  window is hidden.
+- **Shortcuts, Spotlight and Siri:** Open Board, New Board, Launch Agents on a Board, New
+  Sketch and Arrange Board by Project. "Launch agents in Tellurion" works from Siri.
+- **Settings → Features** switches off Web tiles, drawing, Documents, Diagrams, Accounts,
+  Mission Map and Media tiles; a feature that's off leaves the palettes and menus.
+
+The full list is in the [1.8.0 notes](CHANGELOG.md#180).
+
+<br>
+
 ## Light on your Mac
 
 All of the sidebar's animations run in Core Animation, so the app does almost no work per
@@ -844,10 +899,16 @@ Apple silicon MacBook).
 ## Security and privacy
 
 - **Nothing leaves your Mac unless you ask.** There's no account of ours, telemetry or server.
-  What goes elsewhere is what you send to a cloud provider yourself: your agents' own sign-ins
-  and, once you've connected a Venice account and opened a model, those chats and Codex sessions.
-  Agent tracking and
-  shared memory read the files Claude Code and Codex already write.
+  What goes elsewhere is what your agents send through their own sign-ins, and what a feature
+  you turned on sends to the service you chose for it: chats and Codex sessions on a Venice
+  account you connected, web searches (to Exa, or to a SearXNG of your own), downloads of
+  local models, the skills directory when you browse it, web pages you open in a board, and
+  your phone over your own Tailscale network if you set that up. The app also checks this
+  project's releases on GitHub for updates.
+- **Agent activity stays in files on your Mac.** Tracking and shared memory read the files
+  Claude Code and Codex already write, and Tellurion keeps its own record of each session's
+  activity (prompts, tool calls) in `~/.ghostty-extreme/`, readable only by you and removed
+  after two weeks without use.
 - **Your Venice key stays in the keychain.** It isn't in any terminal's environment, command line
   or file. Agents and chats reach Venice through a small server inside the app, on 127.0.0.1 with a
   token made each launch, which only passes on model requests and the model list. It leaves out
@@ -861,8 +922,11 @@ Apple silicon MacBook).
 - **The Backend view never stores credentials.** It runs your providers' own CLIs with
   their existing logins, read-only commands only. It reads only the *names* of your env
   variables, never their values, and so does the Environment window.
-- **Agent hooks only observe.** They report status and never approve, block or change what
-  an agent does. Any agent settings file is backed up before it's changed.
+- **Agent hooks only observe,** with one exception. They report status and never approve or
+  block what an agent does. The exception is localhost sessions: a command that starts a known
+  dev server inside the project is changed to start it in a localhost session instead (switch
+  Localhost off in Settings → Features to stop that). Any agent settings file is backed up
+  before it's changed.
 - **The editor stays local.** It can only show its own pages, and Visual Fix only talks
   to your local dev server.
 
@@ -966,6 +1030,7 @@ Hold ⌃⌘ for a moment to see them all over the window.
 | ⌘, | Settings (Ghostty's config file is under Tellurion → Edit Config File…) |
 | ⌃⌘S | Show or hide the sidebar |
 | ⌃⌘M | Mission Control |
+| ⌃⌘O | Orchestrator |
 | ⌃⌘E | Code editor |
 | ⌃⌘Y | Project memory |
 | ⌃⌘V | Visual Fix |

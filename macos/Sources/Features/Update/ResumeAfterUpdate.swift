@@ -126,12 +126,13 @@ enum ResumeAfterUpdate {
                 if let (surface, controller) = surface(entry.surface) {
                     switch entry.kind {
                     case .localhost:
-                        if LocalhostSessions.shared.restart(command: entry.value, in: entry.cwd ?? surface.pwd ?? NSHomeDirectory(),
+                        if let server = command(for: entry),
+                           LocalhostSessions.shared.restart(command: server, in: entry.cwd ?? surface.pwd ?? NSHomeDirectory(),
                                                             tab: controller) { resumed += 1 }
                     case .claude, .codex:
                         // A leading space keeps it out of shell history.
-                        if let model = surface.surfaceModel {
-                            Self.run(" \(command(for: entry))", in: model)
+                        if let model = surface.surfaceModel, let line = command(for: entry) {
+                            Self.run(" \(line)", in: model)
                             resumed += 1
                         }
                     }
@@ -157,32 +158,33 @@ enum ResumeAfterUpdate {
         }
     }
 
-    private static func command(for entry: Entry) -> String {
+    /// What an entry types (or, for a server, runs), or nil for one that isn't brought back.
+    /// The plan is plain JSON that any program running as you can write, so an agent's
+    /// session id must be a real one, and a server's command can't hide control characters.
+    static func command(for entry: Entry) -> String? {
         switch entry.kind {
-        case .claude: return "claude --resume \(entry.value)"
+        case .claude:
+            return AgentResume.command(.claude, session: entry.value)
         case .codex:
             if entry.localModel != nil || entry.localProvider != nil {
-                // The file this comes from is plain JSON, so no value is typed unchecked.
-                guard UUID(uuidString: entry.value) != nil else { return "true" }
-                return LocalCodex.resumeLine(entry.value, provider: entry.localProvider, model: entry.localModel).trimmingCharacters(in: .whitespacesAndNewlines)
+                return AgentResume.command(.codex, session: entry.value, on: .local(provider: entry.localProvider, model: entry.localModel))
             }
-            guard let model = entry.venice else { return "codex resume \(entry.value)" }
-            guard UUID(uuidString: entry.value) != nil else { return "true" }
-            let chosen = VeniceAPI.isValidSlug(model) ? "\(VeniceCodex.modelVariable)=\(AgentTools.shellQuote(model)) " : ""
-            return chosen + VeniceCodex.command("resume \(entry.value)")
-        case .localhost: return entry.value
+            return AgentResume.command(.codex, session: entry.value, on: entry.venice.map { AgentResume.Backend.venice(model: $0) } ?? .plain)
+        case .localhost:
+            return Ghostty.Shell.containsControlCharacters(entry.value) ? nil : entry.value
         }
     }
 
     private static func reopen(_ entry: Entry) -> Bool {
         let owner = TerminalController.all.first { $0.window?.isVisible == true } ?? TerminalController.all.first
+        guard let line = command(for: entry) else { return false }
         if entry.kind == .localhost {
-            return LocalhostSessions.shared.start(command: entry.value, in: entry.cwd ?? NSHomeDirectory(), from: owner) != nil
+            return LocalhostSessions.shared.start(command: line, in: entry.cwd ?? NSHomeDirectory(), from: owner) != nil
         }
         guard let owner else { return false }
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = entry.cwd
-        config.initialInput = " \(command(for: entry))\n"
+        config.initialInput = " \(line)\n"
         return TerminalController.newTab(owner.ghostty, from: owner.window, withBaseConfig: config) != nil
     }
 }

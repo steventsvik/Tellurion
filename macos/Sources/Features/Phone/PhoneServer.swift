@@ -2,17 +2,21 @@
 import AppKit
 import Combine
 import GhosttyKit
+import os
 
 /// Lets a paired phone use this Mac's terminal: it lists the tabs with their agents' status,
 /// mirrors a tab's screen live, and types into it.
 ///
 /// Security, in layers:
+/// - The device token is what protects it. Everything past pairing needs one: a socket
+///   must send it first, within a few seconds, and is closed if it sends anything else.
+///   Pairing takes a one-time code from the QR on the Mac, valid for 10 minutes. Tokens
+///   are stored hashed and revocable.
 /// - The server listens on 127.0.0.1 only. Phones reach it through `tailscale serve`, which
 ///   is private to the user's tailnet (never Funnel) and adds the caller's Tailscale login.
-/// - Requests must carry the Mac owner's Tailscale login, so other people on a shared
-///   tailnet (and anything on this Mac that doesn't go through Tailscale) are turned away.
-/// - Everything past pairing needs a device token. Pairing takes a one-time code from the
-///   QR on the Mac, valid for 10 minutes. Tokens are stored hashed and revocable.
+/// - Requests must carry the Mac owner's Tailscale login, which turns away other people on
+///   a shared tailnet. It doesn't stop a program on this Mac, which can connect to the port
+///   directly and write that header itself; such a program still has no device token.
 /// - It's off until the user turns it on, and shows who's connected.
 final class PhoneServer: ObservableObject {
     static let shared = PhoneServer()
@@ -35,6 +39,16 @@ final class PhoneServer: ObservableObject {
     private var clients: [ObjectIdentifier: Client] = [:]
     private var screenTimer: Timer?
     private var tabsTimer: Timer?
+    private static let log = StoredFile.logger("Phone")
+    /// How long a new socket has to send its device token.
+    static let helloDeadline: TimeInterval = 5
+    /// Each watched surface's last screen, so an unchanged one costs a comparison.
+    private var screens: [UUID: ScreenCache] = [:]
+    private var screenSerial = 0
+    /// What the last tabs message was built from, and the message.
+    private var lastTabStates: [TabState] = []
+    private var lastTabsMessage = ""
+    private var tabsBuilt = Date.distantPast
     /// Terminal windows that have closed. AppKit can keep a closed tab's window (and its
     /// terminal) around for a while; the phone shouldn't see it.
     private let closedWindows = NSHashTable<NSWindow>.weakObjects()
@@ -123,6 +137,7 @@ final class PhoneServer: ObservableObject {
             error = nil
         } catch {
             self.error = "Couldn't listen on port \(Self.localPort): \(error.localizedDescription)"
+            Self.log.error("Couldn't listen on port \(Self.localPort): \(error.localizedDescription, privacy: .public)")
         }
         if servePort == nil {
             TailscaleMonitor.shared.servedPort(localPort: Self.localPort) { [weak self] in self?.servePort = $0 }
@@ -195,7 +210,8 @@ final class PhoneServer: ObservableObject {
         var device: PhoneDevice?
         /// The surface it's watching.
         var watching: UUID?
-        var lastScreen = ""
+        /// The serial of the screen it was last sent (see `ScreenCache`); 0 for none.
+        var lastScreen = 0
         var lastTabs = ""
         init(socket: PhoneSocket) { self.socket = socket }
     }
@@ -211,7 +227,7 @@ final class PhoneServer: ObservableObject {
         }
         socket.onClose = { [weak self] in self?.dropClient(id) }
         // It has a few seconds to say who it is.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak client] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.helloDeadline) { [weak client] in
             if let client, client.device == nil { client.socket.close() }
         }
         return true
@@ -236,11 +252,11 @@ final class PhoneServer: ObservableObject {
     }
 
     private func receive(_ text: String, from client: Client) {
-        guard let message = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
-              let type = message["t"] as? String else { return }
+        let message = (try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]) ?? [:]
+        let type = message["t"] as? String
 
         guard let device = client.device else {
-            // The first message must be the device's token.
+            // The first message must be the device's token; anything else closes the socket.
             guard type == "hello", let token = message["token"] as? String,
                   let device = PhoneDevices.shared.device(for: token) else {
                 client.socket.send(Self.json(["t": "error", "code": "unpaired", "message": "This phone isn't paired any more."]))
@@ -258,11 +274,12 @@ final class PhoneServer: ObservableObject {
             return
         }
         PhoneDevices.shared.touch(device.id)
+        guard let type else { return }
 
         switch type {
         case "watch":
             client.watching = (message["id"] as? String).flatMap(UUID.init(uuidString:))
-            client.lastScreen = ""
+            client.lastScreen = 0
             updateTimers()
             pushScreens()
         case "unwatch":
@@ -280,7 +297,9 @@ final class PhoneServer: ObservableObject {
             client.socket.send(Self.json(["t": "pong"]))
         case "unpair":
             // The phone asked to be forgotten.
-            PhoneDevices.shared.remove(device.id)
+            if !PhoneDevices.shared.remove(device.id) {
+                Self.log.error("A phone asked to be forgotten, and the list couldn't be saved")
+            }
         default:
             break
         }
@@ -296,31 +315,70 @@ final class PhoneServer: ObservableObject {
         return nil
     }
 
-    private func tabsMessage() -> String {
-        var tabs: [[String: Any]] = []
+    /// What a tab's entry in the tabs message is built from. Cheap to gather and compare,
+    /// so an unchanged list isn't rebuilt.
+    private struct TabState: Equatable {
+        var id: UUID
+        var title: String
+        var pwd: String?
+        var focused: Bool
+        var localhost: String?
+        var agent: VerticalTabAgentKind?
+        var activity: String?
+        var task: String?
+        var detail: String?
+    }
+
+    private func tabStates() -> [TabState] {
+        var states: [TabState] = []
         let key = TerminalWindows.controller(of: NSApp.keyWindow)
         for controller in openControllers {
             for surface in controller.surfaceTree {
                 let server = LocalhostSessions.shared.session(for: surface)
-                var tab: [String: Any] = [
-                    "id": surface.id.uuidString,
-                    "title": TerminalWindows.title(of: surface, in: controller as? BoardController) ?? surface.title,
-                    "pwd": surface.pwd.map { $0.replacingOccurrences(of: NSHomeDirectory(), with: "~") } ?? "",
-                    "focused": controller === key && controller.focusedSurface === surface,
-                ]
-                if let pwd = surface.pwd { tab["project"] = LocalhostProject(folder: pwd).name }
-                if let server { tab["localhost"] = server.url?.absoluteString ?? "" }
-                if let info = VerticalTabsAgents.shared.info(for: surface) {
-                    tab["agent"] = info.kind.rawValue
-                    tab["agentName"] = info.kind.displayName
-                    tab["activity"] = Self.activity(info.activity)
-                    if let task = info.task { tab["task"] = String(task.prefix(200)) }
-                    if let detail = info.detail { tab["detail"] = String(detail.prefix(200)) }
-                }
-                tabs.append(tab)
+                let info = VerticalTabsAgents.shared.info(for: surface)
+                states.append(TabState(
+                    id: surface.id,
+                    title: TerminalWindows.title(of: surface, in: controller as? BoardController) ?? surface.title,
+                    pwd: surface.pwd,
+                    focused: controller === key && controller.focusedSurface === surface,
+                    localhost: server.map { $0.url?.absoluteString ?? "" },
+                    agent: info?.kind,
+                    activity: info.map { Self.activity($0.activity) },
+                    task: info?.task.map { String($0.prefix(200)) },
+                    detail: info?.detail.map { String($0.prefix(200)) }))
             }
         }
-        return Self.json(["t": "tabs", "tabs": tabs])
+        return states
+    }
+
+    /// The tabs message. Rebuilt when a tab changed, and every half minute regardless (a
+    /// tab's project comes from the folders on disk).
+    private func tabsMessage() -> String {
+        let states = tabStates()
+        if states == lastTabStates, !lastTabsMessage.isEmpty, Date().timeIntervalSince(tabsBuilt) < 30 { return lastTabsMessage }
+        let home = NSHomeDirectory()
+        let tabs: [[String: Any]] = states.map { state in
+            var tab: [String: Any] = [
+                "id": state.id.uuidString,
+                "title": state.title,
+                "pwd": state.pwd.map { $0.replacingOccurrences(of: home, with: "~") } ?? "",
+                "focused": state.focused,
+            ]
+            if let pwd = state.pwd { tab["project"] = LocalhostProject(folder: pwd).name }
+            if let localhost = state.localhost { tab["localhost"] = localhost }
+            if let agent = state.agent {
+                tab["agent"] = agent.rawValue
+                tab["agentName"] = agent.displayName
+                tab["activity"] = state.activity ?? ""
+                if let task = state.task { tab["task"] = task }
+                if let detail = state.detail { tab["detail"] = detail }
+            }
+            return tab
+        }
+        lastTabStates = states
+        lastTabsMessage = Self.json(["t": "tabs", "tabs": tabs])
+        tabsBuilt = Date()
+        return lastTabsMessage
     }
 
     private static func activity(_ activity: VerticalTabAgentActivity) -> String {
@@ -368,37 +426,58 @@ final class PhoneServer: ObservableObject {
         }
     }
 
-    private func pushScreens() {
-        var cache: [UUID: String] = [:]
-        for client in clients.values {
-            guard let id = client.watching, !client.socket.isBackedUp else { continue }
-            let message: String
-            if let cached = cache[id] {
-                message = cached
-            } else {
-                guard let surface = surface(id.uuidString), let built = Self.screenMessage(surface) else { continue }
-                cache[id] = built
-                message = built
-            }
-            guard message != client.lastScreen else { continue }
-            client.lastScreen = message
-            client.socket.send(message)
-        }
+    /// A surface's screen as it was last read: the raw text and the numbers beside it, the
+    /// message built from them, and a serial that changes when they do.
+    private struct ScreenCache {
+        var text: Data
+        var numbers: [UInt32]
+        var message: String
+        var serial: Int
     }
 
-    private static func screenMessage(_ surface: Ghostty.SurfaceView) -> String? {
-        guard let cSurface = surface.surface else { return nil }
+    private func pushScreens() {
+        var read: Set<UUID> = []
+        for client in clients.values {
+            guard let id = client.watching, !client.socket.isBackedUp else { continue }
+            // Each surface is read once a tick, however many phones watch it.
+            if read.insert(id).inserted {
+                guard let surface = surface(id.uuidString) else { continue }
+                refreshScreen(surface)
+            }
+            guard let screen = screens[id], screen.serial != client.lastScreen else { continue }
+            client.lastScreen = screen.serial
+            client.socket.send(screen.message)
+        }
+        let watched = Set(clients.values.compactMap(\.watching))
+        if screens.count > watched.count { screens = screens.filter { watched.contains($0.key) } }
+    }
+
+    /// Reads the surface's screen and, only if it changed since the last read, builds its
+    /// message: the raw bytes are compared first, so a still screen makes no text or JSON.
+    private func refreshScreen(_ surface: Ghostty.SurfaceView) {
+        guard let cSurface = surface.surface else { return }
         var mirror = ghostty_mirror_s()
-        guard ghostty_surface_read_mirror(cSurface, &mirror) else { return nil }
+        guard ghostty_surface_read_mirror(cSurface, &mirror) else { return }
         defer { ghostty_surface_free_mirror(&mirror) }
-        let vt = mirror.text.map { String(cString: $0) } ?? ""
-        return json([
-            "t": "screen", "id": surface.id.uuidString, "vt": vt,
+        let length = mirror.text == nil ? 0 : Int(mirror.text_len)
+        let numbers: [UInt32] = [
+            UInt32(mirror.cols), UInt32(mirror.rows), UInt32(mirror.cursor_x), UInt32(mirror.cursor_y),
+            mirror.cursor_visible ? 1 : 0, mirror.alternate ? 1 : 0, mirror.background, mirror.foreground,
+        ]
+        if let cached = screens[surface.id], cached.numbers == numbers, cached.text.count == length {
+            let same = length == 0 || cached.text.withUnsafeBytes { memcmp($0.baseAddress, mirror.text, length) == 0 }
+            if same { return }
+        }
+        let text = mirror.text.map { Data(bytes: $0, count: length) } ?? Data()
+        let message = Self.json([
+            "t": "screen", "id": surface.id.uuidString, "vt": String(decoding: text, as: UTF8.self),
             "cols": Int(mirror.cols), "rows": Int(mirror.rows),
             "x": Int(mirror.cursor_x), "y": Int(mirror.cursor_y), "cursor": mirror.cursor_visible,
             "alt": mirror.alternate,
             "bg": String(format: "#%06x", mirror.background), "fg": String(format: "#%06x", mirror.foreground),
         ])
+        screenSerial += 1
+        screens[surface.id] = ScreenCache(text: text, numbers: numbers, message: message, serial: screenSerial)
     }
 
     // MARK: Keys

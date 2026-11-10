@@ -42,7 +42,7 @@ struct BoardWorkspace: Codable, Identifiable, Equatable {
         var zoom: CGFloat
     }
 
-    var version = 1
+    var version = BoardStore.currentVersion
     let id: UUID
     var name: String
     /// The folder new terminals and agents start in.
@@ -110,18 +110,103 @@ enum BoardStore {
 
     private static func file(_ id: UUID) -> URL { folder.appendingPathComponent(id.uuidString + ".json") }
 
-    /// Every saved board, most recently changed first.
-    static func all() -> [BoardWorkspace] {
-        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+    /// The newest board file this build writes and fully understands.
+    static let currentVersion = 1
+
+    /// A board as it came from its file. `readOnly`: the file is from a newer build, or has
+    /// things this build doesn't know, so saving the board would lose them.
+    struct Decoded: Equatable {
+        var workspace: BoardWorkspace
+        var readOnly: Bool
+    }
+
+    /// Reads a board file's contents. A card of a kind this build doesn't know is left out and
+    /// a group with an unknown role shows as General, rather than the whole board failing to
+    /// load; either makes the board read-only, as does a newer `version`.
+    static func decode(_ data: Data) throws -> Decoded {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
+        var data = data
+        var readOnly = false
+        if var object = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            var changed = false
+            if let cards = object["cards"] as? [[String: Any]] {
+                let known = cards.filter { ($0["kind"] as? String).flatMap(BoardCard.Kind.init(rawValue:)) != nil }
+                if known.count != cards.count {
+                    object["cards"] = known
+                    changed = true
+                }
+            }
+            if var groups = object["groups"] as? [[String: Any]] {
+                for index in groups.indices where (groups[index]["role"] as? String).flatMap(BoardRole.init(rawValue:)) == nil {
+                    groups[index]["role"] = BoardRole.general.rawValue
+                    object["groups"] = groups
+                    changed = true
+                }
+            }
+            if changed {
+                data = try JSONSerialization.data(withJSONObject: object)
+                readOnly = true
+            }
+        }
+        let workspace = try decoder.decode(BoardWorkspace.self, from: data)
+        return Decoded(workspace: workspace, readOnly: readOnly || workspace.version > currentVersion)
+    }
+
+    private static let lock = NSLock()
+    private static var readOnlyBoards: Set<UUID> = []
+    /// Files already logged as unreadable, by name and size, so listing the boards again
+    /// doesn't log them again.
+    private static var reported: Set<String> = []
+
+    /// Whether the board is never saved: its file has more in it than this build understands.
+    static func isReadOnly(_ id: UUID) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return readOnlyBoards.contains(id)
+    }
+
+    /// Every saved board, most recently changed first. A file that can't be decoded is
+    /// logged and left where it is.
+    static func all() -> [BoardWorkspace] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         return files.filter { $0.pathExtension == "json" }
-            .compactMap { try? decoder.decode(BoardWorkspace.self, from: Data(contentsOf: $0)) }
-            .filter { $0.version == 1 }
+            .compactMap(load)
             .sorted { $0.updated > $1.updated }
     }
 
+    private static func load(_ file: URL) -> BoardWorkspace? {
+        do {
+            let data = try Data(contentsOf: file)
+            let decoded = try decode(data)
+            guard decoded.workspace.version >= 1 else { return nil }
+            lock.lock()
+            var isNew = false
+            if decoded.readOnly {
+                isNew = readOnlyBoards.insert(decoded.workspace.id).inserted
+            } else {
+                readOnlyBoards.remove(decoded.workspace.id)
+            }
+            lock.unlock()
+            if isNew {
+                log.error("Board \(file.lastPathComponent, privacy: .public) has things from a newer Tellurion (version \(decoded.workspace.version)); it opens but isn't saved here")
+            }
+            return decoded.workspace
+        } catch {
+            let size = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? -1
+            lock.lock()
+            let isNew = reported.insert("\(file.lastPathComponent):\(size)").inserted
+            lock.unlock()
+            if isNew {
+                log.error("Couldn't load board \(file.lastPathComponent, privacy: .public): \(StoredFile.summary(of: error), privacy: .public)")
+            }
+            return nil
+        }
+    }
+
     static func save(_ workspace: BoardWorkspace) {
+        // A board from a newer build keeps its file as that build wrote it.
+        guard !isReadOnly(workspace.id) else { return }
         let encoder = StoredFile.encoder
         encoder.dateEncodingStrategy = .iso8601
         // If this fails the board stays open with its last saved state on disk; the next change tries again.

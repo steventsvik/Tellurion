@@ -145,6 +145,7 @@ private struct MissionAnchors: PreferenceKey {
 struct MissionMapView: View {
     let controller: BoardController
     @ObservedObject var model: BoardModel
+    @Environment(\.tellurionMotion) private var motion
     @State private var filter: MissionStatus?
     @State private var search = ""
     @State private var selected: String?
@@ -403,7 +404,8 @@ struct MissionMapView: View {
                     let info = VerticalTabsAgents.shared.info(for: surface)
                     row("Status", model.paused.contains(id) ? "Paused" : info?.activity.label ?? "Terminal", color: node.status?.color)
                     if let since = info?.since {
-                        TimelineView(.periodic(from: .now, by: 1)) { _ in row("For", Self.elapsed(since)) }
+                        // Counts up only while the board is on screen.
+                        TimelineView(.periodic(from: .now, by: motion ? 1 : 3600)) { _ in row("For", Self.elapsed(since)) }
                     }
                     if let task = info?.task { Text(task).font(Tellurion.font(11)).foregroundColor(Tellurion.muted).lineLimit(4) }
                 }

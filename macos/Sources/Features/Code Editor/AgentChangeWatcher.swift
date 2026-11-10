@@ -40,7 +40,13 @@ final class AgentChangeWatcher {
     private(set) var root: String?
     private var repoRoot: String?
     private var baseline: String?
-    private var shadow: [String: String] = [:]
+    /// Each changed file's last seen text. Capped: the files seen longest ago are dropped,
+    /// and diff against the baseline again if they change.
+    private var shadow = RecentTexts(limit: 64 * 1_048_576)
+    /// How many files in one batch of changes may be looked up in the baseline (a `git show`
+    /// each). Past that (a checkout, a formatter run) the rest are noted, not reported.
+    private static let baselineLookupsPerBatch = 60
+    private var baselineLookupsLeft = 0
     private var pending: Set<String> = []
     private var flushScheduled = false
     /// Whether git ignores a path (build output, secrets, caches), so it isn't the agent's change.
@@ -53,7 +59,23 @@ final class AgentChangeWatcher {
         ".parcel-cache", "coverage", ".gradle", "Pods", ".open-next", ".vercel", ".wrangler", ".output", ".expo",
     ]
 
-    deinit { stopStream() }
+    /// What the file events stream holds instead of the watcher itself, so an event that
+    /// arrives while the watcher is going away finds nothing rather than a dead object.
+    private final class Relay {
+        weak var watcher: AgentChangeWatcher?
+        init(_ watcher: AgentChangeWatcher) { self.watcher = watcher }
+    }
+
+    deinit {
+        // Nothing on the queue refers to the watcher any more (those blocks hold it), so
+        // the stream is only this one's to read. It's torn down on its own queue.
+        guard let stream else { return }
+        queue.async {
+            FSEventStreamStop(stream)
+            FSEventStreamInvalidate(stream)
+            FSEventStreamRelease(stream)
+        }
+    }
 
     // MARK: Watching
 
@@ -89,15 +111,27 @@ final class AgentChangeWatcher {
 
     /// The editor saved this content itself; don't report it as the agent's change.
     func noteOwnWrite(path: String, content: String) {
-        queue.async { self.shadow[Self.realPath(path)] = content }
+        queue.async { self.shadow.set(Self.realPath(path), content) }
     }
 
     private func startStream(_ root: String) {
+        // The stream keeps the relay alive for as long as it exists.
+        let relay = Relay(self)
+        defer { withExtendedLifetime(relay) {} }
         var context = FSEventStreamContext(
-            version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil)
+            version: 0, info: Unmanaged.passUnretained(relay).toOpaque(),
+            retain: { info in
+                guard let info else { return nil }
+                _ = Unmanaged<Relay>.fromOpaque(info).retain()
+                return info
+            },
+            release: { info in
+                guard let info else { return }
+                Unmanaged<Relay>.fromOpaque(info).release()
+            },
+            copyDescription: nil)
         let callback: FSEventStreamCallback = { _, info, count, paths, flags, _ in
-            guard let info else { return }
-            let watcher = Unmanaged<AgentChangeWatcher>.fromOpaque(info).takeUnretainedValue()
+            guard let info, let watcher = Unmanaged<Relay>.fromOpaque(info).takeUnretainedValue().watcher else { return }
             let list = unsafeBitCast(paths, to: NSArray.self) as? [String] ?? []
             var files: [String] = []
             for index in 0..<count {
@@ -137,6 +171,7 @@ final class AgentChangeWatcher {
             let paths = pending
             pending.removeAll()
             let ignoredNow = gitIgnored(paths)
+            baselineLookupsLeft = Self.baselineLookupsPerBatch
             for path in paths.sorted() where !ignoredNow.contains(path) { process(path) }
         }
     }
@@ -163,18 +198,11 @@ final class AgentChangeWatcher {
     /// The ignored ones among `relatives`, or nil if git failed.
     private static func checkIgnore(_ relatives: [String], in repoRoot: String) -> Set<String>? {
         let process = AgentTools.gitProcess(["check-ignore", "--stdin", "-z"], in: repoRoot)
-        let input = Pipe(), output = Pipe()
-        process.standardInput = input
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        guard (try? process.run()) != nil else { return nil }
-        input.fileHandleForWriting.write(Data((relatives.joined(separator: "\0") + "\0").utf8))
-        try? input.fileHandleForWriting.close()
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        let result = ProcessRunner.run(process, input: Data((relatives.joined(separator: "\0") + "\0").utf8),
+                                       timeout: 20, discardingError: true)
         // 0: some are ignored, 1: none are; anything else is an error.
-        guard process.terminationStatus <= 1 else { return nil }
-        return Set(data.split(separator: 0).compactMap { String(data: Data($0), encoding: .utf8) })
+        guard result.launchError == nil, !result.timedOut, (0...1).contains(result.status) else { return nil }
+        return Set(result.stdout.split(separator: 0).compactMap { String(data: Data($0), encoding: .utf8) })
     }
 
     static func realPath(_ path: String) -> String {
@@ -201,8 +229,17 @@ final class AgentChangeWatcher {
         if isDirectory.boolValue { return }
         let current = exists ? Self.readText(path) : nil
         if exists && current == nil { return } // binary or too large
-        let previous = shadow[path] ?? baselineContent(path)
-        if let current { shadow[path] = current } else { shadow.removeValue(forKey: path) }
+        let seen = shadow[path]
+        if seen == nil, repoRoot != nil {
+            guard baselineLookupsLeft > 0 else {
+                // Too many new files at once: remember this one, and report its next change.
+                if let current { shadow.set(path, current) }
+                return
+            }
+            baselineLookupsLeft -= 1
+        }
+        let previous = seen ?? baselineContent(path)
+        if let current { shadow.set(path, current) } else { shadow.remove(path) }
         guard previous != current else { return }
 
         let modified = (try? fm.attributesOfItem(atPath: path)[.modificationDate] as? Date)?.timeIntervalSince1970 ?? Date().timeIntervalSince1970
@@ -284,7 +321,7 @@ final class AgentChangeWatcher {
             for file in files where !file.isBinary {
                 let path = (repoRoot as NSString).appendingPathComponent(file.path)
                 guard Self.isInteresting(path, root: repoRoot) else { continue }
-                if let text = Self.readText(path) { shadow[path] = text }
+                if let text = Self.readText(path) { shadow.set(path, text) }
                 let modified = (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate] as? Date)?
                     .timeIntervalSince1970 ?? 0
                 changes.append(Change(path: path, hunks: Self.hunks(of: file), created: file.status == .added,
@@ -328,6 +365,43 @@ final class AgentChangeWatcher {
             flush(nextLine: lastNew + 1)
         }
         return result
+    }
+}
+
+/// Texts by name, up to `limit` bytes in all: adding past that drops the ones set longest ago.
+struct RecentTexts {
+    let limit: Int
+    private(set) var total = 0
+    private var texts: [String: (text: String, order: Int)] = [:]
+    private var next = 0
+
+    init(limit: Int) { self.limit = limit }
+
+    var count: Int { texts.count }
+
+    subscript(name: String) -> String? { texts[name]?.text }
+
+    mutating func set(_ name: String, _ text: String) {
+        remove(name)
+        next += 1
+        texts[name] = (text, next)
+        total += text.utf8.count
+        guard total > limit else { return }
+        // Oldest first, never the one just set.
+        for old in texts.filter({ $0.key != name }).sorted(by: { $0.value.order < $1.value.order }) {
+            if total <= limit { break }
+            remove(old.key)
+        }
+    }
+
+    mutating func remove(_ name: String) {
+        guard let old = texts.removeValue(forKey: name) else { return }
+        total -= old.text.utf8.count
+    }
+
+    mutating func removeAll() {
+        texts.removeAll()
+        total = 0
     }
 }
 #endif

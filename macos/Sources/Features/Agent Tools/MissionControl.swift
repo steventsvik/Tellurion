@@ -223,6 +223,8 @@ private struct MissionCardView: View {
                 }
                 Spacer(minLength: 6)
                 if let agent = card.agent, agent.kind != .hermes {
+                    ProjectCheckMark(surface: card.surface.value, activity: agent.activity)
+                    OrchestratorWireMark(surface: card.surface.value)
                     AgentStatusPill(activity: agent.activity)
                 }
             }
@@ -254,6 +256,8 @@ private struct MissionCardView: View {
                 AgentPermissionButtons(surface: surface, prompt: prompt)
             }
             if let surface = card.surface.value { AgentMessagesLine(surface: surface) }
+            if let surface = card.surface.value { AgentConflictLine(surface: surface) }
+            if let surface = card.surface.value { AgentBudgetLine(surface: surface) }
             actions
         }
         .padding(12)
@@ -298,6 +302,7 @@ private struct MissionCardView: View {
                 }
                 .fixedSize()
             }
+            if let surface = card.surface.value { AgentBudgetButton(surface: surface) }
             Spacer()
         }
         .controlSize(.small)

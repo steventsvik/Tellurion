@@ -174,7 +174,7 @@ private struct OrchestratorPanel: View {
                 if snapshot.wiring {
                     connectList
                 } else if showLog {
-                    logView
+                    OrchestratorLogView(log: brain.log, accent: accent)
                 } else if snapshot.agents == 0 {
                     emptyState
                 } else {
@@ -359,7 +359,7 @@ private struct OrchestratorPanel: View {
                     ScrollViewReader { proxy in
                         ScrollView {
                             VStack(alignment: .leading, spacing: 4) {
-                                ForEach(recent) { entry in entryRow(entry).id(entry.id) }
+                                ForEach(recent) { entry in OrchestratorEntryRow(entry: entry, accent: accent).id(entry.id) }
                             }
                             .padding(.trailing, 20)
                             .background(GeometryReader { geometry in
@@ -412,53 +412,10 @@ private struct OrchestratorPanel: View {
         }
     }
 
-    /// Every entry since the orchestrator was last reset, newest at the bottom.
-    private var logView: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(brain.log) { entry in entryRow(entry).id(entry.id) }
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .onAppear { if let last = brain.log.last { proxy.scrollTo(last.id, anchor: .bottom) } }
-            .onChange(of: brain.log.count) { _ in
-                if let last = brain.log.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
-            }
-        }
-    }
-
-    private func entryRow(_ entry: OrchestratorBrain.Entry) -> some View {
-        HStack(alignment: .top, spacing: 6) {
-            Image(systemName: Self.symbol(entry.kind)).font(.system(size: 9, weight: .semibold))
-                .foregroundColor(entry.kind == .error ? .red : entry.kind == .say ? accent : Tellurion.dim)
-                .frame(width: 12).padding(.top, 2)
-            Text(entry.text).font(Tellurion.font(11)).foregroundColor(entry.kind == .say ? Tellurion.text : Tellurion.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-            if entry.images > 0 {
-                Label("\(entry.images)", systemImage: "photo").font(Tellurion.font(10)).foregroundColor(Tellurion.dim)
-                    .padding(.top, 1)
-                    .help("\(entry.images) image\(entry.images == 1 ? "" : "s") went with it")
-            }
-        }
-    }
-
     private var waitingLine: String {
         let count = snapshot.working + snapshot.queued
         let who = count == 0 ? "Waiting" : "Waiting for \(count) agent\(count == 1 ? "" : "s")"
         return who + " · turn \(brain.turn) of \(brain.limit)"
-    }
-
-    private static func symbol(_ kind: OrchestratorBrain.Entry.Kind) -> String {
-        switch kind {
-        case .user: return "person.fill"
-        case .say: return "sparkle"
-        case .action: return "arrow.turn.down.right"
-        case .event: return "circle.fill"
-        case .error: return "exclamationmark.triangle.fill"
-        }
     }
 
     // MARK: Input
@@ -534,16 +491,7 @@ private struct OrchestratorPanel: View {
     }
 
     private func button(_ symbol: String, _ help: String, filled: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 10.5, weight: .bold))
-                .foregroundColor(filled ? Tellurion.ink : Tellurion.muted)
-                .frame(width: 26, height: 26)
-                .background(Circle().fill(filled ? accent : Tellurion.panel))
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
-        .accessibilityLabel(help)
+        OrchestratorRoundButton(symbol: symbol, help: help, filled: filled, accent: accent, action: action)
     }
 
     private func submit() {
@@ -572,71 +520,29 @@ private struct OrchestratorPanel: View {
     }
 }
 
-/// One wired agent: its logo, name, agent and role, and status; on hover, go to it or pause it.
+/// One wired agent (see OrchestratorWiredRow); on hover, go to it or pause it.
 private struct OrchestratorAgentRow: View {
     let controller: BoardController
     let row: OrchestratorRow
     let accent: Color
-    @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 9) {
-            Group {
-                if let kind = row.kind {
-                    VerticalTabAgentLogo(kind: kind, tint: Tellurion.text)
-                } else {
-                    Image(systemName: "terminal").font(.system(size: 11)).foregroundColor(Tellurion.muted)
-                }
+        OrchestratorWiredRow(row: row, actions: [
+            .init(symbol: "scope", help: "Go to it", run: focus),
+            .init(symbol: row.paused ? "play.fill" : "pause.fill", help: row.paused ? "Resume" : "Pause") {
+                controller.setPaused(!row.paused, [row.id])
+            },
+        ], focus: focus, editRole: {
+            guard let team = controller.model.teams.first(where: { team in team.members.contains { $0.tile == row.id } }) else { return }
+            controller.promptRename("Role", current: controller.role(of: row.id, in: team.id) ?? "", button: "Set Role") {
+                controller.setRole($0, for: row.id, in: team.id)
             }
-            .frame(width: 18, height: 18)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(row.name).font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text).lineLimit(1)
-                Text(row.detail).font(Tellurion.font(10.5)).foregroundColor(Tellurion.dim).lineLimit(1)
-            }
-            Spacer(minLength: 4)
-            if hovering {
-                icon("scope", "Go to it") { focus() }
-                icon(row.paused ? "play.fill" : "pause.fill", row.paused ? "Resume" : "Pause") {
-                    controller.setPaused(!row.paused, [row.id])
-                }
-            } else if row.paused {
-                BoardPausedPill()
-            } else if row.kind != nil {
-                AgentStatusPill(activity: row.activity)
-            }
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 40)
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Tellurion.raised : .clear))
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
-        .onTapGesture { focus() }
-        .contextMenu {
-            Button("Go to It") { focus() }
-            Button("Role…") {
-                guard let team = controller.model.teams.first(where: { team in team.members.contains { $0.tile == row.id } }) else { return }
-                controller.promptRename("Role", current: controller.role(of: row.id, in: team.id) ?? "", button: "Set Role") {
-                    controller.setRole($0, for: row.id, in: team.id)
-                }
-            }
-            Button("Unwire") { controller.unwire(row.id) }
-        }
+        }, unwire: { controller.unwire(row.id) })
     }
 
     private func focus() {
         guard let surface = controller.model.surfaces.first(where: { $0.id == row.id }) else { return }
         controller.focusTile(surface)
-    }
-
-    private func icon(_ symbol: String, _ help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 10, weight: .semibold)).foregroundColor(Tellurion.muted)
-                .frame(width: 22, height: 22)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
-        .accessibilityLabel(help)
     }
 }
 

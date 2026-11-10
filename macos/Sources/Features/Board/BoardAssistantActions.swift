@@ -305,10 +305,44 @@ extension BoardController {
         return flat.count > length ? String(flat.prefix(length)) + "…" : flat
     }
 
-    /// The whole text on one line, with its line breaks shown.
-    private static func visible(_ text: String) -> String {
-        text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ⏎ ")
+    /// The whole text on one line, with its line breaks and any other control character
+    /// shown: what you confirm is what's typed.
+    nonisolated static func visible(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\r\n", with: "\n")
+        var shown = ""
+        for scalar in trimmed.unicodeScalars {
+            switch scalar.value {
+            case 0x0A, 0x0D: shown += " ⏎ "
+            case 0x00...0x1F: shown.unicodeScalars.append(Unicode.Scalar(0x2400 + scalar.value) ?? scalar)
+            case 0x7F: shown += "␡"
+            case 0x80...0x9F: shown += "\\u{\(String(scalar.value, radix: 16))}"
+            default: shown.unicodeScalars.append(scalar)
+            }
+        }
+        return shown
     }
+
+    /// What's typed into a terminal for a proposed command or line: trimmed, and nil when
+    /// any control character is left. Typed, one acts as a key (a line break runs what's
+    /// before it, Ctrl-U erases it), so the terminal would run something other than what
+    /// the confirmation showed.
+    nonisolated static func typedCommand(_ command: String) -> String? {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Ghostty.Shell.containsControlCharacters(trimmed) ? nil : trimmed
+    }
+
+    /// Whether a message for an agent has nothing hidden in it: line breaks and tabs are
+    /// part of a message, other control characters are keys.
+    nonisolated static func isMessage(_ text: String) -> Bool {
+        !text.unicodeScalars.contains { $0.properties.generalCategory == .control && !"\n\r\t".unicodeScalars.contains($0) }
+    }
+
+    /// Why a command or line wasn't typed.
+    nonisolated static func refusal(_ text: String, lines: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).contains(where: \.isNewline) ? lines : hiddenRefusal
+    }
+
+    nonisolated static var hiddenRefusal: String { "That has hidden control characters, so it wasn't sent" }
 
     // MARK: Doing it
 
@@ -371,7 +405,7 @@ extension BoardController {
             return "Give \(tileLabel(surface)): “\(Self.clip(item.item.text, 80))”"
         case "message_group":
             guard let id = handles.id(action.target), let group = namedGroup(id) else { return nil }
-            return "Send to \(group.name)'s \(group.tiles.count) tiles: “\(action.text ?? "")”"
+            return "Send to \(group.name)'s \(group.tiles.count) tiles: “\(Self.visible(action.text ?? ""))”"
         case "close_group":
             guard let id = handles.id(action.target), let group = namedGroup(id) else { return nil }
             return "Close \(group.name) and its \(group.tiles.count) tiles"
@@ -449,25 +483,31 @@ extension BoardController {
                 config.workingDirectory = folder
             }
             // One command: a second line would run too, unseen in the confirmation.
-            if action.command?.trimmingCharacters(in: .whitespacesAndNewlines).contains("\n") == true {
-                return "A terminal runs one command; put the rest in a script"
+            var command: String?
+            if let proposed = action.command {
+                guard let line = Self.typedCommand(proposed) else {
+                    return Self.refusal(proposed, lines: "A terminal runs one command; put the rest in a script")
+                }
+                command = line + "\n"
             }
-            let command = action.command.map { $0.hasSuffix("\n") ? $0 : $0 + "\n" }
             guard let view = addTile(config: config, command: command) else { return nil }
             if let title = action.title, !title.isEmpty { model.titles[view.id] = title }
             return "Opened " + (action.title.map { "“\($0)”" } ?? "a terminal")
         case "message_agent":
             guard let surface = surface(action.tile, handles), let text = action.text, !text.isEmpty else { return nil }
             // A shell would run each line; agents take the text as one message.
-            if VerticalTabsAgents.shared.info(for: surface) == nil, text.trimmingCharacters(in: .whitespacesAndNewlines).contains("\n") {
-                return "A terminal takes one line at a time"
+            if VerticalTabsAgents.shared.info(for: surface) == nil {
+                guard let line = Self.typedCommand(text) else { return Self.refusal(text, lines: "A terminal takes one line at a time") }
+                deliver(line, to: surface)
+            } else {
+                guard Self.isMessage(text) else { return Self.hiddenRefusal }
+                deliver(text, to: surface)
             }
-            deliver(text, to: surface)
             return "Sent to \(tileLabel(surface))"
         case "hand_item":
             guard let found = item(action, handles) else { return "No such item" }
             if let surface = surface(action.tile, handles) {
-                hand(found.item.id, in: found.card.id, to: surface)
+                guard hand(found.item.id, in: found.card.id, to: surface) else { return "\(tileLabel(surface)) has no agent running; not sent" }
                 return "Gave “\(Self.clip(found.item.text, 40))” to \(tileLabel(surface))"
             }
             let kind: VerticalTabAgentKind = action.agent == "codex" ? .codex : .claude
@@ -589,6 +629,11 @@ extension BoardController {
             return "Added \(tiles.count) tile\(tiles.count == 1 ? "" : "s") to \(group.name)"
         case "message_group":
             guard let id = handles.id(action.target), let group = namedGroup(id), let text = action.text else { return nil }
+            // A terminal in the group would run each line.
+            let shells = groupSurfaces(group).contains { VerticalTabsAgents.shared.info(for: $0) == nil }
+            guard shells ? Self.typedCommand(text) != nil : Self.isMessage(text) else {
+                return Self.refusal(text, lines: "A terminal takes one line at a time")
+            }
             let count = messageGroup(id, text)
             return "Sent to \(group.name) (\(count) tile\(count == 1 ? "" : "s"))"
         case "close_group":

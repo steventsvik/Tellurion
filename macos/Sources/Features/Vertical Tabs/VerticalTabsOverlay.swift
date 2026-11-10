@@ -285,6 +285,11 @@ private struct VerticalTabsMenuPanel: View {
                     MemoryWindow.show(folder: pane.pwd)
                 }
             }
+            if TellurionSettings.isOn(.checks) {
+                item("Project check…", enabled: pane.pwd != nil) {
+                    ProjectChecksWindow.show(folder: pane.pwd)
+                }
+            }
             separator
             ForEach(AgentHandoff.Mode.quick, id: \.self) { mode in
                 ForEach(AgentHandoff.targets, id: \.self) { target in
@@ -301,6 +306,14 @@ private struct VerticalTabsMenuPanel: View {
             item("Start a review loop…", enabled: pane.surface != nil && pane.agent != nil) {
                 guard let surface = pane.surface else { return }
                 PipelineSetup.show(writer: surface, in: controller)
+            }
+            if TellurionSettings.isOn(.orchestrator), let surface = pane.surface {
+                item(ClassicOrchestrators.shared.wired.contains(surface.id) ? "Unwire from orchestrator" : "Wire to orchestrator") {
+                    ClassicOrchestrators.shared.toggleWire(surface, in: controller)
+                }
+            }
+            if TellurionSettings.isOn(.budgets), let surface = pane.surface, AgentBudgets.canMeasure(pane.agent) {
+                item("Budget…") { AgentBudgetPopover.show(for: surface) }
             }
             if TellurionSettings.isOn(.races) {
                 item("Race agents on this project…", enabled: pane.pwd != nil) {

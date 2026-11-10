@@ -13,7 +13,8 @@
 # The app opens and tracks the sessions; this script only asks it to, through an OSC 777
 # notification written to the terminal it runs in.
 
-dir="$HOME/.ghostty-extreme/localhost"
+# TELLURION_TEST_HOME moves .ghostty-extreme for a test copy of the app, as in `tellurion`.
+dir="${TELLURION_TEST_HOME:-$HOME}/.ghostty-extreme/localhost"
 self="~/.ghostty-extreme/bin/localhost"
 
 quote() { printf "'%s'" "${1//\'/\'\\\'\'}"; }
@@ -90,11 +91,20 @@ is_dev_server() {
 }
 
 # True for commands that forward a port to this Mac and stay open.
+# A session runs in a normal tab, outside the sandbox the agent's own commands get, so a
+# tunnel only counts when all it can do is forward a port. ssh runs a program of the
+# caller's choice through ProxyCommand and the like, set with -o, -J or a config file (-F),
+# and kubectl through a kubeconfig's login command: with any of those it's left to the agent.
 is_tunnel() {
-  local c="$1"
+  local c="$1" lower
+  lower=$(printf '%s' "$c" | tr '[:upper:]' '[:lower:]')
+  if [[ "$c" =~ ^(ssh|autossh|gcloud)[[:space:]] ]]; then
+    [[ "$lower" == *proxycommand* || "$lower" == *proxyjump* || "$lower" == *--ssh-flag* ]] && return 1
+    [[ "$c" =~ [[:space:]]-[A-Za-z0-9]*[oJF] ]] && return 1
+  fi
   [[ "$c" =~ ^(ssh|autossh)[[:space:]].*-[A-Za-z]*L[[:space:]]*[0-9] ]] && return 0
   [[ "$c" =~ ^gcloud[[:space:]].*compute[[:space:]]+ssh[[:space:]].*-L[[:space:]]*[0-9] ]] && return 0
-  [[ "$c" =~ ^(kubectl|oc)[[:space:]].*port-forward([[:space:]]|$) ]] && return 0
+  [[ "$c" =~ ^(kubectl|oc)[[:space:]].*port-forward([[:space:]]|$) && "$lower" != *kubeconfig* ]] && return 0
   [[ "$c" =~ ^ngrok[[:space:]]+(http|tcp|tls)([[:space:]]|$) ]] && return 0
   [[ "$c" =~ ^cloudflared[[:space:]].*tunnel([[:space:]]|$) ]] && return 0
   return 1
@@ -114,22 +124,30 @@ was_session() {
   return 1
 }
 
-# For commands an agent runs in the background: a project script or task-runner target whose
-# name says it serves something (`scripts/gcp.sh bot-dashboard`, `make dev`, `./run-server.sh`).
+# For commands an agent runs in the background: a task-runner target whose name says it
+# serves something (`make dev`, `just serve`), the same kind of thing as `npm run dev`.
+# Only the runner and one target: no options that point it at another file or folder.
+# A script of any name (`./x.sh web &`) doesn't count: its name says nothing about what it
+# does, and a session runs outside the agent's sandbox. Once someone has started it in a
+# session themselves (`localhost start -- './x.sh web'`), `was_session` knows it.
 sounds_like_server() {
   local c="$1"
-  [[ "$c" =~ ^(\./|[A-Za-z0-9_.-]+/)[^[:space:]]+ || "$c" =~ ^(bash|sh|zsh)[[:space:]]+[^[:space:]]+\.(sh|bash|zsh)([[:space:]]|$) \
-     || "$c" =~ ^(make|just|task|mise[[:space:]]+run)[[:space:]] ]] || return 1
+  [[ "$c" =~ ^(make|just|task|mise[[:space:]]+run)[[:space:]]+[A-Za-z0-9_][A-Za-z0-9_:.-]*$ ]] || return 1
   local words
-  words=" $(printf '%s' "$c" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' ' ') "
+  words=" $(printf '%s' "${c##* }" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' ' ') "
   [[ "$words" =~ [[:space:]](dev|serve|server|devserver|dashboard|tunnel|preview|watch|proxy|web|frontend)[[:space:]] ]]
 }
+
+# The folder itself, with symlinks followed, or nothing.
+real_folder() { (cd "$1" 2>/dev/null && pwd -P); }
 
 # `cd dir && npm run dev > dev.log 2>&1 &` -> `cd dir && localhost start --log dev.log -- 'npm run dev'`.
 # Anything more involved than one server command is left alone. `--cwd` is the folder the
 # command runs in; `--background` says the agent was going to run it as a background job.
+# A `cd` in front only counts into the project itself: with `cd /tmp && uvicorn app:app` the
+# "dev server" is whatever sits in that other folder.
 rewrite() {
-  local c prefix="" log="" cwd="" background=0 raw
+  local c prefix="" log="" errors="" cwd="" background=0 raw
   raw=$(trim "$1")
   shift
   while [ $# -gt 0 ]; do
@@ -149,19 +167,54 @@ rewrite() {
     target=$(trim "${BASH_REMATCH[1]#cd}")
     target="${target#[\'\"]}"; target="${target%[\'\"]}"
     case "$target" in "~"*) target="$HOME${target#\~}" ;; /*) ;; *) target="${cwd:-.}/$target" ;; esac
-    cwd=$(cd "$target" 2>/dev/null && pwd) || cwd=""
+    local project
+    project=$(real_folder "${cwd:-.}") || return 1
+    cwd=$(real_folder "$target") || return 1
+    [[ "$cwd" == "$project" || "$cwd" == "${project%/}"/* ]] || return 1
   fi
   # A trailing `&` means the agent meant it to keep running.
   [[ "$raw" == *"&" && "$raw" != *"&&" ]] && background=1
   [[ "$c" =~ ^nohup[[:space:]]+(.*)$ ]] && c="${BASH_REMATCH[1]}"
   c=$(trim "$c")
   [[ "$c" == *"&" && "$c" != *"&&" ]] && c=$(trim "${c%&}")
-  [[ "$c" =~ ^(.*[^[:space:]])[[:space:]]+2\>\&1$ ]] && c="${BASH_REMATCH[1]}"
-  if [[ "$c" =~ ^(.*[^[:space:]\>])[[:space:]]*\>\>?[[:space:]]*([^[:space:]\>\&\;\|]+)$ ]]; then
+  # Redirections at the end, last first: where its output went becomes the session's log.
+  # `2>err.log` is a redirection of stream 2, not an argument "2"; /dev/null is no log at
+  # all; `2>&1` only joins the two streams, which a session's log does anyway.
+  local joined='^(.*[^[:space:]])[[:space:]]+[0-9]?>&[0-9]$'
+  local spaced='^(.*[^[:space:]])[[:space:]]+([0-9&]?)>>?[[:space:]]*([^[:space:]<>&;|]+)$'
+  local attached='^(.*[^[:space:]<>&])>>?[[:space:]]*([^[:space:]<>&;|]+)$'
+  local stream target
+  while :; do
+    c=$(trim "$c")
+    if [[ "$c" =~ $joined ]]; then
+      c="${BASH_REMATCH[1]}"
+      continue
+    fi
+    if [[ "$c" =~ $spaced ]]; then
+      stream="${BASH_REMATCH[2]}"
+      target="${BASH_REMATCH[3]}"
+    elif [[ "$c" =~ $attached ]]; then
+      stream=""
+      target="${BASH_REMATCH[2]}"
+    else
+      break
+    fi
     c="${BASH_REMATCH[1]}"
-    log="${BASH_REMATCH[2]}"
-  fi
-  c=$(trim "$c")
+    case "$target" in
+      /dev/null) continue ;;
+      "~/"*) target="$HOME/${target#\~/}" ;;
+    esac
+    # A name the shell would still have to work out (a variable, quotes, a pattern) isn't
+    # one to guess at.
+    case "$target" in *[\$\'\"\`\*\?\~\(\)\{\}\[\]\\]*) return 1 ;; esac
+    case "$stream" in
+      ""|1|"&") log="$target" ;;
+      2) errors="$target" ;;
+      *) return 1 ;;
+    esac
+  done
+  # Only its errors went to a file: that file is the nearest thing to a log it had.
+  log="${log:-$errors}"
   [[ "$c" =~ [\;\|\&\`\<\>] || "$c" == *'$('* ]] && return 1
   is_dev_server "$c" || is_tunnel "$c" || was_session "$c" "$cwd" \
     || { [ $background = 1 ] && sounds_like_server "$c"; } || return 1
@@ -170,12 +223,26 @@ rewrite() {
 
 status_field() { jq -r "$2 // empty" "$dir/$1.status.json" 2>/dev/null; }
 
+# The port a session serves on: the status file's own "port", or for one written by an older
+# version of the app, the one in its URL, which may go on with a path (http://localhost:5173/app/).
+session_port() {
+  local port url
+  port=$(status_field "$1" '(.port | numbers)')
+  if [ -z "$port" ]; then
+    url=$(status_field "$1" '(.url | strings)')
+    url="${url#*://}"
+    url="${url%%[/?#]*}"
+    case "$url" in *:*) port="${url##*:}" ;; esac
+  fi
+  case "$port" in ""|*[!0-9]*) return 1 ;; esac
+  printf '%s' "$port"
+}
+
 # True if something is listening on the session's address.
 listening() {
-  local port url
-  url=$(status_field "$1" .url)
-  port="${url##*:}"
-  [ -n "$port" ] && lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1
+  local port
+  port=$(session_port "$1") || return 1
+  lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1
 }
 
 print_session() {

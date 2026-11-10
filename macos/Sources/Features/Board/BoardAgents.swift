@@ -67,18 +67,14 @@ struct BoardAgent: Identifiable, Hashable {
         // A tile on Venice stays on it: never back to another provider without being asked.
         let venice = agent.kind == .codex && BoardAccounts.shared.account(tile.chosenAccounts[.codex])?.isVenice == true
         if venice {
-            let resume = tile.session.flatMap { UUID(uuidString: $0) != nil ? "resume \($0)" : nil }
-            return " " + VeniceCodex.command(resume ?? "") + "\n"
+            return tile.session.flatMap { AgentResume.line(.codex, session: $0, on: .venice(model: nil)) }
+                ?? " " + VeniceCodex.command() + "\n"
         }
         if let session = tile.session, UUID(uuidString: session) != nil {
-            switch agent.kind {
-            case .claude: return " claude --resume \(session)\n"
-            case .codex:
-                // A session on a model on this Mac stays there too, by what Codex recorded for it.
-                if let local = LocalCodex.session(session) { return LocalCodex.resumeLine(session, provider: local.provider, model: local.model) }
-                return " codex resume \(session)\n"
-            default: break
-            }
+            // A session on a model on this Mac stays there too, by what Codex recorded for it.
+            let local = agent.kind == .codex ? LocalCodex.session(session) : nil
+            let backend = local.map { AgentResume.Backend.local(provider: $0.provider, model: $0.model) } ?? .plain
+            if let line = AgentResume.line(agent.kind, session: session, on: backend) { return line }
         }
         // The leading space keeps the line out of the shell history, like the resume lines.
         return " " + agent.binary + "\n"

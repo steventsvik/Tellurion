@@ -100,11 +100,19 @@ private struct ToolsPanel: View {
         } else {
             add(.missionControl, PixelIcon.grid.symbol, "Mission Control", "Every agent as a live card", MissionControl.toggle)
         }
+        if board == nil {
+            add(.orchestrator, "point.3.connected.trianglepath.dotted", "Orchestrator", "One command for this project's agents") {
+                ClassicOrchestrators.show(from: owner)
+            }
+        }
         if !hermes {
             add(.races, "flag.checkered.2.crossed", "Agent races", "One task, several agents, keep the best") { AgentRaces.showSetup(from: owner) }
         }
         add(.review, PixelIcon.inbox.symbol, "Review changes", "Each agent's finished work", ReviewInbox.toggle)
+        add(.checks, "checkmark.seal", "Checks", "Done means the project's check passed") { ProjectChecksWindow.show(folder: pwd) }
         add(.activity, PixelIcon.chart.symbol, "Agent activity", "Time, prompts, files and tokens", ActivityDashboard.toggle)
+        add(.sessionSearch, "magnifyingglass", "Search sessions", "Find a prompt, message, command or file", SessionSearch.toggle)
+        add(.budgets, "dollarsign.circle", "Budgets", "What a session may use before it stops", BudgetsWindow.show)
         section("Agents")
 
         add(.localhost, PixelIcon.globe.symbol, "Localhost", "Dev servers your agents started", LocalhostManager.toggle)

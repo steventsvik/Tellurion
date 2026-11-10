@@ -115,7 +115,7 @@ enum LocalCodex {
         cli + " local codex" + (arguments.isEmpty ? "" : " " + arguments)
     }
 
-    /// Resumes a session (its id already quoted) on the model and provider it ran on. Without a
+    /// Resumes a session (its id already checked, see `AgentResume`) on the model and provider it ran on. Without a
     /// known model, `tellurion local codex` picks one that's here; it never goes to another provider.
     static func resumeLine(_ id: String, provider: String?, model: String?) -> String {
         var chosen = ""

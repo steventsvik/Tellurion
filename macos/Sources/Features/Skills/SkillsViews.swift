@@ -178,7 +178,8 @@ final class SkillsModel: ObservableObject {
     var canRemove: Bool {
         guard let skill = selected else { return false }
         switch skill.origin {
-        case .registry, .git, .local: return true
+        case .registry: return SkillInventory.removeCommand(skill) != nil
+        case .git, .local: return true
         case .plugin, .bundled, .hermesHub: return false
         }
     }
@@ -196,7 +197,7 @@ final class SkillsModel: ObservableObject {
         alert.addButton(withTitle: "Remove").hasDestructiveAction = true
         guard alert.runModal() == .alertSecondButtonReturn else { return }
         if case .registry = skill.origin {
-            SetupChecks.openTab(running: SkillInventory.removeCommand(skill))
+            if let command = SkillInventory.removeCommand(skill) { SetupChecks.openTab(running: command) }
             return
         }
         NSWorkspace.shared.recycle([URL(fileURLWithPath: skill.id)]) { _, _ in

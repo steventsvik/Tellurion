@@ -166,15 +166,19 @@ enum HookInstaller {
         try data.write(to: url, options: .atomic)
     }
 
+    /// How many backups of one file are kept.
+    static let backupsKept = 5
+
     /// Copies the file, when there is one, to `<name>.ghostty-extreme-backup-<timestamp>` beside
     /// it before it's rewritten. Every write gets its own copy: a backup from the same second
-    /// is kept, and the new one gets a `-2`, `-3`… suffix.
+    /// is kept, and the new one gets a `-2`, `-3`… suffix. Only the newest few are kept.
     @discardableResult
     static func backUp(_ url: URL, stamp: String = AgentTools.timestamp()) throws -> URL? {
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path) else { return nil }
         let folder = url.deletingLastPathComponent()
-        let base = "\(url.lastPathComponent).ghostty-extreme-backup-\(stamp)"
+        let prefix = "\(url.lastPathComponent).ghostty-extreme-backup-"
+        let base = prefix + stamp
         var backup = folder.appendingPathComponent(base)
         var n = 2
         while fm.fileExists(atPath: backup.path) {
@@ -182,6 +186,7 @@ enum HookInstaller {
             n += 1
         }
         try fm.copyItem(at: url, to: backup)
+        StoredFile.prune(in: folder, prefix: prefix, keep: backupsKept)
         return backup
     }
 

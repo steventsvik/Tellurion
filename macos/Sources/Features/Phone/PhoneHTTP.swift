@@ -264,38 +264,68 @@ final class PhoneSocket {
         })
     }
 
+    /// The start of a frame from a client: where its mask is and how long its payload is.
+    struct FrameHeader: Equatable {
+        let fin: Bool
+        let opcode: UInt8
+        /// Where the four mask bytes start; the payload follows them.
+        let offset: Int
+        let length: Int
+        /// The header, the mask and the payload together.
+        var size: Int { offset + 4 + length }
+    }
+
+    enum FrameStart: Equatable {
+        /// More bytes are needed to tell.
+        case incomplete
+        /// Not a frame this accepts; the connection closes.
+        case invalid
+        case header(FrameHeader)
+    }
+
+    /// Reads a frame's header from the first bytes of what has arrived. This runs before the
+    /// device says who it is, so the length is whatever was sent: it's read unsigned and
+    /// held to `maxMessage`, or a huge one would turn negative and crash the app when the
+    /// payload is taken.
+    static func frameStart(_ bytes: [UInt8]) -> FrameStart {
+        guard bytes.count >= 2 else { return .incomplete }
+        var length = UInt64(bytes[1] & 0x7F)
+        var offset = 2
+        if length == 126 {
+            guard bytes.count >= 4 else { return .incomplete }
+            length = UInt64(bytes[2]) << 8 | UInt64(bytes[3])
+            offset = 4
+        } else if length == 127 {
+            guard bytes.count >= 10 else { return .incomplete }
+            length = bytes[2..<10].reduce(UInt64(0)) { $0 << 8 | UInt64($1) }
+            offset = 10
+        }
+        // Clients must mask their frames.
+        guard bytes[1] & 0x80 != 0, length <= UInt64(maxMessage) else { return .invalid }
+        return .header(FrameHeader(fin: bytes[0] & 0x80 != 0, opcode: bytes[0] & 0x0F, offset: offset, length: Int(length)))
+    }
+
     /// Reads whole frames out of `buffer` (on `queue`).
     private func parse() {
         while buffer.count >= 2 {
-            let bytes = [UInt8](buffer.prefix(14))
-            let fin = bytes[0] & 0x80 != 0
-            let opcode = bytes[0] & 0x0F
-            let masked = bytes[1] & 0x80 != 0
-            var length = Int(bytes[1] & 0x7F)
-            var offset = 2
-            if length == 126 {
-                guard bytes.count >= 4 else { return }
-                length = Int(bytes[2]) << 8 | Int(bytes[3])
-                offset = 4
-            } else if length == 127 {
-                guard bytes.count >= 10 else { return }
-                length = bytes[2..<10].reduce(0) { $0 << 8 | Int($1) }
-                offset = 10
+            let header: FrameHeader
+            switch Self.frameStart([UInt8](buffer.prefix(14))) {
+            case .incomplete: return
+            case .invalid: finish(); return
+            case .header(let found): header = found
             }
-            // Clients must mask their frames.
-            guard masked, length <= Self.maxMessage else { finish(); return }
-            guard buffer.count >= offset + 4 + length else { return }
-            let start = buffer.startIndex
-            let mask = [UInt8](buffer[(start + offset)..<(start + offset + 4)])
-            var payload = [UInt8](buffer[(start + offset + 4)..<(start + offset + 4 + length)])
+            guard buffer.count >= header.size else { return }
+            let start = buffer.startIndex + header.offset
+            let mask = [UInt8](buffer[start..<(start + 4)])
+            var payload = [UInt8](buffer[(start + 4)..<(start + 4 + header.length)])
             for i in payload.indices { payload[i] ^= mask[i % 4] }
-            buffer.removeFirst(offset + 4 + length)
+            buffer.removeFirst(header.size)
 
-            switch opcode {
+            switch header.opcode {
             case 0x0, 0x1:
                 fragments.append(contentsOf: payload)
                 guard fragments.count <= Self.maxMessage else { finish(); return }
-                if fin {
+                if header.fin {
                     let text = String(decoding: fragments, as: UTF8.self)
                     fragments = Data()
                     DispatchQueue.main.async { self.onMessage(text) }

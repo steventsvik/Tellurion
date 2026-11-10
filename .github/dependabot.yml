@@ -1,0 +1,8 @@
+# Keeps the actions the workflows use up to date. They're pinned to commits, so nothing
+# changes until one of these pull requests is merged.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

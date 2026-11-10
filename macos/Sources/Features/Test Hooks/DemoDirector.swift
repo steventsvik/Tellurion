@@ -24,6 +24,15 @@ import AppKit
 ///     visualfix <n> [url]     open Visual Fix from tab n, optionally on a URL
 ///     answer <n> allow|deny   answer tab n's permission prompt, as its sidebar buttons do
 ///     restorelast <n>         ask to undo tab n's last agent turn
+///     checks <n>              open the Checks window on tab n's project
+///     checkset <n> <command>  save a check command for tab n's project
+///     budgets | scoreboard | worktrees | search
+///     budget <n> <dollars>    give tab n's agent a budget
+///     orch <n>                open the Orchestrator window for tab n's project (making its orchestrator)
+///     orchwire <n>            wire tab n's focused pane to its project's orchestrator
+///     orchcanned <n> <reply JSON>   that orchestrator's next turn answers this instead of running its engine
+///     orchcmd <n> <text>      send that orchestrator a command
+///     snap <folder>           draw every visible window into <folder>/<title>.png
 @MainActor
 enum DemoDirector {
     private static var started = false
@@ -56,6 +65,12 @@ enum DemoDirector {
         let windows = window.tabGroup?.windows ?? [window]
         guard index >= 1, index <= windows.count else { return nil }
         return windows[index - 1].windowController as? TerminalController
+    }
+
+    /// The orchestrator of a tab's project, made if it has none.
+    private static func orchestrator(of tab: TerminalController) -> ClassicOrchestrator? {
+        guard TellurionSettings.isOn(.orchestrator) else { return nil }
+        return ClassicOrchestrators.shared.open(root: ClassicOrchestrators.shared.root(for: tab), from: tab)
     }
 
     private static func run(_ command: String, in controller: TerminalController, marks: String?) {
@@ -134,6 +149,49 @@ enum DemoDirector {
             AgentRaces.shared.start(task: rest, folder: folder, counts: [.claude: 1, .codex: 1],
                                     includeChanges: true, from: target) { result in
                 if case .success(let race) = result { AgentRaces.show(race, from: target) }
+            }
+        case "checks":
+            ProjectChecksWindow.show(folder: target?.focusedSurface?.pwd)
+        case "checkset":
+            guard let folder = target?.focusedSurface?.pwd, let root = AgentTools.repoRoot(of: folder) else { return }
+            _ = ProjectChecks.shared.save(ProjectCheck(command: rest), for: root)
+        case "budgets":
+            BudgetsWindow.show()
+        case "budget":
+            guard let surface = target?.focusedSurface, let dollars = Double(rest) else { return }
+            AgentBudgets.shared.setBudget(AgentBudget(dollars: dollars), for: surface)
+        case "scoreboard":
+            AgentRaceScores.showScoreboard()
+        case "worktrees":
+            AgentWorktreesWindow.show()
+        case "search":
+            SessionSearch.toggle()
+        case "orch":
+            let shown = target.flatMap { ClassicOrchestrators.show(from: $0) }
+            note("orch \(shown.map { "\($0.projectName) wired=\($0.team.members.count)" } ?? "no project")")
+        case "orchwire":
+            guard let target, let surface = target.focusedSurface, let orchestrator = orchestrator(of: target) else { return }
+            orchestrator.wire([surface.id])
+            note("orchwire \(orchestrator.paneLabel(surface.id)) wired=\(orchestrator.team.members.count)")
+        case "orchcanned":
+            guard let target, let orchestrator = orchestrator(of: target) else { return }
+            guard let reply = try? JSONDecoder().decode(OrchestratorReply.self, from: Data(rest.utf8)) else {
+                note("orch bad reply")
+                return
+            }
+            orchestrator.brain.canned.append(reply)
+        case "orchcmd":
+            guard let target, let orchestrator = orchestrator(of: target) else { return }
+            orchestrator.command(rest)
+            note("orchcmd \(orchestrator.status.line)")
+        case "snap":
+            for (index, window) in NSApp.windows.enumerated() where window.isVisible {
+                guard let view = window.contentView?.superview ?? window.contentView,
+                      let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
+                view.cacheDisplay(in: view.bounds, to: rep)
+                let name = window.title.isEmpty ? "window" : window.title.filter { $0.isLetter || $0.isNumber }
+                try? rep.representation(using: .png, properties: [:])?
+                    .write(to: URL(fileURLWithPath: arg).appendingPathComponent("\(index)-\(name).png"))
             }
         case "mark":
             guard let marks else { return }

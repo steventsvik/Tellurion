@@ -32,10 +32,10 @@ enum BoardPresets {
         builtIns + saved()
     }
 
+    /// Your presets. A file that can't be read is moved aside (and logged) rather than
+    /// replaced by the next save; a preset that can't be decoded is skipped, the rest kept.
     static func saved() -> [BoardPreset] {
-        guard let data = try? Data(contentsOf: file),
-              let presets = try? JSONDecoder().decode([BoardPreset].self, from: data) else { return [] }
-        return presets
+        StoredFile.loadList(BoardPreset.self, from: file, what: "the board presets", log: BoardStore.log).value ?? []
     }
 
     static func save(_ preset: BoardPreset) {
@@ -60,7 +60,8 @@ enum BoardPresets {
 extension BoardController {
     /// Starts a group: one tile per slot laid out as a grid, all in a new named group.
     @discardableResult
-    func spawnGroup(name: String, role: BoardRole, slots: [String], folder: String?, task: String?, skip: Bool) -> UUID? {
+    func spawnGroup(name: String, role: BoardRole, slots: [String], folder: String?, task: String?, skip: Bool,
+                    folders: [String]? = nil) -> UUID? {
         let task = task?.trimmingCharacters(in: .whitespacesAndNewlines)
         let lines: [(agent: BoardAgent?, command: String)] = slots.prefix(12).map { slot in
             guard let agent = BoardAgent.catalog.first(where: { $0.binary == slot }) else { return (nil, "") }
@@ -72,7 +73,7 @@ extension BoardController {
         }
         guard !lines.isEmpty else { return nil }
         undoManager?.beginUndoGrouping()
-        let views = launch(lines, folder: folder?.isEmpty == false ? folder : nil, skip: skip)
+        let views = launch(lines, folder: folder?.isEmpty == false ? folder : nil, skip: skip, folders: folders)
         guard !views.isEmpty else {
             undoManager?.endUndoGrouping()
             return nil

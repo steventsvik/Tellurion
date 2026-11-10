@@ -316,6 +316,17 @@ class TellurionVeniceTests(unittest.TestCase):
         for bad in ("file:///etc/passwd", "search.example", ""):
             self.assertNotEqual(self.search_cli("use", bad).returncode, 0, bad)
 
+    def test_search_use_takes_plain_http_only_on_this_mac(self):
+        for local in ("http://127.0.0.1:8899", "http://localhost:8080/", "http://[::1]:8080", "http://127.0.0.1/searx"):
+            self.assertEqual(self.search_cli("use", local).returncode, 0, local)
+            self.assertEqual((self.root / "venice" / "searxng-url").read_text().strip(), local)
+        for remote in ("http://search.example", "http://192.168.1.5:8080", "http://127.0.0.1.example.com", "http://localhost.example.com",
+                       "http://127.0.0.1@example.com/", "http://127.0.0.1:8899@example.com", "http://example.com/127.0.0.1"):
+            result = self.search_cli("use", remote)
+            self.assertNotEqual(result.returncode, 0, remote)
+            self.assertIn("https", result.stderr, remote)
+            self.assertEqual((self.root / "venice" / "searxng-url").read_text().strip(), "http://127.0.0.1/searx", remote)
+
     def test_search_stop_only_says_it_stopped_something(self):
         self.assertIn("isn't set up", self.search_cli("stop").stdout)
         self.search_env = {"FAKE_EXISTS": "1"}
@@ -469,6 +480,75 @@ class VeniceChatTests(unittest.TestCase):
                 chat.configure("venice", None)
         self.assertEqual(chat.BASE, "http://127.0.0.1:4242/api")
         self.assertEqual(chat.HEADERS["Authorization"], "Bearer tok")
+
+    def test_the_apple_models_file_follows_the_test_home(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / ".ghostty-extreme"
+            root.mkdir()
+            (root / "apple-model.json").write_text('{"port":4343,"token":"apple-tok"}')
+            with unittest.mock.patch.dict(os.environ, {"TELLURION_TEST_HOME": folder}):
+                chat.configure("apple", None)
+        self.assertEqual(chat.BASE, "http://127.0.0.1:4343")
+        self.assertEqual(chat.HEADERS["Authorization"], "Bearer apple-tok")
+
+    def test_a_proxy_in_the_environment_never_gets_the_token(self):
+        # With http_proxy set, a plain urlopen sends the request, token included, to the proxy.
+        class Proxy(http.server.BaseHTTPRequestHandler):
+            seen = []
+
+            def log_message(self, *args):
+                pass
+
+            def do_GET(self):
+                Proxy.seen.append((self.path, self.headers.get("Authorization")))
+                self.send_response(502)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            do_POST = do_GET
+
+        servers = []
+        for handler in (Models, Proxy):
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            self.addCleanup(server.server_close)
+            self.addCleanup(server.shutdown)
+            servers.append(server)
+        Models.seen = []
+        proxy = "http://127.0.0.1:%d" % servers[1].server_address[1]
+        chat.BASE = "http://127.0.0.1:%d/api" % servers[0].server_address[1]
+        chat.HEADERS["Authorization"] = "Bearer secret-token"
+        environment = {"http_proxy": proxy, "HTTP_PROXY": proxy, "all_proxy": proxy, "no_proxy": "", "NO_PROXY": ""}
+        with unittest.mock.patch.dict(os.environ, environment):
+            error, spec = chat.venice_check("other")
+            self.assertIsNone(error)
+            self.assertEqual(spec.get("name"), "OTHER")
+            with self.assertRaises(Exception):
+                chat.post("/v1/chat/completions", {"model": "other"}, timeout=5).read()
+        self.assertEqual(Proxy.seen, [])
+        self.assertEqual(Models.seen[0], ("/api/v1/models?type=text", "Bearer secret-token"))
+
+    def test_only_this_macs_addresses_skip_the_proxy(self):
+        for url in ("http://127.0.0.1:1234/v1", "http://localhost:8080", "http://[::1]:1/", "http://127.9.9.9/"):
+            self.assertTrue(chat.on_this_mac(url), url)
+        for url in ("http://127.0.0.1.example.com/", "http://localhost.example.com/", "http://example.com/127.0.0.1",
+                    "http://127.0.0.1@example.com/", "https://api.venice.ai/", "http://192.168.1.4:1234"):
+            self.assertFalse(chat.on_this_mac(url), url)
+
+    def test_the_chats_feed_is_for_this_user_only(self):
+        with tempfile.TemporaryDirectory() as folder:
+            feed = Path(folder) / "feeds" / "local-1.jsonl"
+            with unittest.mock.patch.object(chat, "FEED", str(feed)), \
+                    unittest.mock.patch.dict(os.environ, {"GHOSTTY_EXTREME_AGENT_EVENTS": "1"}):
+                old = os.umask(0o022)
+                try:
+                    chat.record("prompt", "a secret plan")
+                    chat.record("answer", "noted")
+                finally:
+                    os.umask(old)
+            self.assertEqual(stat.S_IMODE(feed.stat().st_mode), 0o600)
+            self.assertEqual(stat.S_IMODE(feed.parent.stat().st_mode), 0o700)
+            self.assertEqual(len(feed.read_text().splitlines()), 2)
 
     def test_answers_cant_steer_the_terminal(self):
         lines = [b'data: {"choices":[{"delta":{"content":"hi \\u001b]52;c;QQ==\\u0007there"}}]}\n',

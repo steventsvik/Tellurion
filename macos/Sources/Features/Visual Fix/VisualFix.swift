@@ -144,6 +144,10 @@ final class VisualFixSession: NSObject, ObservableObject {
     private final class MessageProxy: NSObject, WKScriptMessageHandler {
         weak var session: VisualFixSession?
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+            // Only the page itself, served from your own app: a frame inside it (an ad, an
+            // embedded site) gets no say in what's selected or sent to an agent.
+            let origin = message.frameInfo.securityOrigin
+            guard message.frameInfo.isMainFrame, VisualFixSession.isLocal(scheme: origin.`protocol`, host: origin.host) else { return }
             session?.received(message.body)
         }
     }
@@ -477,12 +481,16 @@ final class VisualFixSession: NSObject, ObservableObject {
 extension VisualFixSession {
     /// A dev server on this Mac or the local network: localhost, loopback, private and
     /// link-local addresses, `.local` and `.localhost` names.
-    static func isLocal(_ url: URL) -> Bool {
-        guard url.scheme == "http" || url.scheme == "https", let host = url.host?.lowercased() else { return false }
+    static func isLocal(_ url: URL) -> Bool { isLocal(scheme: url.scheme, host: url.host) }
+
+    /// The same for a page's origin.
+    static func isLocal(scheme: String?, host: String?) -> Bool {
+        guard scheme == "http" || scheme == "https", let host = host?.lowercased() else { return false }
         if ["localhost", "127.0.0.1", "::1", "0.0.0.0", "[::1]"].contains(host) { return true }
         if host.hasSuffix(".localhost") || host.hasSuffix(".local") { return true }
         let parts = host.split(separator: ".").compactMap { Int($0) }
-        guard parts.count == 4 else { return host.hasPrefix("fe80:") || host.hasPrefix("fd") }
+        // Link-local and private IPv6 addresses, not names that happen to start like one.
+        guard parts.count == 4 else { return host.contains(":") && (host.hasPrefix("fe80:") || host.hasPrefix("fd")) }
         switch (parts[0], parts[1]) {
         case (127, _), (10, _), (192, 168), (169, 254): return true
         case (172, 16...31): return true

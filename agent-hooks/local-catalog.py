@@ -14,7 +14,8 @@ can; FOLDER/default-model records it.
 In Ollama the model is loaded first, so the context it's really served with is known: Ollama gives
 a model a smaller context than it allows (its settings, or a default from the Mac's memory), and
 Codex has to compact before that is full, or the start of the conversation is silently cut off.
-One line of JSON on stdout says what was found: {"model": …, "context": …, "tools": …}.
+One line of JSON on stdout says what was found: {"model": …, "context": …, "tools": …, "base": …},
+"base" being the server's address, so Codex can be sent to the server that was checked.
 
 Exit 0: written. 1: the catalog couldn't be made (Codex still runs, with the fallback; the JSON
 line is still printed). 2: the model asked for isn't here or can't call tools, said on stderr.
@@ -166,7 +167,7 @@ def main():
     venice = shared()
     clean = venice.CONTROL.sub
     app = APPS[args.provider]
-    base = args.base or (ollama_base() if args.provider == "ollama" else LMSTUDIO)
+    base = args.base.rstrip("/") or (ollama_base() if args.provider == "ollama" else LMSTUDIO)
     if args.model and not NAME.match(args.model):
         print(clean("", f"That model name can't be right: {args.model}")[:200], file=sys.stderr)
         return 2
@@ -186,7 +187,7 @@ def main():
             served = ollama_load(base, chosen["name"]) or served
         except (urllib.error.URLError, OSError, ValueError):
             pass  # Codex loads it itself; the context stays the model's own
-    print(json.dumps({"model": chosen["name"], "context": served, "tools": chosen["tools"]}), flush=True)
+    print(json.dumps({"model": chosen["name"], "context": served, "tools": chosen["tools"], "base": base}), flush=True)
     try:
         os.makedirs(args.out, mode=0o700, exist_ok=True)
         bundled = json.loads(venice.run_codex(args.codex, "debug", "models", "--bundled"))

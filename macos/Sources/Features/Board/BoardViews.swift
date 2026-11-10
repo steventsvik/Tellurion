@@ -114,6 +114,7 @@ struct BoardWindowView: View {
             TellurionLaunch.start()
             ReviewInbox.start()
             TurnCheckpoints.start()
+            ProjectChecks.start()
         }
         .sheet(isPresented: $model.showComposer) {
             BoardComposer(controller: controller, isPresented: $model.showComposer)
@@ -645,6 +646,7 @@ private struct BoardSidebarRow: View {
                 }
                 // A review loop it's in, and messages waiting to be typed into it.
                 AgentMessagesLine(surface: surface, compact: true)
+                AgentConflictLine(surface: surface, compact: true)
                 branch
             }
             Spacer(minLength: 0)

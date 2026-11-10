@@ -147,8 +147,21 @@ final class GitPanelModel: ObservableObject {
 
     func openGitButler() {
         guard let but = GitButler.binary else { return }
-        let root = self.root
-        queue.async { _ = ToolPath.run(but, ["gui"], in: root) }
+        // Its window stays open for as long as you use it: started on its own and not waited
+        // for, rather than as a command with a time limit.
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: but)
+        process.arguments = ["gui"]
+        process.currentDirectoryURL = URL(fileURLWithPath: root)
+        process.environment = EventToken.scrubbed(ProcessInfo.processInfo.environment)
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            self.error = "Couldn't open GitButler: \(error.localizedDescription)"
+        }
     }
 
     /// Runs a Graphite command in a new tab: they can ask questions, and pushing needs your login.

@@ -26,6 +26,14 @@ enum BoardAgentNames {
     }
 }
 
+/// The tiles this run of the app started with permission prompts skipped, because you asked
+/// for that in the Group composer or duplicated such a tile. Kept in memory only: a board file
+/// is plain JSON that any program running as you can write, so what it says about a tile's
+/// command never turns prompts off, and never puts the badge on a tile.
+enum BoardSkippedPrompts {
+    static var tiles: Set<UUID> = []
+}
+
 extension BoardAgent {
     /// The flag that starts it without permission prompts, for agents that have one.
     var skipFlag: String? {
@@ -49,8 +57,25 @@ extension BoardController {
 
     /// Whether a tile's agent was started with its permission prompts skipped.
     func skipsPermissions(_ id: UUID) -> Bool {
-        guard let line = commands[id] else { return false }
-        return BoardAgent.catalog.contains { agent in agent.skipFlag.map { line.contains($0) } ?? false }
+        Self.skipsPermissions(command: commands[id], startedSkipping: BoardSkippedPrompts.tiles.contains(id))
+    }
+
+    /// A tile skips prompts only if the app started it that way in this run and its command
+    /// still says so (it's dropped when the agent quits). The command alone isn't enough: it
+    /// may have come from the board's file.
+    nonisolated static func skipsPermissions(command: String?, startedSkipping: Bool) -> Bool {
+        guard startedSkipping, let command else { return false }
+        return BoardAgent.catalog.contains { agent in agent.skipFlag.map { command.contains($0) } ?? false }
+    }
+
+    /// What's typed into a duplicate of a tile: its agent started afresh, the way a new tile
+    /// of that kind is, or nothing for a plain terminal. Never the tile's stored command, which
+    /// may have come from the board's file.
+    nonisolated static func duplicateLine(agent: BoardAgent?, skipsPermissions: Bool) -> String? {
+        guard let agent else { return nil }
+        let line = agent.command(prompt: nil)
+        guard skipsPermissions, let flag = agent.skipFlag, line.hasPrefix(agent.binary) else { return line }
+        return agent.binary + " " + flag + line.dropFirst(agent.binary.count)
     }
 
     /// Starts a tile's agent again in place: its session resumed when it has one, else its
@@ -83,14 +108,15 @@ extension BoardController {
         Ghostty.moveFocus(to: view)
     }
 
-    /// A new tile beside this one, in its folder, running the same agent (with the same
-    /// flags), in the same group.
+    /// A new tile beside this one, in its folder and in the same group: the same agent started
+    /// afresh (without permission prompts if this one was started that way here), or a plain
+    /// shell for a plain terminal.
     func duplicateTile(_ view: Ghostty.SurfaceView) {
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = folder(of: view) ?? workspace.folder
         let agent = VerticalTabsAgents.shared.info(for: view).flatMap { BoardAgent.forKind($0.kind) }
-        // The command it was started with (flags included), else its agent plainly.
-        let command = commands[view.id] ?? agent.map { $0.binary + "\n" }
+        let skips = skipsPermissions(view.id)
+        let command = Self.duplicateLine(agent: agent, skipsPermissions: skips)
         let size = model.frames[view.id]?.size ?? Self.tileSize
         // One undo step for the copy and its place in the group.
         undoManager?.beginUndoGrouping()
@@ -100,6 +126,7 @@ extension BoardController {
         }
         guard let copy = addTile(config: config, command: command, near: view,
                                  frame: freeSpot(size: size, near: model.frames[view.id])) else { return }
+        if skips, agent?.skipFlag != nil { BoardSkippedPrompts.tiles.insert(copy.id) }
         if let group = namedGroup(containing: view.id) { addToGroup([copy.id], group: group.id) }
     }
 }

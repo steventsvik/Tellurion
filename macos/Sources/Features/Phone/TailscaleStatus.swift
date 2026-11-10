@@ -295,19 +295,9 @@ final class TailscaleMonitor: ObservableObject {
         var environment = ProcessInfo.processInfo.environment
         environment["TAILSCALE_BE_CLI"] = "1"
         process.environment = EventToken.scrubbed(environment)
-        let out = Pipe(), err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        process.standardInput = FileHandle.nullDevice
-        do { try process.run() } catch { return AgentTools.Result(status: -1, output: "", error: "\(error)") }
-        let deadline = DispatchWorkItem { if process.isRunning { process.terminate() } }
-        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
-        let outData = out.fileHandleForReading.readDataToEndOfFile()
-        let errData = err.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        deadline.cancel()
-        return AgentTools.Result(status: process.terminationStatus, output: String(decoding: outData, as: UTF8.self),
-                                 error: String(decoding: errData, as: UTF8.self))
+        let result = ProcessRunner.run(process, timeout: timeout)
+        if let failure = result.launchError { return AgentTools.Result(status: -1, output: "", error: failure) }
+        return AgentTools.Result(status: result.status, output: result.text, error: result.errorText)
     }
 
     /// Opens the admin page where MagicDNS and HTTPS certificates are switched on.

@@ -359,6 +359,7 @@ extension BoardController {
         roles.submenu = roleMenu
         menu.addItem(roles)
         menu.addItem(ClosureMenuItem("Ungroup", image: nil) { [weak self] in self?.ungroup(id) })
+        AgentWorktreesWindow.addMenuItem(to: menu)
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Close Group…", image: nil) { [weak self] in self?.closeGroup(id) })
         return menu

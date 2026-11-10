@@ -175,7 +175,6 @@ struct UpdateCard: View {
 struct UpdateProgressBar: View {
     let fraction: Double?
     var height: CGFloat = 6
-    @State private var sweep = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -186,12 +185,8 @@ struct UpdateProgressBar: View {
                         .frame(width: max(6, geometry.size.width * min(max(fraction, 0), 1)))
                         .animation(.easeOut(duration: 0.25), value: fraction)
                 } else {
-                    Capsule().fill(Tellurion.gold)
-                        .frame(width: geometry.size.width * 0.3)
-                        .offset(x: sweep ? geometry.size.width * 0.7 : 0)
-                        // Only shown for the few seconds before the restart.
-                        .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: sweep)
-                        .onAppear { sweep = true }
+                    // Only shown for the few seconds before the restart; a layer animation.
+                    ActivityBarLayer(color: Tellurion.gold)
                 }
             }
         }

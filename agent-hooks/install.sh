@@ -12,10 +12,19 @@ here="$(cd "$(dirname "$0")" && pwd)"
 hooks="$HOME/.ghostty-extreme/agent-hooks"
 bin="$HOME/.ghostty-extreme/bin"
 mkdir -p "$hooks" "$bin"
-cp "$here/agent-hook.sh" "$here/ghostty-extreme.zsh" "$here/codex-hook.py" "$here/memory_context.py" \
-   "$here/agent-event.py" "$here/opencode-plugin.js" "$here/venice-catalog.py" "$here/venice-search.py" "$hooks/"
-cp "$here/localhost" "$here/localhost-run" "$here/tellurion" "$here/ghostty-extreme" "$bin/"
-chmod +x "$hooks/agent-hook.sh" "$hooks/agent-event.py" "$bin/localhost" "$bin/localhost-run" "$bin/tellurion" "$bin/ghostty-extreme"
+# Everything in this folder is installed except its tests and the two installers, so a new
+# script can't be left out here: the commands go to bin, the rest to the hooks folder.
+for file in "$here"/*; do
+  [ -f "$file" ] || continue
+  name=$(basename "$file")
+  case "$name" in
+    test_*|install.sh|install-codex.py) continue ;;
+    localhost|localhost-run|tellurion|ghostty-extreme) to="$bin" ;;
+    *) to="$hooks" ;;
+  esac
+  cp "$file" "$to/$name"
+  if [ -x "$file" ] || [ "$name" = local-chat.py ]; then chmod +x "$to/$name"; fi
+done
 # Before the rebrand the hooks lived in ~/.ghostty-custom; agents may still point there
 # (Codex ties its hook approvals to the exact command), so keep that copy current too.
 legacy="$HOME/.ghostty-custom/agent-hooks"
