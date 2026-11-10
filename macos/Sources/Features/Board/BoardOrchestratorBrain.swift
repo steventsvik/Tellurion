@@ -27,26 +27,37 @@ final class OrchestratorBrain: ObservableObject {
         let activity: VerticalTabAgentActivity
         let detail: String?
         let answer: String?
+        /// One line about its project's check, if that failed for the turn it finished.
+        var failedCheck: String?
     }
+
+    /// Why it stopped following up: you or a limit stopped it, or the work is done.
+    enum Ending { case stopped, done }
 
     @Published private(set) var log: [Entry] = []
     @Published private(set) var busy = false
     /// Following up on its own after a command.
     @Published private(set) var running = false
     @Published private(set) var turn = 0
+    /// How its last command ended; nil while it runs, and before the first one.
+    @Published private(set) var ending: Ending?
     @Published private(set) var engines: [Engine]?
     /// The agent CLIs on this Mac, for starting new agents.
     @Published private(set) var installed: [BoardAgent] = []
     @Published var engine: Engine? {
         didSet {
             guard oldValue != engine else { return }
-            if let engine { UserDefaults.standard.set(engine.rawValue, forKey: BoardAssistant.engineKey) }
+            if remembersEngine, let engine { UserDefaults.standard.set(engine.rawValue, forKey: BoardAssistant.engineKey) }
             session = nil
         }
     }
 
-    weak var controller: BoardController?
+    weak var host: OrchestratorHost?
     let id: UUID
+    /// Whether choosing an engine also makes it the one new orchestrators start with.
+    var remembersEngine = true
+    /// The engine to start with, where the host keeps its own choice.
+    var preferredEngine: Engine?
     private var session: String?
     private var run: HeadlessAgent.Run?
     /// The command it's working on.
@@ -59,19 +70,19 @@ final class OrchestratorBrain: ObservableObject {
     private var flagged: Set<UUID> = []
     /// Counts turns started, so a lookup that finishes after a stop is dropped.
     private var pass = 0
-    /// Wired tiles found running an agent that hasn't reported a status (see BoardPause.agents).
+    /// Wired panes found running an agent that hasn't reported a status (see BoardPause.agents).
     private(set) var detected: Set<UUID> = []
     /// Pictures pasted with the command, for its first turn.
     private var pictures: [ImageAttachment] = []
     /// Tests: replies to use instead of running the engine, in order.
     var canned: [OrchestratorReply] = []
 
-    init(controller: BoardController, id: UUID) {
-        self.controller = controller
+    init(host: OrchestratorHost, id: UUID) {
+        self.host = host
         self.id = id
     }
 
-    var limit: Int { controller?.orchestrator(id)?.turns ?? BoardTeams.turns }
+    var limit: Int { host?.orchestrator(id)?.turns ?? BoardTeams.turns }
 
     func lookUp() {
         guard engines == nil else { return }
@@ -79,7 +90,7 @@ final class OrchestratorBrain: ObservableObject {
             guard let self else { return }
             self.installed = agents
             self.engines = found
-            let saved = UserDefaults.standard.string(forKey: BoardAssistant.engineKey).flatMap(Engine.init(rawValue:))
+            let saved = self.preferredEngine ?? UserDefaults.standard.string(forKey: BoardAssistant.engineKey).flatMap(Engine.init(rawValue:))
             self.engine = saved.flatMap { found.contains($0) ? $0 : nil } ?? found.first
         }
     }
@@ -90,31 +101,25 @@ final class OrchestratorBrain: ObservableObject {
     /// with it go to the brain in its prompt; an @mentioned agent is told where they're saved.
     func command(_ raw: String, images: [ImageAttachment] = []) {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let controller, !text.isEmpty else { return }
-        let (mentioned, rest) = controller.mentions(in: text)
+        guard let host, !text.isEmpty else { return }
+        let (mentioned, rest) = host.mentionedPanes(in: text, for: id)
         if !mentioned.isEmpty {
             guard let message = Self.mentionMessage(rest, files: ImageAttachment.save(images)) else {
                 add(.error, "Say what to tell them, or paste a picture with the mention.")
                 return
             }
-            for surface in mentioned { controller.deliverToAgent(message, to: surface, label: "From you") }
+            for pane in mentioned { host.deliver(message, toAgentIn: pane, label: "From you") }
             add(.user, text, images: images.count)
-            add(.action, "Sent to " + ListFormatter.localizedString(byJoining: mentioned.map { controller.tileLabel($0) }))
+            add(.action, "Sent to " + ListFormatter.localizedString(byJoining: mentioned.map { host.paneLabel($0) }))
             return
         }
         stop(quietly: true)
         pictures = images
         add(.user, text, images: images.count)
         goal = text
-        if controller.orchestrator(id)?.goal != text {
-            controller.model.teams = controller.model.teams.map { team in
-                var team = team
-                if team.id == id { team.goal = text }
-                return team
-            }
-            controller.scheduleSave()
-        }
+        if host.orchestrator(id)?.goal != text { host.setGoal(text, for: id) }
         turn = 0
+        ending = nil
         running = true
         flagged = []
         think(command: text, updates: [])
@@ -140,7 +145,10 @@ final class OrchestratorBrain: ObservableObject {
         waiting = []
         watchdog?.cancel()
         watchdog = nil
-        if running, !quietly { add(.event, "Stopped. Send a command to carry on.") }
+        if running, !quietly {
+            add(.event, "Stopped. Send a command to carry on.")
+            ending = .stopped
+        }
         running = false
     }
 
@@ -149,6 +157,7 @@ final class OrchestratorBrain: ObservableObject {
         session = nil
         log = []
         turn = 0
+        ending = nil
     }
 
     /// Wired agents finished, asked something or need permission.
@@ -167,17 +176,22 @@ final class OrchestratorBrain: ObservableObject {
         // Only finished turns and questions are worth a turn; a permission prompt waits for you.
         guard updates.contains(where: { $0.activity != .needsPermission }) else { return }
         guard turn < limit else {
-            running = false
+            halt()
             add(.event, "Stopped after \(limit) turns. Send a command to carry on.")
             return
         }
-        if let controller, let team = controller.orchestrator(id),
-           controller.wiredAgents(team).contains(where: { controller.model.paused.contains($0.surface.id) }) {
-            running = false
+        if let host, host.orchestrator(id) != nil, host.orchestratorAgents(id).contains(where: { host.isPaused($0.pane) }) {
+            halt()
             add(.event, "Paused agents: waiting. Send a command to carry on.")
             return
         }
         think(command: nil, updates: updates)
+    }
+
+    /// Stops following up, as something stopped it (not because the work is done).
+    private func halt() {
+        running = false
+        ending = .stopped
     }
 
     private static func describe(_ update: Update) -> String {
@@ -189,20 +203,33 @@ final class OrchestratorBrain: ObservableObject {
         }
     }
 
+    /// One update as the brain reads it: who, what happened, and its answer.
+    static func line(for update: Update, handle: String?) -> String {
+        var line = "- \(handle ?? "?") \(update.name): \(describe(update).dropFirst(update.name.count + 1))"
+        if let detail = update.detail, update.activity == .needsPermission { line += " (\(detail))" }
+        if let check = update.failedCheck { line += "; its project check failed: \(check)" }
+        if let answer = update.answer {
+            line += ". Its answer:\n" + BoardTeams.clip(answer, 2500)
+        } else if update.activity == .done || update.activity == .ready || update.activity == .needsInput {
+            line += " (its answer couldn't be read; ask it if you need it)"
+        }
+        return line
+    }
+
     // MARK: Thinking
 
     private func think(command: String?, updates: [Update]) {
-        guard let controller else { return }
-        guard let team = controller.ensureTeam(id) else {
-            add(.error, "This orchestrator card is gone from the board.")
-            running = false
+        guard let host else { return }
+        guard host.ensureTeam(id) != nil else {
+            add(.error, host.orchestratorPlace == .board ? "This orchestrator card is gone from the board." : "This orchestrator was closed.")
+            halt()
             return
         }
         let engine = self.engine, tool = engine.flatMap { ToolPath.find($0.rawValue) }
         guard canned.isEmpty == false || tool != nil else {
             add(.error, engines == nil ? "Still looking for Claude Code and Codex. Try again in a moment."
                 : "The orchestrator needs Claude Code or Codex. Install one, then try again.")
-            running = false
+            halt()
             return
         }
         turn += 1
@@ -210,14 +237,11 @@ final class OrchestratorBrain: ObservableObject {
         pass += 1
         let pass = self.pass
         // Agents started by hand haven't always said anything yet: look for them by process.
-        let unknown = Set(controller.wiredAgents(team).filter { VerticalTabsAgents.shared.info(for: $0.surface) == nil }.map(\.surface.id))
+        let unknown = Set(host.orchestratorAgents(id).filter { host.agentInfo($0.pane) == nil }.map(\.pane))
         guard unknown.isEmpty else {
-            BoardPause.queue.async { [weak self] in
-                let found = BoardPause.agents(in: unknown)
-                DispatchQueue.main.async {
-                    guard self?.pass == pass else { return }
-                    self?.proceed(command: command, updates: updates, detected: found)
-                }
+            host.detectAgents(in: unknown) { [weak self] found in
+                guard self?.pass == pass else { return }
+                self?.proceed(command: command, updates: updates, detected: found)
             }
             return
         }
@@ -225,24 +249,16 @@ final class OrchestratorBrain: ObservableObject {
     }
 
     private func proceed(command: String?, updates: [Update], detected: [UUID: String]) {
-        guard let controller, let team = controller.ensureTeam(id), busy else { return }
+        guard let host, host.ensureTeam(id) != nil, busy else { return }
         self.detected = Set(detected.keys)
         let engine = self.engine, tool = engine.flatMap { ToolPath.find($0.rawValue) }
-        let context = controller.orchestratorContext(team, agents: installed, detected: detected)
+        let context = host.orchestratorContext(id, agents: installed, detected: detected)
+        let instructions = OrchestratorPrompt.instructions(for: host.orchestratorPlace)
         var body = "Turn \(turn) of at most \(limit).\n\nThe agents now:\n\(context.text)"
         if let goal { body += "\n\nThe user's command: \(goal)" }
         if let command, command != goal { body += "\n\nNew from the user: \(command)" }
         if !updates.isEmpty {
-            body += "\n\nSince your last turn:\n" + updates.map { update in
-                var line = "- \(context.handle(update.tile) ?? "?") \(update.name): \(Self.describe(update).dropFirst(update.name.count + 1))"
-                if let detail = update.detail, update.activity == .needsPermission { line += " (\(detail))" }
-                if let answer = update.answer {
-                    line += ". Its answer:\n" + BoardTeams.clip(answer, 2500)
-                } else if update.activity == .done || update.activity == .ready || update.activity == .needsInput {
-                    line += " (its answer couldn't be read; ask it if you need it)"
-                }
-                return line
-            }.joined(separator: "\n")
+            body += "\n\nSince your last turn:\n" + updates.map { Self.line(for: $0, handle: context.handle($0.tile)) }.joined(separator: "\n")
         }
         let pictures = self.pictures
         self.pictures = []
@@ -258,11 +274,11 @@ final class OrchestratorBrain: ObservableObject {
         }
         guard let engine, let tool else {
             busy = false
-            running = false
+            halt()
             add(.error, "Claude Code or Codex isn't available any more.")
             return
         }
-        let prompt = HeadlessAgent.prompt(engine, instructions: OrchestratorPrompt.instructions, session: session, body: body)
+        let prompt = HeadlessAgent.prompt(engine, instructions: instructions, session: session, body: body)
         let session = self.session
         let run = HeadlessAgent.Run()
         self.run = run
@@ -270,7 +286,7 @@ final class OrchestratorBrain: ObservableObject {
             // Off the main thread: the files are written and the PNGs encoded here. Codex reads
             // the files; for Claude Code the pictures go in its prompt and switch it to a stream.
             let files = ImageAttachment.save(pictures)
-            let arguments = HeadlessAgent.arguments(engine, instructions: OrchestratorPrompt.instructions,
+            let arguments = HeadlessAgent.arguments(engine, instructions: instructions,
                                                     schema: OrchestratorPrompt.schema, session: session, images: files)
             let input = HeadlessAgent.input(engine, prompt: prompt, images: pictures.map(\.png))
             let result = HeadlessAgent.run(run, tool: tool, arguments: arguments, input: input)
@@ -282,7 +298,7 @@ final class OrchestratorBrain: ObservableObject {
                 if let session = parsed.session { self.session = session }
                 guard let reply = parsed.json.flatMap({ try? JSONDecoder().decode(OrchestratorReply.self, from: $0) }) else {
                     self.add(.error, parsed.error ?? "No answer from \(engine.title).")
-                    self.running = false
+                    self.halt()
                     return
                 }
                 self.apply(reply, handles: context.handles)
@@ -292,35 +308,37 @@ final class OrchestratorBrain: ObservableObject {
 
     /// Does what the reply says (tests feed replies here directly).
     func apply(_ reply: OrchestratorReply, handles: [String: UUID]) {
-        guard let controller else { return }
+        guard let host else { return }
         let say = reply.say.trimmingCharacters(in: .whitespacesAndNewlines)
         if !say.isEmpty { add(.say, say) }
         var dispatched = false
         // Its own step to undo: replies come between events, so nothing else would close it.
-        let undo = controller.undoManager
+        let undo = host.orchestratorUndo
         let own = undo?.groupingLevel == 0
         if own { undo?.beginUndoGrouping() }
         for action in reply.actions {
-            guard let line = controller.performOrchestration(action, for: id, handles: handles, detected: detected) else { continue }
+            guard let line = host.performOrchestration(action, for: id, handles: handles, detected: detected) else { continue }
             add(.action, line)
             if action.type != "wait" { dispatched = true }
         }
         if own {
             undo?.endUndoGrouping()
-            undo?.setActionName(controller.orchestratorName(id))
+            undo?.setActionName(host.orchestratorName(id))
         }
         if reply.done == true {
+            if running { ending = .done }
             running = false
             return
         }
         watch()
         let pending = waiting
         waiting = []
-        guard running, let team = controller.orchestrator(id) else { return }
+        guard running, host.orchestrator(id) != nil else { return }
         // Nothing sent and nobody working: there's nothing to wait for.
-        let working = controller.wiredAgents(team).contains { VerticalTabsAgents.shared.info(for: $0.surface)?.activity == .working }
+        let working = host.orchestratorAgents(id).contains { host.agentInfo($0.pane)?.activity == .working }
         if !dispatched && !working && pending.isEmpty {
             running = false
+            ending = .done
             return
         }
         if !pending.isEmpty { followUp(pending) }
@@ -331,13 +349,13 @@ final class OrchestratorBrain: ObservableObject {
     private func watch() {
         watchdog?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self, self.running, !self.busy, let controller = self.controller,
-                  let team = controller.orchestrator(self.id) else { return }
-            for agent in controller.wiredAgents(team) where !self.flagged.contains(agent.surface.id) {
-                let stuck = AgentInbox.shared.waiting(for: agent.surface).contains { Date().timeIntervalSince($0.created) > 40 }
-                guard stuck, AgentInbox.readiness(of: agent.surface) != .working else { continue }
-                self.flagged.insert(agent.surface.id)
-                self.add(.error, "\(controller.tileLabel(agent.surface)) hasn't taken its message: something is waiting in its "
+            guard let self, self.running, !self.busy, let host = self.host, host.orchestrator(self.id) != nil else { return }
+            for agent in host.orchestratorAgents(self.id) where !self.flagged.contains(agent.pane) {
+                guard let surface = agent.surface else { continue }
+                let stuck = AgentInbox.shared.waiting(for: surface).contains { Date().timeIntervalSince($0.created) > 40 }
+                guard stuck, AgentInbox.readiness(of: surface) != .working else { continue }
+                self.flagged.insert(agent.pane)
+                self.add(.error, "\(host.paneLabel(agent.pane)) hasn't taken its message: something is waiting in its "
                          + "terminal (a prompt or sign-in). Answer it there and the message goes in.")
             }
             self.watch()
@@ -349,7 +367,7 @@ final class OrchestratorBrain: ObservableObject {
     func add(_ kind: Entry.Kind, _ text: String, images: Int = 0) {
         log.append(Entry(kind: kind, text: text, images: images))
         if log.count > 80 { log.removeFirst(log.count - 80) }
-        DemoDirector.note("orchestrator[\(controller?.orchestratorName(id) ?? "")] \(kind): \(text.replacingOccurrences(of: "\n", with: " / "))")
+        DemoDirector.note("orchestrator[\(host?.orchestratorName(id) ?? "")] \(kind): \(text.replacingOccurrences(of: "\n", with: " / "))")
     }
 }
 
@@ -370,37 +388,55 @@ struct OrchestratorAction: Codable, Equatable {
 }
 
 enum OrchestratorPrompt {
-    static let instructions = """
-    You are an orchestrator on the user's Tellurion board, a canvas of terminals in a macOS \
-    app. Several coding agents (Claude Code, Codex and others, each in its own terminal) are \
-    wired to you. The user gives you a command; you split it into tasks, hand them to the \
-    agents, read what they answer when they finish, and hand out the next steps until the \
-    command is done. You can't run commands or read files yourself; you act only through \
-    the actions below, and the board carries them out.
+    /// The board's instructions.
+    static let instructions = instructions(for: .board)
 
-    Each message lists the wired agents with handles (A1, A2…), their role, status, folder \
-    and their last answer. Use only handles from the latest message. Agents can't see each \
-    other or this conversation, so give each one everything it needs: what to do, where, \
-    and what to report back. Keep agents busy in parallel when the work allows it; don't \
-    give two agents the same files at once. A "terminal" with no agent running can't take \
-    messages: start an agent in it, or spawn one.
+    /// What the brain is told about its job. Only where it lives differs: a board's canvas of
+    /// terminals, or a classic window's tabs.
+    static func instructions(for place: OrchestratorPlace) -> String {
+        let opening = place == .board
+            ? "You are an orchestrator on the user's Tellurion board, a canvas of terminals in a macOS app."
+            : "You are an orchestrator in the user's Tellurion terminal: several tabs, each with a coding agent, in a macOS app."
+        let hands = place == .board ? "the board" : "Tellurion"
+        return """
+        \(opening) Several coding agents (Claude Code, Codex and others, each in its own terminal) are \
+        wired to you. The user gives you a command; you split it into tasks, hand them to the \
+        agents, read what they answer when they finish, and hand out the next steps until the \
+        command is done. You can't run commands or read files yourself; you act only through \
+        the actions below, and \(hands) carries them out.
 
-    Reply with JSON only: {"say": "...", "actions": [...], "done": false}. "say" is one or \
-    two short, plain sentences for the user: what you just did or found. Set "done" to true \
-    only when the user's command is complete (or can't be done), and say so in "say".
+        Each message lists the wired agents with handles (A1, A2…), their role, status, folder \
+        and their last answer. Use only handles from the latest message. Agents can't see each \
+        other or this conversation, so give each one everything it needs: what to do, where, \
+        and what to report back. Keep agents busy in parallel when the work allows it; don't \
+        give two agents the same files at once. A "terminal" with no agent running can't take \
+        messages: start an agent in it, or spawn one.
 
-    Actions:
-    - send {agent, text}: give one agent work, or answer its question. agent is a handle or \
-    a role.
-    - broadcast {text}: the same message to every wired agent.
-    - spawn {agent, role, task?, folder?}: start a new agent (claude, codex, or another \
-    installed one listed; "shell" for a plain terminal), wired to you. task is its first \
-    message. Start agents only when the wired ones aren't enough (at most 24 in all).
-    - wait {}: nothing to do until agents finish.
+        Reply with JSON only: {"say": "...", "actions": [...], "done": false}. "say" is one or \
+        two short, plain sentences for the user: what you just did or found. Set "done" to true \
+        only when the user's command is complete (or can't be done), and say so in "say".
 
-    When an agent is waiting for the user's permission, tell the user in "say"; you can't \
-    approve it. When nothing is wired and the command needs agents, spawn them.
-    """
+        Actions:
+        - send {agent, text}: give one agent work, or answer its question. agent is a handle or \
+        a role.
+        - broadcast {text}: the same message to every wired agent.
+        - spawn {agent, role, task?, folder?}: start a new agent (claude, codex, or another \
+        installed one listed; "shell" for a plain terminal), wired to you. task is its first \
+        message. Start agents only when the wired ones aren't enough (at most 24 in all).
+        - wait {}: nothing to do until agents finish.
+
+        When an agent is waiting for the user's permission, tell the user in "say"; you can't \
+        approve it. When nothing is wired and the command needs agents, spawn them.
+        """
+    }
+
+    /// What an agent the orchestrator starts is told first.
+    static func memberIntro(role: String?, orchestrator: String, place: OrchestratorPlace) -> String {
+        "You're " + (role.map { "the \($0)" } ?? "an agent") + " working for \(orchestrator), which coordinates several coding "
+            + "agents " + (place == .board ? "on the user's Tellurion board" : "in the user's Tellurion terminal")
+            + ". It sees your final answer each turn, so end each turn with a short "
+            + "summary of what you did and anything you need."
+    }
 
     /// For Claude Code's structured output.
     static let schema: String = {
@@ -421,104 +457,5 @@ enum OrchestratorPrompt {
         let data = (try? JSONSerialization.data(withJSONObject: schema, options: [.sortedKeys])) ?? Data()
         return String(bytes: data, encoding: .utf8) ?? "{}"
     }()
-}
-
-/// The wired agents in words, with a handle for each.
-struct OrchestratorContext {
-    var text: String
-    var handles: [String: UUID]
-
-    func handle(_ tile: UUID) -> String? { handles.first { $0.value == tile }?.key }
-}
-
-extension BoardController {
-    /// `detected`: agents found running by process in tiles that haven't reported any status.
-    func orchestratorContext(_ team: BoardTeam, agents installed: [BoardAgent], detected: [UUID: String] = [:]) -> OrchestratorContext {
-        var handles: [String: UUID] = [:]
-        var lines: [String] = []
-        let wired = wiredAgents(team)
-        if wired.isEmpty { lines.append("No agents are wired yet.") }
-        for (index, agent) in wired.enumerated() {
-            let handle = "A\(index + 1)"
-            handles[handle] = agent.surface.id
-            var parts = ["\(handle) \"\(tileLabel(agent.surface))\""]
-            if let role = agent.role { parts.append("role \(role)") }
-            if let group = agent.group { parts.append("in group \(groupTitle(group))") }
-            if let info = VerticalTabsAgents.shared.info(for: agent.surface) {
-                parts.append("\(info.kind.displayName), \(info.activity.label.lowercased())")
-                if let detail = info.detail, AgentAlerts.isWaiting(info.activity) { parts.append("waiting on: \(detail)") }
-            } else if let binary = detected[agent.surface.id] {
-                let name = BoardAgent.catalog.first { $0.binary == binary }?.kind.displayName ?? binary
-                parts.append("\(name), running (it hasn't reported a status yet; it takes messages)")
-            } else {
-                parts.append("terminal (no agent)")
-            }
-            if model.paused.contains(agent.surface.id) { parts.append("paused by the user") }
-            if let folder = folder(of: agent.surface) { parts.append("in \((folder as NSString).abbreviatingWithTildeInPath)") }
-            lines.append("- " + parts.joined(separator: "; "))
-            if let answer = lastAnswer(agent.surface), VerticalTabsAgents.shared.info(for: agent.surface)?.activity != .working {
-                lines.append("  Last answer: " + BoardTeams.clip(answer.replacingOccurrences(of: "\n", with: " "), 600))
-            }
-        }
-        lines.append("Installed agents: " + (installed.isEmpty ? "none found" : installed.map(\.binary).joined(separator: ", ")) + ".")
-        return OrchestratorContext(text: lines.joined(separator: "\n"), handles: handles)
-    }
-
-    /// One action from an orchestrator's brain; what was done, in words.
-    /// `detected`: tiles running an agent that hasn't reported a status, which take messages
-    /// typed in directly.
-    func performOrchestration(_ action: OrchestratorAction, for id: UUID, handles: [String: UUID],
-                              detected: Set<UUID> = []) -> String? {
-        guard let team = orchestrator(id) else { return nil }
-        let wired = wiredAgents(team)
-        let from = orchestratorName(id)
-        func target(_ name: String?) -> BoardTeamAgent? {
-            guard let name = name?.trimmingCharacters(in: .whitespaces), !name.isEmpty else { return nil }
-            if let tile = handles[name.uppercased()] { return wired.first { $0.surface.id == tile } }
-            let lower = name.lowercased()
-            return wired.first { $0.role?.lowercased() == lower }
-                ?? wired.first { tileLabel($0.surface).lowercased() == lower }
-                ?? wired.first { $0.role?.lowercased().hasPrefix(lower) == true }
-        }
-        /// Only to agents: text typed into a plain shell would run as a command.
-        func send(_ text: String, to agent: BoardTeamAgent) -> Bool {
-            if VerticalTabsAgents.shared.info(for: agent.surface) == nil {
-                guard detected.contains(agent.surface.id) else { return false }
-                // An agent's input box takes one line (a newline would send it early).
-                let line = text.replacingOccurrences(of: "\n", with: " ")
-                deliver("From \(from)" + (agent.role.map { ", to you as the \($0)" } ?? "") + ": " + line, to: agent.surface)
-            } else {
-                deliverToAgent("From \(from)" + (agent.role.map { ", to you as the \($0)" } ?? "") + ":\n\n" + text,
-                               to: agent.surface, label: "From \(from)")
-            }
-            return true
-        }
-        switch action.type {
-        case "send":
-            guard let agent = target(action.agent), let text = action.text, !text.isEmpty else { return nil }
-            guard send(text, to: agent) else { return "\(tileLabel(agent.surface)) has no agent running; not sent" }
-            return "Sent \(tileLabel(agent.surface)): " + BoardTeams.clip(text.replacingOccurrences(of: "\n", with: " "), 120)
-        case "broadcast":
-            guard let text = action.text, !text.isEmpty, !wired.isEmpty else { return nil }
-            let skipped = wired.filter { !send(text, to: $0) }.map { tileLabel($0.surface) }
-            if skipped.count == wired.count { return "Not sent: no agent running in \(skipped.joined(separator: ", "))" }
-            if !skipped.isEmpty { return "Sent everyone with an agent (not \(skipped.joined(separator: ", "))): " + BoardTeams.clip(text.replacingOccurrences(of: "\n", with: " "), 100) }
-            return "Sent everyone: " + BoardTeams.clip(text.replacingOccurrences(of: "\n", with: " "), 120)
-        case "spawn":
-            guard wired.count < BoardTeams.maxAgents else { return "Can't start more than \(BoardTeams.maxAgents) agents" }
-            let name = (action.agent ?? "claude").lowercased()
-            let agent = BoardAgent.catalog.first { $0.binary == name || $0.kind.rawValue == name }
-            guard agent != nil || name == "shell" else { return "Unknown agent \(name)" }
-            let folder = action.folder.map { ($0 as NSString).expandingTildeInPath }
-            if let folder, !FileManager.default.fileExists(atPath: folder) { return "No folder \(action.folder ?? "")" }
-            let role = action.role?.isEmpty == false ? action.role : nil
-            guard spawnAgent(agent, role: role, task: action.task, folder: folder, for: id) != nil else { return nil }
-            return "Started " + (agent?.kind.displayName ?? "a terminal") + (role.map { " · \($0)" } ?? "")
-        case "wait":
-            return nil
-        default:
-            return nil
-        }
-    }
 }
 #endif

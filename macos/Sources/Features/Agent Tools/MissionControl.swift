@@ -224,6 +224,7 @@ private struct MissionCardView: View {
                 Spacer(minLength: 6)
                 if let agent = card.agent, agent.kind != .hermes {
                     ProjectCheckMark(surface: card.surface.value, activity: agent.activity)
+                    OrchestratorWireMark(surface: card.surface.value)
                     AgentStatusPill(activity: agent.activity)
                 }
             }

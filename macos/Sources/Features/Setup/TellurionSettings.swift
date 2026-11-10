@@ -9,6 +9,7 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
     case editor
     case visualFix
     case missionControl
+    case orchestrator
     case races
     case localhost
     case review
@@ -46,6 +47,7 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
         case .editor: return "Code editor"
         case .visualFix: return "Visual Fix"
         case .missionControl: return "Mission Control"
+        case .orchestrator: return "Orchestrator"
         case .races: return "Agent races"
         case .localhost: return "Localhost sessions"
         case .review: return "Review changes"
@@ -83,6 +85,7 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
         case .editor: return "A VS Code–style editor per tab that follows the agent, with the code map and backend views"
         case .visualFix: return "Preview your dev server beside the terminal and point at what to change"
         case .missionControl: return "Every agent in every window as a live card"
+        case .orchestrator: return "One command for a project's tabs: your own Claude Code or Codex splits the work between the wired agents and follows up"
         case .races: return "Give one task to several agents in separate copies and keep the best"
         case .localhost: return "Dev servers agents start open in their own tab and keep running"
         case .review: return "An inbox of each agent's finished changes, with comments and commit"
@@ -121,6 +124,7 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
         case .editor: return "E"
         case .visualFix: return "V"
         case .missionControl: return "M"
+        case .orchestrator: return "O"
         case .races: return "R"
         case .localhost: return "L"
         case .review: return "I"
@@ -282,6 +286,8 @@ final class TellurionSettings: ObservableObject {
             }
         case .missionControl:
             AgentToolWindows.close(id: MissionControl.windowID)
+        case .orchestrator:
+            ClassicOrchestrators.shared.turnedOff()
         case .background:
             AgentToolWindows.close(id: Housekeeping.windowID)
         case .localhost:

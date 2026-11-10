@@ -507,9 +507,12 @@ final class BoardAssistantOrbView: NSView {
 struct BoardAssistantField: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
-    let controller: BoardController
+    /// The board it's on; nil for an orchestrator's field in a window of its own.
+    let controller: BoardController?
     /// An orchestrator's field: @ lists only these tiles, and ⌘L stays with the bar.
     var mentions: Set<UUID>?
+    /// Off a board: the names @ lists, each with what it says when pointed at.
+    var names: (() -> [(label: String, tip: String?)])?
     /// Takes the pictures pasted into the field, if it takes any.
     var onImages: (([ImageAttachment]) -> Void)?
     let onSubmit: () -> Void
@@ -535,7 +538,7 @@ struct BoardAssistantField: NSViewRepresentable {
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         context.coordinator.field = field
         if mentions == nil {
-            controller.assistantField = field
+            controller?.assistantField = field
         } else {
             field.font = .systemFont(ofSize: 12.5)
         }
@@ -644,9 +647,10 @@ struct BoardAssistantField: NSViewRepresentable {
         }
 
         private func showTiles(in editor: NSTextView, at caret: Int) {
+            guard let board = parent.controller else { return showNames(in: editor, at: caret) }
             let only = parent.mentions
-            let tiles = parent.controller.tileLabels().filter { only?.contains($0.id) ?? true }
-            let groups = only == nil ? parent.controller.model.groups : []
+            let tiles = board.tileLabels().filter { only?.contains($0.id) ?? true }
+            let groups = only == nil ? board.model.groups : []
             guard let field, !tiles.isEmpty || !groups.isEmpty else { return }
             let menu = NSMenu()
             // Groups first: @Backend reaches every tile in it.
@@ -674,6 +678,22 @@ struct BoardAssistantField: NSViewRepresentable {
             menu.popUp(positioning: nil, at: field.convert(inWindow, from: nil), in: field)
         }
 
+        /// The same menu off a board, from `names`.
+        private func showNames(in editor: NSTextView, at caret: Int) {
+            guard let field, let names = parent.names?(), !names.isEmpty else { return }
+            let menu = NSMenu()
+            for name in names {
+                let item = NSMenuItem(title: name.label, action: #selector(pick(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = name.label
+                item.toolTip = name.tip
+                menu.addItem(item)
+            }
+            let glyph = editor.firstRect(forCharacterRange: NSRange(location: caret, length: 0), actualRange: nil)
+            let inWindow = field.window?.convertPoint(fromScreen: glyph.origin) ?? .zero
+            menu.popUp(positioning: nil, at: field.convert(inWindow, from: nil), in: field)
+        }
+
         @objc private func pick(_ item: NSMenuItem) {
             guard let label = item.representedObject as? String, let field,
                   let editor = field.currentEditor() as? NSTextView else { return }
@@ -691,7 +711,7 @@ struct BoardAssistantField: NSViewRepresentable {
                 parent.onRecall()
                 return true
             case #selector(NSResponder.cancelOperation(_:)):
-                let board = parent.controller
+                guard let board = parent.controller else { return false }
                 if let surface = board.focusedSurface ?? board.model.focused?.value {
                     Ghostty.moveFocus(to: surface)
                 } else {

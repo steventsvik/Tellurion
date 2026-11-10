@@ -152,7 +152,7 @@ final class BoardController: BaseTerminalController {
     /// The bar's text field, for ⌘L.
     weak var assistantField: NSTextField?
     /// What orchestrators have yet to hear from their agents (see BoardTeams).
-    let teamRelay = BoardTeamRelay()
+    let teamRelay = OrchestratorRelay()
     /// The Documents panel (see StudioDocuments).
     lazy var documents = StudioDocuments()
     /// Diagrams drawn from the project (see StudioDiagrams).

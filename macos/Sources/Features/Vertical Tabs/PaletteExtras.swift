@@ -185,6 +185,15 @@ enum PaletteExtras {
         ) {
             MissionControl.show()
         }) }
+        if TellurionSettings.isOn(.orchestrator),
+           let tab = TerminalWindows.controller(of: surfaceView.window) as? TerminalController { options.append(CommandOption(
+            title: "Orchestrator",
+            description: "Give this project's agents one command; your own Claude Code or Codex splits the work and follows up",
+            symbols: ["⌃", "⌘", "O"],
+            leadingIcon: "point.3.connected.trianglepath.dotted"
+        ) { [weak tab] in
+            ClassicOrchestrators.show(from: tab)
+        }) }
         options.append(CommandOption(
             title: "Toggle Vertical Tabs",
             description: "Show or hide the sidebar",
