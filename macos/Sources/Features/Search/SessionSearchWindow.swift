@@ -403,6 +403,8 @@ private struct SessionSearchChip: View {
             Text(title)
                 .font(Tellurion.font(10.5, weight: .semibold))
                 .foregroundColor(on ? Tellurion.gold : Tellurion.dim)
+                .lineLimit(1)
+                .fixedSize()
                 .padding(.horizontal, 8)
                 .frame(height: 22)
                 .background(shape.fill(on ? Tellurion.gold.opacity(0.12) : Tellurion.panel))

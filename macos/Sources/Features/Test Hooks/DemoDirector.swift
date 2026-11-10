@@ -24,6 +24,11 @@ import AppKit
 ///     visualfix <n> [url]     open Visual Fix from tab n, optionally on a URL
 ///     answer <n> allow|deny   answer tab n's permission prompt, as its sidebar buttons do
 ///     restorelast <n>         ask to undo tab n's last agent turn
+///     checks <n>              open the Checks window on tab n's project
+///     checkset <n> <command>  save a check command for tab n's project
+///     budgets | scoreboard | worktrees | search
+///     budget <n> <dollars>    give tab n's agent a budget
+///     snap <folder>           draw every visible window into <folder>/<title>.png
 @MainActor
 enum DemoDirector {
     private static var started = false
@@ -134,6 +139,31 @@ enum DemoDirector {
             AgentRaces.shared.start(task: rest, folder: folder, counts: [.claude: 1, .codex: 1],
                                     includeChanges: true, from: target) { result in
                 if case .success(let race) = result { AgentRaces.show(race, from: target) }
+            }
+        case "checks":
+            ProjectChecksWindow.show(folder: target?.focusedSurface?.pwd)
+        case "checkset":
+            guard let folder = target?.focusedSurface?.pwd, let root = AgentTools.repoRoot(of: folder) else { return }
+            _ = ProjectChecks.shared.save(ProjectCheck(command: rest), for: root)
+        case "budgets":
+            BudgetsWindow.show()
+        case "budget":
+            guard let surface = target?.focusedSurface, let dollars = Double(rest) else { return }
+            AgentBudgets.shared.setBudget(AgentBudget(dollars: dollars), for: surface)
+        case "scoreboard":
+            AgentRaceScores.showScoreboard()
+        case "worktrees":
+            AgentWorktreesWindow.show()
+        case "search":
+            SessionSearch.toggle()
+        case "snap":
+            for (index, window) in NSApp.windows.enumerated() where window.isVisible {
+                guard let view = window.contentView?.superview ?? window.contentView,
+                      let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
+                view.cacheDisplay(in: view.bounds, to: rep)
+                let name = window.title.isEmpty ? "window" : window.title.filter { $0.isLetter || $0.isNumber }
+                try? rep.representation(using: .png, properties: [:])?
+                    .write(to: URL(fileURLWithPath: arg).appendingPathComponent("\(index)-\(name).png"))
             }
         case "mark":
             guard let marks else { return }
