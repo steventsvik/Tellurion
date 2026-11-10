@@ -26,21 +26,26 @@ enum APIPricing {
     private static let tier10x50Read025 = Rates(input: 10, output: 50, cacheWrite5m: 12.5, cacheWrite1h: 20, cacheRead: 0.25)
     private static let tier30x150 = Rates(input: 30, output: 150, cacheWrite5m: 37.5, cacheWrite1h: 60, cacheRead: 3)
     private static let tier8x40 = Rates(input: 8, output: 40, cacheWrite5m: 10, cacheWrite1h: 16, cacheRead: 0.4)
+    private static let tier8x40Read02 = Rates(input: 8, output: 40, cacheWrite5m: 10, cacheWrite1h: 16, cacheRead: 0.2)
+    private static let tier16x80 = Rates(input: 16, output: 80, cacheWrite5m: 20, cacheWrite1h: 32, cacheRead: 0.4)
+    private static let tier2x10Read01 = Rates(input: 2, output: 10, cacheWrite5m: 2.5, cacheWrite1h: 4, cacheRead: 0.1)
     private static let haiku45 = Rates(input: 1, output: 5, cacheWrite5m: 1.25, cacheWrite1h: 2, cacheRead: 0.1)
     private static let haiku35 = Rates(input: 0.8, output: 4, cacheWrite5m: 1, cacheWrite1h: 1.6, cacheRead: 0.08)
 
     private static let claudeRates: [String: Rates] = [
         "opus-5-5": tier4x20, "opus-5": tier5x25, "opus-4-8": tier5x25, "opus-4-7": tier5x25, "opus-4-6": tier5x25,
         "opus-4-5": tier5x25, "opus-4-1": tier15x75, "opus-4-0": tier15x75, "opus-4": tier15x75,
-        "sonnet-5-5": tier2x10, "sonnet-5": tier2x10, "sonnet-4-6": tier3x15, "sonnet-4-5": tier3x15,
+        "sonnet-5-5": tier2x10Read01, "sonnet-5": tier2x10, "sonnet-4-6": tier3x15, "sonnet-4-5": tier3x15,
         "sonnet-4-0": tier3x15, "sonnet-4": tier3x15, "3-7-sonnet": tier3x15, "3-5-sonnet": tier3x15,
         "haiku-4-5": haiku45, "3-5-haiku": haiku35,
+        "fable-5-2": tier8x40Read02, "mythos-5-2": tier8x40Read02,
         "fable-5-1": tier10x50Read025, "fable-5": tier10x50, "mythos-5-1": tier10x50Read025, "mythos-5": tier10x50,
     ]
 
     /// Fast mode is billed at a premium on the models that offer it.
     private static let claudeFastRates: [String: Rates] = [
         "opus-5-5": tier8x40, "opus-5": tier10x50, "opus-4-8": tier10x50, "opus-4-7": tier30x150, "opus-4-6": tier30x150,
+        "fable-5-2": tier16x80, "mythos-5-2": tier16x80,
     ]
 
     /// "claude-haiku-4-5-20251001" or "claude-opus-5-5[1m]" -> "haiku-4-5", "opus-5-5".
