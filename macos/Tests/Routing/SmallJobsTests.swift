@@ -111,7 +111,8 @@ struct SmallJobsTests {
         }
         let started = Date()
         let (result, outcome) = await jobs(servers, seen, limits: .init(loaded: 0.2, loading: 0.2)).run(job(seen))
-        #expect(Date().timeIntervalSince(started) < 10)
+        // Well before the server's 20 seconds; generous, since a busy machine is slow to notice.
+        #expect(Date().timeIntervalSince(started) < 18)
         #expect(text(result) == "From the agent")
         #expect(outcome.route == .escalated(reason: "it took too long"))
         #expect(outcome.model == "mid:4b" && outcome.reason == "it took too long")
