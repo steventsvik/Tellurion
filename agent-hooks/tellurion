@@ -302,7 +302,7 @@ local_model() {
       printf 'Usage: tellurion local [--provider ollama|lmstudio|openai|apple|venice] [--base URL] <model>\n       tellurion local codex [-m <model>] [--provider ollama|lmstudio] [codex options]\n' >&2
       return 2 ;;
   esac
-  exec python3 "$hooks/local-chat.py" "$@"
+  exec python3 -I "$hooks/local-chat.py" "$@"
 }
 
 venice_stop() {
@@ -323,6 +323,13 @@ venice_toml() {
 VENICE_SEARXNG_IMAGE=docker.io/searxng/searxng:2026.11.2-cccbc9e15
 VENICE_SEARXNG_NAME=tellurion-searxng
 VENICE_SEARXNG_URL=http://127.0.0.1:8899
+
+# True for an address on this Mac: localhost, 127.x.x.x or [::1], with or without a port.
+venice_on_this_mac() {
+  local host=${1#*://}
+  host=${host%%[/?#]*}
+  [[ "$host" =~ ^(localhost|127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|\[::1\])(:[0-9]{1,5})?$ ]]
+}
 
 venice_search_address() {
   local folder="$1" address=""
@@ -365,9 +372,13 @@ venice_search() {
     setup) venice_search_setup "$folder" ;;
     use)
       case "${2:-}" in
-        http://*|https://*) mkdir -p "$folder" && printf '%s\n' "$2" > "$folder/searxng-url" && printf 'Web search falls back to %s.\n' "$2" ;;
-        *) venice_stop "Usage: tellurion venice search use <http or https address of a SearXNG with JSON turned on>" ;;
+        http://*)
+          # Plain http shows every search to anyone on the network in between.
+          venice_on_this_mac "$2" || venice_stop "A SearXNG on another machine needs an https address: over plain http, anyone on the network between could read your searches. (http is fine for one on this Mac, such as http://127.0.0.1:8899.)" ;;
+        https://*) ;;
+        *) venice_stop "Usage: tellurion venice search use <https address of a SearXNG with JSON turned on, or an http one on this Mac>" ;;
       esac
+      mkdir -p "$folder" && printf '%s\n' "$2" > "$folder/searxng-url" && printf 'Web search falls back to %s.\n' "$2"
       ;;
     stop)
       if type -P docker >/dev/null && docker inspect "$VENICE_SEARXNG_NAME" >/dev/null 2>&1; then
@@ -433,8 +444,8 @@ venice_codex() {
   local script="$root/agent-hooks/venice-catalog.py"
   [ -f "$script" ] || script="$here/venice-catalog.py"
   local settings=()
-  if TELLURION_VENICE_TOKEN="$token" python3 "$script" --port "$port" --codex "$codex" --out "$folder" && [ -f "$folder/codex-catalog.json" ]; then
-    settings+=(-c "model_catalog_json=\"$folder/codex-catalog.json\"")
+  if TELLURION_VENICE_TOKEN="$token" python3 -I "$script" --port "$port" --codex "$codex" --out "$folder" && [ -f "$folder/codex-catalog.json" ]; then
+    settings+=(-c "model_catalog_json=\"$(venice_toml "$folder/codex-catalog.json")\"")
   else
     printf 'Codex will start without its details for Venice models, so it edits files with shell commands instead of apply_patch.\n' >&2
   fi
@@ -554,11 +565,12 @@ venice_codex() {
 local_codex() {
   local root="${TELLURION_TEST_HOME:-$HOME}/.ghostty-extreme"
   local folder="$root/local" provider="${TELLURION_LOCAL_PROVIDER:-ollama}" model="${TELLURION_LOCAL_MODEL:-}" base=""
-  local chosen=0 codex here python script found status context argument
+  local chosen=0 codex here python script found status context argument server=""
   local kept=() settings=() options=()
 
-  # --provider and --base (an LM Studio server that isn't on 127.0.0.1:1234; Ollama's is
-  # OLLAMA_HOST) are ours. A model named for Codex (-m) is checked here first, and stays Codex's.
+  # --provider and --base (a server that isn't on its usual address: 127.0.0.1:1234 for LM
+  # Studio, OLLAMA_HOST or 127.0.0.1:11434 for Ollama) are ours. A model named for Codex (-m)
+  # is checked here first, and stays Codex's.
   local arguments=("$@") i=0
   while [ "$i" -lt "${#arguments[@]}" ]; do
     argument=${arguments[$i]}; i=$((i + 1))
@@ -599,7 +611,7 @@ local_codex() {
   found=$("$python" -I "$script" --provider "$provider" --codex "$codex" --out "$folder" ${model:+--model "$model"} ${base:+--base "$base"})
   status=$?
   case "$status" in
-    0) settings+=(-c "model_catalog_json=\"$folder/codex-catalog.json\"") ;;
+    0) settings+=(-c "model_catalog_json=\"$(venice_toml "$folder/codex-catalog.json")\"") ;;
     1) printf 'Codex will start without its details for this model, so it edits files with shell commands instead of apply_patch.\n' >&2 ;;
     *) exit 1 ;;
   esac
@@ -608,6 +620,15 @@ local_codex() {
   context=$(printf '%s' "$found" | sed -n 's/.*"context": *\([0-9]*\).*/\1/p')
   [ -n "$model" ] || venice_stop "No model was chosen."
   [ "$chosen" = 1 ] || settings+=(-m "$model")
+  # Codex has to talk to the server whose model was just checked. Its own Ollama and LM Studio
+  # providers can't be redefined in settings and don't read OLLAMA_HOST: they go to their
+  # usual ports unless CODEX_OSS_BASE_URL names another address. So when --base or OLLAMA_HOST
+  # moved the server, Codex is told the same one.
+  if [ -n "$base" ] || { [ "$provider" = ollama ] && [ -n "${OLLAMA_HOST:-}" ]; }; then
+    server=$(printf '%s' "$found" | sed -n 's/.*"base": *"\(https\{0,1\}:\/\/[][A-Za-z0-9_.:/-]*\)".*/\1/p')
+    [ -n "$server" ] || venice_stop "The address of the model server can't be read, so Codex can't be sent to it."
+    export CODEX_OSS_BASE_URL="$server/v1"
+  fi
   if [ -n "$context" ] && [ "$context" -lt 24000 ]; then
     local app="LM Studio"
     [ "$provider" = ollama ] && app=Ollama

@@ -134,7 +134,8 @@ def tty_path():
 # format), so each event is also appended to a small one of ours, with the same records,
 # under ~/.ghostty-extreme/feeds/. Old feeds are removed after a week.
 
-FEEDS = os.path.join(os.path.expanduser("~"), ".ghostty-extreme", "feeds")
+# TELLURION_TEST_HOME moves .ghostty-extreme for a test copy of the app, and the feeds with it.
+FEEDS = os.path.join(os.environ.get("TELLURION_TEST_HOME") or os.path.expanduser("~"), ".ghostty-extreme", "feeds")
 PATH_KEYS = ("file_path", "filePath", "absolute_path", "target_file", "path", "file", "notebook_path")
 
 
@@ -220,9 +221,14 @@ def feed_records(agent, event, p, name):
 
 
 def write_feed(path, records):
-    os.makedirs(FEEDS, exist_ok=True)
+    # Prompts and tool output: for this user only, like the agents' own transcripts.
+    os.makedirs(FEEDS, mode=0o700, exist_ok=True)
     fresh = not os.path.exists(path)
-    with open(path, "a", encoding="utf-8") as feed:
+    if fresh:
+        os.chmod(FEEDS, 0o700)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(descriptor, "a", encoding="utf-8") as feed:
+        os.fchmod(descriptor, 0o600)
         for record in records:
             feed.write(json.dumps(record, ensure_ascii=False) + "\n")
     if fresh:

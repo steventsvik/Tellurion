@@ -160,5 +160,94 @@ class TestSwitches(Folder):
             self.assertNotEqual(name, "TELLURION_TEST_HOME", "the release keeps this one")
 
 
+def diff(path, added, start=1):
+    """A diff that adds these lines to a file."""
+    body = "".join(f"+{line}\n" for line in added)
+    return (f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n"
+            f"@@ -{start},0 +{start},{len(added)} @@\n{body}")
+
+
+class AddedText(Folder):
+    # Made up here, so this file holds nothing that looks like a key itself.
+    TOKEN = "ghp_" + "a1B2" * 9
+    FILLER = ["let value = %d" % number for number in range(200000)]
+
+    def check(self, kind, text, *more):
+        path = self.folder / "changes.diff"
+        path.write_text(text)
+        return run(kind, path, *more)
+
+    def test_a_clean_diff_passes(self):
+        result = self.check("secrets", diff("a.swift", ["let a = 1", "// sk-not-a-key"]))
+        self.assertEqual((result.returncode, result.stdout), (0, ""), result.stderr)
+
+    def test_no_changes_at_all_pass(self):
+        self.assertEqual(self.check("secrets", "").returncode, 0)
+
+    def test_a_token_is_found_and_located_but_not_shown(self):
+        result = self.check("secrets", diff("src/keys.swift", ["let a = 1", f'let token = "{self.TOKEN}"'], start=40))
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, 'src/keys.swift:41:let token = "[hidden]"\n')
+        self.assertNotIn(self.TOKEN, result.stdout + result.stderr)
+
+    def test_every_kind_of_key_counts(self):
+        keys = ["sk-ant-" + "x" * 24, "sk-proj-" + "x" * 24, "github_pat_" + "x" * 30, "AKIA" + "A1" * 8,
+                "-----BEGIN OPENSSH " + "PRIVATE KEY-----", "xoxb-" + "1" * 12]
+        for key in keys:
+            result = self.check("secrets", diff("a.txt", [key]))
+            self.assertEqual(result.returncode, 1, key)
+            self.assertIn("a.txt:1:", result.stdout)
+
+    def test_a_hit_on_the_first_line_of_a_large_diff_is_still_a_hit(self):
+        # The reader used to stop at the first match, the writer died of it, and with
+        # pipefail that counted as nothing found.
+        result = self.check("secrets", diff("big.swift", [self.TOKEN] + self.FILLER))
+        self.assertEqual((result.returncode, result.stdout), (1, "big.swift:1:[hidden]\n"), result.stderr)
+        result = self.check("mentions", diff("big.swift", ["open /Users/someone/x"] + self.FILLER), "/Users/someone")
+        self.assertEqual((result.returncode, result.stdout), (1, "big.swift:1:open /Users/someone/x\n"), result.stderr)
+
+    def test_a_hit_on_the_last_line_of_a_large_diff_is_a_hit(self):
+        result = self.check("secrets", diff("big.swift", self.FILLER + [self.TOKEN]))
+        self.assertEqual((result.returncode, result.stdout), (1, "big.swift:200001:[hidden]\n"), result.stderr)
+
+    def test_only_added_lines_count(self):
+        text = ("--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,2 @@\n"
+                f" kept {self.TOKEN}\n-removed {self.TOKEN}\n+added\n")
+        self.assertEqual(self.check("secrets", text).returncode, 0)
+        self.assertEqual(self.check("mentions", text, "kept").returncode, 0)
+
+    def test_an_added_line_that_looks_like_a_header_is_still_searched(self):
+        text = ("--- a/a.txt\n+++ b/a.txt\n@@ -1,0 +1,3 @@\n"
+                f"+++ b/fake\n+@@ -1 +1 @@\n+{self.TOKEN}\n")
+        result = self.check("secrets", text)
+        self.assertEqual((result.returncode, result.stdout), (1, "a.txt:3:[hidden]\n"))
+
+    def test_each_file_and_line_is_named(self):
+        text = diff("one.txt", ["x /Users/someone"], start=7) + diff("two/three.txt", ["a", "b", "/Users/someone/y"])
+        result = self.check("mentions", text, "/Users/someone")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout.splitlines(), ["one.txt:7:x /Users/someone", "two/three.txt:3:/Users/someone/y"])
+
+    def test_the_text_is_taken_literally(self):
+        self.assertEqual(self.check("mentions", diff("a", ["/Users/xname"]), "/Users/.name").returncode, 0)
+        self.assertEqual(self.check("mentions", diff("a", ["-e"]), "-e").returncode, 1)
+
+    def test_a_diff_that_cant_be_read_is_a_failure_not_a_pass(self):
+        self.assertEqual(run("secrets", self.folder / "absent").returncode, 2)
+        self.assertEqual(run("secrets", self.folder).returncode, 2)
+        self.assertEqual(run("mentions", self.folder / "absent", "x").returncode, 2)
+        self.assertEqual(self.check("mentions", diff("a", ["x"]), "").returncode, 2)
+
+
+class ReleaseScript(unittest.TestCase):
+    """release.sh can't be run here, so its text is checked for the shape that hid matches."""
+
+    def test_no_check_reads_a_pipe_with_a_reader_that_stops_early(self):
+        for number, line in enumerate((HERE / "release.sh").read_text().splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            self.assertNotRegex(line, r"(?<!\|)\|\s*grep\s+-[A-Za-z]*q", f"release.sh:{number}")
+
+
 if __name__ == "__main__":
     unittest.main()

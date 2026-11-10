@@ -4,7 +4,7 @@
 // Amp has no command hooks, so this plugin listens to its events and writes the same
 // OSC 777 notification the other agents' hooks send to the terminal. It only observes:
 // it never allows, rejects or changes a tool call.
-import { appendFileSync, closeSync, mkdirSync, openSync, writeSync } from "node:fs"
+import { appendFileSync, chmodSync, closeSync, mkdirSync, openSync, writeSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 
@@ -29,16 +29,19 @@ function sendRaw(body) {
 
 // The code editor's live feed: Claude Code's transcript format, which the editor reads,
 // under ~/.ghostty-extreme/feeds/ (see agent-event.py).
-const FEED = join(homedir(), ".ghostty-extreme", "feeds", `amp-${process.pid}.jsonl`)
+const FEED = join(process.env.TELLURION_TEST_HOME || homedir(), ".ghostty-extreme", "feeds", `amp-${process.pid}.jsonl`)
 let fed = false
 
 function record(entry) {
   if (!ACTIVE) return
   try {
-    mkdirSync(dirname(FEED), { recursive: true })
-    appendFileSync(FEED, JSON.stringify({ timestamp: new Date().toISOString(), ...entry }) + "\n")
+    // Prompts and tool calls: for this user only, like the agents' own transcripts.
+    mkdirSync(dirname(FEED), { recursive: true, mode: 0o700 })
+    appendFileSync(FEED, JSON.stringify({ timestamp: new Date().toISOString(), ...entry }) + "\n", { mode: 0o600 })
     if (!fed) {
       fed = true
+      chmodSync(dirname(FEED), 0o700)
+      chmodSync(FEED, 0o600)
       sendRaw({ agent: "amp", event: "transcript", detail: FEED, t: TOKEN })
     }
   } catch {}

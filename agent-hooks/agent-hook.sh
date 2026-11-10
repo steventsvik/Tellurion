@@ -31,14 +31,14 @@ elif [ "${GHOSTTY_CUSTOM_AGENT_EVENTS:-}" = "1" ]; then
 else
   exit 0
 fi
-command -v jq >/dev/null 2>&1 || exit 0
 
 agent="${1:-}"
 event="${2:-}"
-# Codex has its own event adapter; the Claude protocol below stays unchanged.
+# Codex has its own event adapter, which doesn't need jq; the Claude protocol below stays unchanged.
 if [ "$agent" = "codex" ]; then
   exec python3 "$(dirname "$0")/codex-hook.py" "$event"
 fi
+command -v jq >/dev/null 2>&1 || exit 0
 input=$(cat)
 
 # Dev servers Claude Code starts go to a localhost session (Tellurion only).
@@ -97,6 +97,9 @@ sequence=$(jq -r --arg agent "$agent" --arg event "$event" --arg ns "$namespace"
         else "" end | clip)
     }
   | {agent: $agent, t: $t} + .
+  # The limit is on bytes, token and all, and a letter can take up to four: shorten the
+  # detail until the whole body fits.
+  | until((tojson | utf8bytelength) <= 250 or .detail == ""; .detail |= .[0:-1])
   | "\u001b]777;notify;\($ns)://agent;\(tojson)\u0007"
 ' <<<"$input" 2>/dev/null) || exit 0
 
