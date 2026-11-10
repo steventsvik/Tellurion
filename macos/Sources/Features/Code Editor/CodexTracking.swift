@@ -13,7 +13,7 @@ enum CodexTracking {
     }
 
     static var root: String { NSHomeDirectory() + "/.codex/sessions" }
-    static var hooksRoot: String { NSHomeDirectory() + "/.ghostty-extreme/codex-tracking" }
+    static var hooksRoot: String { AgentTools.root.appendingPathComponent("codex-tracking").path }
 
     static func hookPath(_ id: String) -> String? {
         guard !id.isEmpty, id.count <= 100,

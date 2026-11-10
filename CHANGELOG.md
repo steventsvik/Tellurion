@@ -4,6 +4,24 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Localhost sessions show the address the server announced.** A session's card, Open, the preview and the tab title now use the address the dev server printed, with its path (`localhost:5173/app/`), `https` when the server uses it, and the app's own port when it listens on several. Before, it was always `http://localhost:` plus the lowest port. Reload in the preview also works when the first load failed because the server wasn't up yet.
+- **Fixed two crashes that any program on the Mac could cause** by sending a malformed request to the Apple model's server or to phone access. Phone access also closes connections that don't identify themselves first.
+- **Commands Tellurion types for you can't hide anything.** Installs, skill updates, resumed sessions and the board agent's proposed commands are refused if they contain hidden control characters, and the board agent's confirmation shows every character that will be typed. Resuming a session only ever types a real session id.
+- **Your files are harder to lose.** Applying a design no longer replaces a Ghostty config it can't read, keeps a symlinked config a symlink and backs it up first. A damaged accounts, presets, design or paired-phones file is set aside as `<name>.unreadable-<date>` instead of being overwritten. A board saved by a newer Tellurion opens without being saved over.
+- **Removing a paired phone tells you if it couldn't be saved,** instead of the phone quietly being paired again after a restart.
+- **Background commands can't hang the app.** Git, GitHub, Tailscale and other commands Tellurion runs are stopped if they never finish and no longer stall when they print a lot.
+- **The installer checks what it installs.** `install.sh` verifies that the download is signed by Tellurion's developer and notarized by Apple before installing, and an interrupted install can't lose the copy you already had.
+- **Web search results are marked as untrusted.** What a search or a fetched page returns to a Venice model in Codex is wrapped and labelled as text from the web, so instructions hidden in a page aren't treated as yours. Search also keeps working after an unusual answer from the search service, and `tellurion venice search use` refuses a plain `http` address on another machine.
+- **Agent status no longer disappears for prompts in Cyrillic, emoji or other non-Latin text,** and Codex status works on a Mac without `jq`.
+- **Dev servers are moved to a localhost session more carefully.** Only known dev-server commands inside the project are moved; scripts with server-like names, commands in other folders and ssh tunnels with extra options are left to the agent. Starting one with `2>err.log` or `> /dev/null` no longer breaks the command, and starting a server that's already running no longer restarts it when its address has a path.
+- **`tellurion local codex --base <address>`** (and a custom `OLLAMA_HOST`) now sends Codex to that server instead of the default one.
+- **Less work in the background.** Localhost sessions check their servers less often while Tellurion isn't in front, phone access does nothing while the screen and tabs aren't changing, and the Visual Fix panel, the update indicator and a few small animations no longer redraw the window.
+- **Smaller fixes.** Usage limits no longer go missing when a session log is cut mid-character. A newly installed command line tool is found without restarting. The connection to Venice restarts by itself if it stops. Restoring a checkpoint says which files couldn't be restored. Hooks work when your home folder's name has a space in it. Chats and searches with servers on this Mac no longer go through a proxy set in your environment. Visual Fix only listens to the page itself, not to frames embedded in it. AI POV's browser and the localhost preview refuse downloads, camera and microphone requests.
+- **Tidier on disk.** Tellurion's activity files are readable only by you, old Codex tracking files are removed after 14 days, and only the five newest backups of each agent settings file are kept.
+- **The release check for keys and personal paths can no longer miss one** in a large set of changes, and the hooks download includes every file the `tellurion` command needs.
+
 ## 1.9.2
 
 Codex on the models on your Mac, and the shipped app no longer carries phone access's test switches.

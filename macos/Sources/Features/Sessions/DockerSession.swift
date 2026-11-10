@@ -92,8 +92,7 @@ enum DockerSessions {
     /// refreshing them on every use so app updates take effect. Returns the script path.
     private static func installSupportFiles() -> String? {
         let fm = FileManager.default
-        guard let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
-        let dir = support.appendingPathComponent("GhosttyEXTREME/docker", isDirectory: true)
+        let dir = AgentTools.supportFolder.appendingPathComponent("docker", isDirectory: true)
         do {
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
             let script = dir.appendingPathComponent("sandbox.sh")

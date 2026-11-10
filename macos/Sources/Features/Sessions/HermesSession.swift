@@ -54,6 +54,7 @@ final class HermesServer {
         // A login shell so `hermes` is on PATH even when the app was opened from the Dock.
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = ["-lc", "exec hermes dashboard --no-open --skip-build --port \(baseURL.port ?? 9119)"]
+        process.environment = EventToken.scrubbed(ProcessInfo.processInfo.environment)
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         do {

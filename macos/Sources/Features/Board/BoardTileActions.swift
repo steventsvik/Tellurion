@@ -90,7 +90,7 @@ extension BoardController {
         config.workingDirectory = folder(of: view) ?? workspace.folder
         let agent = VerticalTabsAgents.shared.info(for: view).flatMap { BoardAgent.forKind($0.kind) }
         // The command it was started with (flags included), else its agent plainly.
-        let command = commands[view.id] ?? agent.map { $0.binary + "\n" }
+        let command = commands[view.id].flatMap(AgentTools.typedLine) ?? agent.map { $0.binary + "\n" }
         let size = model.frames[view.id]?.size ?? Self.tileSize
         // One undo step for the copy and its place in the group.
         undoManager?.beginUndoGrouping()

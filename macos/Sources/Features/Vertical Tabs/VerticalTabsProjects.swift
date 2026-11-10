@@ -248,7 +248,7 @@ struct VerticalTabsProjectGroupView<Content: View>: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Tellurion.gold.opacity(0.45), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
-                .help("\(group.name) is live at localhost:\(url.port ?? 80). Click to fix it visually")
+                .help("\(group.name) is live at \(LocalhostAddress.display(url)). Click to fix it visually")
                 .fixedSize()
             }
             if hovering {

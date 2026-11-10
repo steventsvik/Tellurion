@@ -31,6 +31,7 @@ enum LocalhostManager {
 
 private struct LocalhostManagerView: View {
     @ObservedObject private var store = LocalhostSessions.shared
+    @StateObject private var motion = WindowMotion()
 
     private var groups: [(project: LocalhostProject, sessions: [LocalhostSession])] {
         let grouped = Dictionary(grouping: store.sessions, by: \.project)
@@ -59,6 +60,9 @@ private struct LocalhostManagerView: View {
         .background(
             LinearGradient(colors: [Color.cyan.opacity(0.05), Color.purple.opacity(0.05), .clear],
                            startPoint: .topLeading, endPoint: .bottomTrailing))
+        // The cards' uptime only ticks while the window can be seen.
+        .environment(\.tellurionMotion, motion.active)
+        .background(LocalhostWindowFinder { motion.attach($0) })
         .onAppear { store.scanOthers = true }
         .onDisappear { store.scanOthers = false }
     }
@@ -162,13 +166,27 @@ private struct LocalhostManagerView: View {
     }
 }
 
+/// Hands over the window a view is in, once it's in one.
+private struct LocalhostWindowFinder: NSViewRepresentable {
+    let found: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async { [weak view] in
+            if let window = view?.window { found(window) }
+        }
+    }
+}
+
 private struct LocalhostManagerCard: View {
     let session: LocalhostSession
     @State private var hovering = false
+    @Environment(\.tellurionMotion) private var motion
 
     var body: some View {
         let accent = session.project.color
-        TimelineView(.periodic(from: .now, by: 1)) { context in
+        TimelineView(.periodic(from: .now, by: motion ? 1 : 3600)) { context in
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     LocalhostPulse(color: session.statusColor, active: session.state == .live, size: 8)
@@ -407,21 +425,31 @@ private struct LocalhostNewServerView: View {
 /// A small browser window for a localhost URL, with reload and "open in browser".
 enum LocalhostPreview {
     static func show(_ url: URL, title: String) {
-        AgentToolWindows.show(id: "preview-\(url.absoluteString)", title: "\(title) · \(url.host ?? ""):\(url.port ?? 80)",
+        AgentToolWindows.show(id: "preview-\(url.absoluteString)", title: "\(title) · \(LocalhostAddress.display(url))",
                               size: NSSize(width: 1100, height: 760)) {
             LocalhostPreviewView(url: url)
         }
     }
 }
 
-private final class LocalhostPreviewModel: ObservableObject {
-    let webView = WKWebView()
+private final class LocalhostPreviewModel: NSObject, ObservableObject, WKUIDelegate {
+    /// Previews keep their cookies and storage apart from everything else, and only until
+    /// the app quits.
+    private static let store = WKWebsiteDataStore.nonPersistent()
+
+    let webView: WKWebView = {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = LocalhostPreviewModel.store
+        return WKWebView(frame: .zero, configuration: configuration)
+    }()
     @Published var address: String
     @Published var loading = false
     private var observations: [NSKeyValueObservation] = []
 
     init(url: URL) {
         address = url.absoluteString
+        super.init()
+        webView.uiDelegate = self
         observations = [
             webView.observe(\.isLoading, options: [.new]) { [weak self] view, _ in
                 DispatchQueue.main.async { self?.loading = view.isLoading }
@@ -438,6 +466,25 @@ private final class LocalhostPreviewModel: ObservableObject {
         if !text.contains("://") { text = "http://" + text }
         if let url = URL(string: text) { webView.load(URLRequest(url: url)) }
     }
+
+    /// A page that never loaded (the server wasn't up yet) has nothing to reload: load the
+    /// address again instead.
+    func reload() {
+        if webView.url == nil { go() } else { webView.reload() }
+    }
+
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                 for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        // A new window opens in the preview instead.
+        if let url = action.request.url { webView.load(URLRequest(url: url)) }
+        return nil
+    }
+
+    func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                 initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+                 decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        decisionHandler(.deny)
+    }
 }
 
 private struct LocalhostPreviewView: View {
@@ -452,7 +499,7 @@ private struct LocalhostPreviewView: View {
             HStack(spacing: 8) {
                 Button { model.webView.goBack() } label: { Image(systemName: "chevron.left") }
                 Button { model.webView.goForward() } label: { Image(systemName: "chevron.right") }
-                Button { model.webView.reload() } label: {
+                Button { model.reload() } label: {
                     Image(systemName: model.loading ? "xmark" : "arrow.clockwise")
                 }
                 HStack(spacing: 6) {

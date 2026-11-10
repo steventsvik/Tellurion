@@ -175,11 +175,16 @@ final class TurnCheckpoints: ObservableObject {
                                        tree: current, isRestorePoint: true, jjOperation: currentOperation),
                             to: ObjectIdentifier(surface))
                 self.queue.async {
+                    var failures: [String] = []
                     if choice == .withJJ, let operation = checkpoint.jjOperation {
                         // jj puts back its history and the files together.
-                        JJ.run(["op", "restore", operation], in: checkpoint.repoRoot)
+                        let result = JJ.run(["op", "restore", operation], in: checkpoint.repoRoot)
+                        if !result.ok { failures.append(Self.short(result.error.isEmpty ? "jj op restore failed" : result.error, 200)) }
                     } else {
-                        Self.apply(changes, from: checkpoint)
+                        failures = Self.apply(changes, from: checkpoint)
+                    }
+                    if !failures.isEmpty {
+                        DispatchQueue.main.async { Self.report(failures) }
                     }
                     DispatchQueue.main.async { VerticalTabsGit.shared.refreshNow(root: checkpoint.repoRoot) }
                     // Reviews of this project now show what's left (or go away).
@@ -249,21 +254,44 @@ final class TurnCheckpoints: ObservableObject {
         return changes
     }
 
-    private static func apply(_ changes: [Change], from checkpoint: Checkpoint) {
+    /// Says that a restore didn't do everything it was asked to.
+    private static func report(_ failures: [String]) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Not everything was restored"
+        alert.informativeText = failures.prefix(6).joined(separator: "\n")
+            + (failures.count > 6 ? "\n… and \(failures.count - 6) more" : "")
+            + "\n\nThe files as they were before restoring are in the same menu."
+        alert.runModal()
+    }
+
+    /// Makes the changes. Returns what couldn't be done, one line each (empty: all of it was).
+    static func apply(_ changes: [Change], from checkpoint: Checkpoint) -> [String] {
         let fm = FileManager.default
         let root = checkpoint.repoRoot
+        var failures: [String] = []
         for change in changes where change.kind == .delete {
             let path = (root as NSString).appendingPathComponent(change.path)
-            try? fm.removeItem(atPath: path)
+            do {
+                try fm.removeItem(atPath: path)
+            } catch {
+                // Already gone is what was wanted.
+                if !StoredFile.isMissing(error) { failures.append("Couldn't delete \(change.path): \(error.localizedDescription)") }
+            }
             removeEmptyParents(of: path, below: root)
         }
         let restores = changes.filter { $0.kind == .restore }.map(\.path)
         // Working tree only: the index and HEAD stay as they are.
         stride(from: 0, to: restores.count, by: 200).forEach { start in
             let chunk = Array(restores[start..<min(start + 200, restores.count)])
-            ReviewInbox.git(["restore", "--source=\(checkpoint.tree)", "--worktree", "--"] + chunk,
-                            in: root, gitDir: checkpoint.gitDir)
+            let result = ReviewInbox.git(["restore", "--source=\(checkpoint.tree)", "--worktree", "--"] + chunk,
+                                         in: root, gitDir: checkpoint.gitDir)
+            if !result.ok {
+                let why = short(result.error.trimmingCharacters(in: .whitespacesAndNewlines), 200)
+                failures.append("Couldn't restore \(chunk.count == 1 ? chunk[0] : "\(chunk.count) files")\(why.isEmpty ? "" : ": " + why)")
+            }
         }
+        return failures
     }
 
     private static func removeEmptyParents(of path: String, below root: String) {

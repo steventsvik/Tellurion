@@ -42,6 +42,7 @@ enum EditorTheme {
         let process = Process()
         process.executableURL = executable
         process.arguments = defaults ? ["+show-config", "--default"] : ["+show-config"]
+        process.environment = EventToken.scrubbed(ProcessInfo.processInfo.environment)
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice

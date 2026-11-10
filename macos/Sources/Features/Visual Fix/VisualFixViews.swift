@@ -132,7 +132,7 @@ private struct VisualFixToolbar: View {
         let live = localhost.sessions.filter { $0.url != nil && $0.isRunning }
         for app in live {
             guard let url = app.url else { continue }
-            let item = ClosureMenuItem("\(app.project.name)  —  localhost:\(url.port ?? 80)", image: nil) { session.load(url) }
+            let item = ClosureMenuItem("\(app.project.name)  —  \(LocalhostAddress.display(url))", image: nil) { session.load(url) }
             item.state = url.port == session.url?.port ? .on : .off
             menu.addItem(item)
         }
@@ -389,9 +389,11 @@ private struct HoverBox: View {
 /// The chosen element: marching cyan outline with pixel corner brackets.
 private struct SelectionBox: View {
     let rect: CGRect
+    @Environment(\.tellurionMotion) private var motion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+        // Marches only while the window is on screen.
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !motion)) { context in
             let phase = CGFloat(context.date.timeIntervalSinceReferenceDate * 18).truncatingRemainder(dividingBy: 12)
             ZStack {
                 Rectangle().fill(Tellurion.core.opacity(0.08))
@@ -428,9 +430,11 @@ private struct Brackets: View {
 private struct PinOutline: View {
     let state: VisualFixRequest.State
     let rect: CGRect
+    @Environment(\.tellurionMotion) private var motion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 20)) { context in
+        // Only a working request pulses, and only while the window is on screen.
+        TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !motion || state != .working)) { context in
             let pulse = 0.5 + 0.5 * sin(context.date.timeIntervalSinceReferenceDate * 4)
             let color = color
             Rectangle()
@@ -834,15 +838,18 @@ private struct VisualFixEmptyState: View {
     @ObservedObject var session: VisualFixSession
     @ObservedObject private var localhost = LocalhostSessions.shared
     @State private var address = ""
-    @State private var breathe = false
+    @Environment(\.tellurionMotion) private var motion
 
     var body: some View {
         VStack(spacing: 16) {
+            // The glow breathes as a layer animation: this panel is in the terminal's window.
             PixelIconView(icon: .target, color: Tellurion.gold, pixel: 5)
-                .scaleEffect(breathe ? 1.08 : 0.94)
-                .shadow(color: Tellurion.gold.opacity(breathe ? 0.6 : 0.2), radius: breathe ? 14 : 4)
-                .onAppear {
-                    withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) { breathe = true }
+                .background {
+                    if motion {
+                        BreathingGlowLayer(color: Tellurion.gold)
+                    } else {
+                        Circle().fill(Tellurion.gold.opacity(0.18)).blur(radius: 10)
+                    }
                 }
             Text("Point at your app, say what to change").font(Tellurion.font(14)).foregroundColor(Tellurion.text)
             Text("Start your dev server (or ask your agent to), then pick it here.\nClick anything on the page and your agent fixes it.")

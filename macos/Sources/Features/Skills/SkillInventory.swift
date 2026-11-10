@@ -420,25 +420,39 @@ enum SkillInventory {
 
     // MARK: Commands
 
+    /// Whether a skill's name, id or source is fit to put on a typed command line: letters,
+    /// digits and `._-/:@`, as real ones are ("owner/repo", "plugin@marketplace"), and not
+    /// starting like an option. They come from skills.sh and from `SKILL.md` files, which
+    /// anyone can write.
+    static func isTypable(_ name: String) -> Bool {
+        guard let first = name.utf8.first, first != UInt8(ascii: "-"), name.utf8.count <= 200 else { return false }
+        let extra = Set("._-/:@".utf8)
+        return name.utf8.allSatisfy { byte in
+            (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte) || extra.contains(byte)
+        }
+    }
+
     /// The shell line that updates `skill`, if it can be updated from here.
     static func updateCommand(_ skill: InstalledSkill) -> String? {
         switch skill.origin {
         case .registry:
+            guard isTypable(skill.name) else { return nil }
             if let root = skill.root {
                 return "cd \(AgentTools.shellQuote(root)) && npx -y skills@latest update \(AgentTools.shellQuote(skill.name)) -p -y"
             }
             return "npx -y skills@latest update \(AgentTools.shellQuote(skill.name)) -g -y"
         case .git: return "git -C \(AgentTools.shellQuote(skill.id)) pull --ff-only"
-        case .plugin(let id, _): return "claude plugin update \(AgentTools.shellQuote(id))"
-        case .hermesHub: return "hermes skills update \(AgentTools.shellQuote(skill.name))"
+        case .plugin(let id, _): return isTypable(id) ? "claude plugin update \(AgentTools.shellQuote(id))" : nil
+        case .hermesHub: return isTypable(skill.name) ? "hermes skills update \(AgentTools.shellQuote(skill.name))" : nil
         case .bundled, .local: return nil
         }
     }
 
     static let updateAllCommand = "npx -y skills@latest update -g -y"
 
-    /// The shell line that removes a skill `npx skills` installed.
-    static func removeCommand(_ skill: InstalledSkill) -> String {
+    /// The shell line that removes a skill `npx skills` installed, if its name can be typed.
+    static func removeCommand(_ skill: InstalledSkill) -> String? {
+        guard isTypable(skill.name) else { return nil }
         let line = "npx -y skills@latest remove \(AgentTools.shellQuote(skill.name))"
         if let root = skill.root { return "cd \(AgentTools.shellQuote(root)) && " + line + " -y" }
         return line + " -g -y"
