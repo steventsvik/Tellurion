@@ -52,7 +52,10 @@ enum ProcessRunner {
             // If the program exits without reading it all, the write fails instead of
             // raising SIGPIPE in the app.
             _ = fcntl(handle.fileDescriptor, F_SETNOSIGPIPE, 1)
-            DispatchQueue.global(qos: .utility).async {
+            // Its own thread, not a shared queue: when every queue thread is busy (many of
+            // these running at once), the input would never be written and the program
+            // would wait for it until the timeout.
+            Thread.detachNewThread {
                 try? handle.write(contentsOf: input)
                 try? handle.close()
             }
