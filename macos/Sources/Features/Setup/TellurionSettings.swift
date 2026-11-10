@@ -13,8 +13,10 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
     case localhost
     case review
     case undo
+    case checks
     case commandHistory
     case activity
+    case sessionSearch
     case background
     case usage
     case ports
@@ -32,7 +34,10 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
     case diagrams
     case accounts
     case missionMap
+    case conflicts
     case media
+    case budgets
+    case smallJobs
 
     var id: String { rawValue }
 
@@ -45,8 +50,10 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
         case .localhost: return "Localhost sessions"
         case .review: return "Review changes"
         case .undo: return "Undo agent turns"
+        case .checks: return "Project checks"
         case .commandHistory: return "Command history"
         case .activity: return "Agent activity"
+        case .sessionSearch: return "Search sessions"
         case .background: return "Background processes"
         case .usage: return "Usage meter"
         case .ports: return "Ports"
@@ -64,7 +71,10 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
         case .diagrams: return "Diagrams"
         case .accounts: return "Accounts"
         case .missionMap: return "Mission Map"
+        case .conflicts: return "Conflict radar"
         case .media: return "Media tiles"
+        case .budgets: return "Budgets"
+        case .smallJobs: return "Small jobs on this Mac"
         }
     }
 
@@ -77,8 +87,10 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
         case .localhost: return "Dev servers agents start open in their own tab and keep running"
         case .review: return "An inbox of each agent's finished changes, with comments and commit"
         case .undo: return "A snapshot before every agent turn, so you can roll a turn back"
+        case .checks: return "When an agent finishes, the project's own check runs, and done means it passed"
         case .commandHistory: return "Every command as a block with its output, and a fix chip when one fails"
         case .activity: return "Active time, prompts, files, tests and tokens per agent"
+        case .sessionSearch: return "One search box across every Claude Code and Codex session on this Mac"
         case .background: return "Finds dev servers, VMs and agents left running"
         case .usage: return "Your Claude and ChatGPT plan limits in the sidebar"
         case .ports: return "What's listening on which port in the sidebar, with Stop, and who holds a port a command couldn't get"
@@ -96,7 +108,10 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
         case .diagrams: return "Architecture and flow diagrams your CLI draws from the project, as editable sketches"
         case .accounts: return "More than one Claude Code or Codex sign-in, and which one each tile uses"
         case .missionMap: return "Who runs whom on a board: orchestrators, groups and every agent's status"
+        case .conflicts: return "Warns when two agents change the same file in the same folder, and can give each agent of a group its own worktree"
         case .media: return "Video and music files playing in a tile on a board"
+        case .budgets: return "A cap on what one agent session may cost at API prices or use in tokens, which pauses the agent when it's reached"
+        case .smallJobs: return "Short texts Tellurion asks a model for, such as a commit message, are written by a model on this Mac when one can; the rest go to Claude Code or Codex as before"
         }
     }
 
@@ -111,12 +126,13 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
         case .review: return "I"
         case .commandHistory: return "B"
         case .activity: return "A"
+        case .sessionSearch: return nil
         case .background: return "K"
         case .memory: return "Y"
         case .skills: return "U"
         case .environment: return "N"
-        case .undo, .usage, .ports, .git, .sharedMemory, .phone, .localModels, .menuBar,
-             .webTiles, .ink, .documents, .diagrams, .accounts, .missionMap, .media: return nil
+        case .undo, .checks, .usage, .ports, .git, .sharedMemory, .phone, .localModels, .menuBar,
+             .webTiles, .ink, .documents, .diagrams, .accounts, .missionMap, .conflicts, .media, .budgets, .smallJobs: return nil
         }
     }
 
@@ -187,9 +203,12 @@ final class TellurionSettings: ObservableObject {
 
     private init() {}
 
+    /// Off until you turn them on, whatever the preset: they change where something is done.
+    static let optIn: Set<TellurionFeature> = [.smallJobs]
+
     /// Whether `feature` is on. Safe from any thread.
     static func isOn(_ feature: TellurionFeature) -> Bool {
-        UserDefaults.standard.object(forKey: feature.key) as? Bool ?? true
+        UserDefaults.standard.object(forKey: feature.key) as? Bool ?? !optIn.contains(feature)
     }
 
     func isOn(_ feature: TellurionFeature) -> Bool { Self.isOn(feature) }
@@ -205,13 +224,13 @@ final class TellurionSettings: ObservableObject {
     }
 
     func apply(_ preset: TellurionPreset) {
-        for feature in TellurionFeature.allCases { set(feature, on: preset.features.contains(feature)) }
+        for feature in TellurionFeature.allCases where !Self.optIn.contains(feature) { set(feature, on: preset.features.contains(feature)) }
     }
 
     /// The preset matching the current switches, if any.
     var preset: TellurionPreset? {
-        let on = Set(TellurionFeature.allCases.filter(Self.isOn))
-        return TellurionPreset.allCases.first { $0.features == on }
+        let on = Set(TellurionFeature.allCases.filter(Self.isOn)).subtracting(Self.optIn)
+        return TellurionPreset.allCases.first { $0.features.subtracting(Self.optIn) == on }
     }
 
     static var motion: TellurionMotionLevel {
@@ -269,8 +288,13 @@ final class TellurionSettings: ObservableObject {
             AgentToolWindows.close(id: LocalhostSessions.windowID)
         case .review:
             AgentToolWindows.close(id: ReviewInbox.windowID)
+        case .checks:
+            AgentToolWindows.close(id: ProjectChecks.windowID)
+            AgentToolWindows.close(id: ProjectCheckLog.windowID)
         case .activity:
             AgentToolWindows.close(id: ActivityDashboard.windowID)
+        case .sessionSearch:
+            AgentToolWindows.close(id: SessionSearch.windowID)
         case .ports:
             PortsMonitor.shared.dismissConflict()
         case .memory:
@@ -294,7 +318,9 @@ final class TellurionSettings: ObservableObject {
             for board in BoardController.all { board.model.showMissionMap = false }
         case .accounts:
             for board in BoardController.all { board.model.showAccounts = false }
-        case .races, .undo, .usage, .git, .sharedMemory, .menuBar, .diagrams, .media:
+        case .budgets:
+            AgentToolWindows.close(id: BudgetsWindow.windowID)
+        case .races, .undo, .usage, .git, .sharedMemory, .menuBar, .diagrams, .conflicts, .media, .smallJobs:
             break
         }
     }

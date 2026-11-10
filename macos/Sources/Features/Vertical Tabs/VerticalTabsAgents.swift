@@ -174,6 +174,7 @@ final class VerticalTabsAgents {
         SetupChecks.shared.eventArrived()
         let before = info(for: surface)?.activity
         apply(event, to: surface)
+        AgentConflicts.shared.note(event: event.event, detail: event.detail, session: event.session, on: surface)
         AgentAlerts.shared.agentChanged(on: surface, from: before, to: info(for: surface))
         VerticalTabsTicker.shared.tickNow()
         NotificationCenter.default.post(name: Self.didChange, object: surface)

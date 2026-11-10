@@ -88,6 +88,7 @@ struct VerticalTabsLayout<Content: View>: View {
             TellurionLaunch.start()
             ReviewInbox.start()
             TurnCheckpoints.start()
+            ProjectChecks.start()
             VerticalTabsTestSupport.openTestTabsIfRequested(from: controller)
         }
     }
@@ -846,6 +847,7 @@ private struct VerticalTabPaneRow: View {
                 primaryLine
                 HStack(spacing: 6) {
                     VerticalTabKindLabel(agent: pane.agent, palette: palette)
+                    ProjectCheckMark(surface: pane.surface, activity: pane.agent?.activity, compact: true)
                     Spacer(minLength: 4)
                     // A pending review already counts the changes.
                     ReviewOrDiffChip(surface: pane.surface) { diffChip }
@@ -860,6 +862,10 @@ private struct VerticalTabPaneRow: View {
                 }
                 // A review loop it's in, and messages waiting to be typed into it.
                 if let surface = pane.surface { AgentMessagesLine(surface: surface, compact: true) }
+                // Files another agent is changing too.
+                if let surface = pane.surface { AgentConflictLine(surface: surface, compact: true) }
+                // Its budget, when one applies: the meter, and what to do at the cap.
+                if let surface = pane.surface { AgentBudgetLine(surface: surface, compact: true) }
             }
         }
     }

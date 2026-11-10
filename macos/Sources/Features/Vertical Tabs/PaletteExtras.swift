@@ -89,6 +89,13 @@ enum PaletteExtras {
                 ) {
                     AgentRaces.showSetup(from: owner)
                 }) }
+                if TellurionSettings.isOn(.races) { options.append(CommandOption(
+                    title: "Race Scoreboard",
+                    description: "Which agent's work you kept, by project and kind of task",
+                    leadingIcon: "chart.bar"
+                ) {
+                    AgentRaceScores.showScoreboard()
+                }) }
             }
             if TellurionSettings.isOn(.memory), let pwd = surfaceView.pwd {
                 options.append(CommandOption(
@@ -100,6 +107,7 @@ enum PaletteExtras {
                     MemoryWindow.show(folder: pwd)
                 })
             }
+            if TellurionSettings.isOn(.checks) { options.append(ProjectChecksWindow.paletteOption(folder: surfaceView.pwd)) }
             if TellurionSettings.isOn(.skills) {
                 options.append(CommandOption(
                     title: "Skills",
@@ -141,6 +149,7 @@ enum PaletteExtras {
                 })
             }
         }
+        options += AgentBudgets.paletteOptions(for: surfaceView)
         options.append(CommandOption(
             title: "Toggle Aurora",
             description: "The light behind the terminal that follows your agents",
@@ -149,6 +158,7 @@ enum PaletteExtras {
             let defaults = UserDefaults.standard
             defaults.set(!(defaults.object(forKey: AgentAurora.enabledKey) as? Bool ?? false), forKey: AgentAurora.enabledKey)
         })
+        if TellurionSettings.isOn(.sessionSearch) { options.append(SessionSearch.paletteOption) }
         if TellurionSettings.isOn(.background) { options.append(CommandOption(
             title: "Background Processes",
             description: "Dev servers, VMs, agents and more left running; close what's stale",
@@ -157,6 +167,7 @@ enum PaletteExtras {
         ) {
             HousekeepingWindow.show()
         }) }
+        if let worktrees = AgentWorktreesWindow.paletteOption() { options.append(worktrees) }
         if let board = TerminalWindows.controller(of: surfaceView.window) as? BoardController {
             options.append(CommandOption(
                 title: "Agent Map",

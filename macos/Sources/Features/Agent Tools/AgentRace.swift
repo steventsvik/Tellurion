@@ -55,6 +55,10 @@ final class AgentRaces: ObservableObject {
     /// Contestant terminals (tabs, or tiles on a board) opened in this run of the app, by race
     /// id + contestant id.
     private var tabs: [String: Weak<Ghostty.SurfaceView>] = [:]
+    /// The kind of task each race is, where the user corrected it in the race window.
+    @Published private(set) var corrected: [String: AgentRaceCategory] = [:]
+    /// What the wording of each race's task says it is, worked out once.
+    private var classified: [String: AgentRaceCategory] = [:]
     private let queue = DispatchQueue(label: "com.steventsvik.ghostty-extreme.races", qos: .userInitiated)
 
     static var directory: URL { AgentTools.root.appendingPathComponent("races", isDirectory: true) }
@@ -83,6 +87,42 @@ final class AgentRaces: ObservableObject {
 
     func activity(for race: AgentRace, _ contestant: AgentRace.Contestant) -> VerticalTabAgentInfo? {
         surface(for: race, contestant).flatMap { VerticalTabsAgents.shared.info(for: $0) }
+    }
+
+    /// The kind of task the race is, for the scoreboard: the user's correction, or else what
+    /// the task's wording says.
+    func category(of race: AgentRace) -> AgentRaceCategory {
+        if let category = corrected[race.id] ?? classified[race.id] { return category }
+        let category = AgentRaceCategory.classify(race.task)
+        classified[race.id] = category
+        return category
+    }
+
+    func setCategory(_ category: AgentRaceCategory, for race: AgentRace) {
+        corrected[race.id] = category
+    }
+
+    /// What's known about each contestant right now, by contestant id, for the scoreboard.
+    private func facts(of race: AgentRace) -> [String: AgentRaceFacts] {
+        var facts: [String: AgentRaceFacts] = [:]
+        for contestant in race.contestants {
+            guard let surface = surface(for: race, contestant) else { continue }
+            facts[contestant.id] = AgentRaceFacts(info: VerticalTabsAgents.shared.info(for: surface),
+                                                  checkPassed: AgentRaceScores.checkPassed(surface))
+        }
+        return facts
+    }
+
+    /// The scoreboard's record of the race as it stands. Runs git and reads the ends of the
+    /// transcripts, so it's for the race queue.
+    private static func scoreRecord(_ race: AgentRace, category: AgentRaceCategory, winner: String?,
+                                    facts: [String: AgentRaceFacts]) -> AgentRaceRecord {
+        var diffs: [String: AgentRaceDiff] = [:]
+        for contestant in race.contestants {
+            diffs[contestant.id] = computeDiff(contestant, binary: true).diff
+        }
+        return AgentRaceRecord(race: race, category: category, winner: winner,
+                               facts: facts.mapValues { $0.resolvingModel() }, diffs: diffs)
     }
 
     /// A race terminal: a purple tab, or a tile when the race was started from a board.
@@ -231,8 +271,11 @@ final class AgentRaces: ObservableObject {
         return (diff, patch)
     }
 
-    /// Applies the contestant's changes to the real project's working tree.
+    /// Applies the contestant's changes to the real project's working tree. When that works,
+    /// the race is decided and goes on the scoreboard with this contestant as the winner.
     func keep(_ contestant: AgentRace.Contestant, of race: AgentRace, completion: @escaping (String?) -> Void) {
+        let facts = self.facts(of: race)
+        let category = self.category(of: race)
         queue.async {
             let patch = Self.computeDiff(contestant, binary: true).patch
             guard !patch.isEmpty else {
@@ -242,7 +285,9 @@ final class AgentRaces: ObservableObject {
             let file = URL(fileURLWithPath: race.directory).appendingPathComponent("\(contestant.id).patch")
             try? patch.write(to: file, atomically: true, encoding: .utf8)
             let result = AgentTools.git(["apply", "--whitespace=nowarn", file.path], in: race.repoRoot)
+            let record = result.ok ? Self.scoreRecord(race, category: category, winner: contestant.id, facts: facts) : nil
             DispatchQueue.main.async {
+                if let record { AgentRaceScores.shared.record(record) }
                 completion(result.ok ? nil : """
                 The changes don't apply cleanly to your project (it probably changed since the race started).
 
@@ -279,14 +324,26 @@ final class AgentRaces: ObservableObject {
         _ = open(config, title: "Race · Judge", from: owner)
     }
 
-    /// Closes the race's tabs, deletes its worktrees and branches, and forgets it.
+    /// Closes the race's tabs, deletes its worktrees and branches, and forgets it. A race
+    /// nobody was kept from goes on the scoreboard as one without a winner, if anyone finished.
     func cleanUp(_ race: AgentRace) {
+        let undecided = !AgentRaceScores.shared.isDecided(race.id)
+        let facts = undecided ? self.facts(of: race) : [:]
+        let category = self.category(of: race)
+        corrected.removeValue(forKey: race.id)
+        classified.removeValue(forKey: race.id)
         for contestant in race.contestants {
             if let surface = surface(for: race, contestant) { TerminalWindows.close(surface) }
             tabs.removeValue(forKey: "\(race.id)/\(contestant.id)")
         }
         races.removeAll { $0.id == race.id }
         queue.async {
+            if undecided, facts.values.contains(where: { $0.activity == .done }) {
+                let record = Self.scoreRecord(race, category: category, winner: nil, facts: facts)
+                if record.countsWithoutWinner {
+                    DispatchQueue.main.async { AgentRaceScores.shared.record(record) }
+                }
+            }
             for contestant in race.contestants {
                 AgentTools.git(["worktree", "remove", "--force", contestant.worktree], in: race.repoRoot)
                 AgentTools.git(["branch", "-D", contestant.branch], in: race.repoRoot)
@@ -363,7 +420,7 @@ enum AgentToolWindows {
 extension AgentRaces {
     static func showSetup(from owner: BaseTerminalController) {
         guard TellurionSettings.isOn(.races) else { return }
-        AgentToolWindows.show(id: "race-setup", title: "Race Agents", size: NSSize(width: 520, height: 430)) {
+        AgentToolWindows.show(id: "race-setup", title: "Race Agents", size: NSSize(width: 520, height: 600)) {
             AgentRaceSetupView(owner: owner, folder: owner.focusedSurface?.pwd)
         }
     }
@@ -387,6 +444,9 @@ private struct AgentRaceSetupView: View {
     @State private var includeChanges = true
     @State private var starting = false
     @State private var error: String?
+    /// The folder's repository, for its track record; found once the window is up.
+    @State private var root: String?
+    @State private var advice: AgentRaceScores.Advice?
 
     private var total: Int { claude + codex }
 
@@ -413,6 +473,12 @@ private struct AgentRaceSetupView: View {
                 contestantStepper(.claude, value: $claude)
                 contestantStepper(.codex, value: $codex)
             }
+            if let advice {
+                AgentRaceAdviceLine(advice: advice) {
+                    claude = advice.count(.claude)
+                    codex = advice.count(.codex)
+                }
+            }
             Toggle("Include my uncommitted changes", isOn: $includeChanges)
                 .font(Tellurion.font(12))
             Text("Project: \(folder.map { ($0 as NSString).abbreviatingWithTildeInPath } ?? "unknown folder")")
@@ -420,8 +486,11 @@ private struct AgentRaceSetupView: View {
             if let error {
                 Text(error).font(Tellurion.font(12)).foregroundColor(.red).fixedSize(horizontal: false, vertical: true)
             }
+            Divider()
+            AgentRaceTrackRecord(root: root)
             Spacer(minLength: 0)
             HStack {
+                Button("Scoreboard…") { AgentRaceScores.showScoreboard() }
                 Spacer()
                 Button("Cancel") { AgentToolWindows.close(id: "race-setup") }
                     .keyboardShortcut(.cancelAction)
@@ -431,7 +500,23 @@ private struct AgentRaceSetupView: View {
             }
         }
         .padding(20)
-        .frame(minWidth: 480, minHeight: 400)
+        .frame(minWidth: 480, minHeight: 560)
+        .onAppear(perform: findRoot)
+        // The suggestion follows the task once typing pauses. It never moves the steppers itself.
+        .task(id: [task, root ?? ""]) {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            let found = AgentRaceScores.advice(forTask: task, root: root)
+            if found != advice { advice = found }
+        }
+    }
+
+    private func findRoot() {
+        guard let folder, root == nil else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let found = AgentTools.repoRoot(of: folder)
+            DispatchQueue.main.async { root = found }
+        }
     }
 
     private func contestantStepper(_ kind: VerticalTabAgentKind, value: Binding<Int>) -> some View {
@@ -505,6 +590,14 @@ private struct AgentRaceView: View {
                 }
             }
             Spacer()
+            Picker("Kind of task", selection: Binding(get: { races.category(of: race) },
+                                                      set: { races.setCategory($0, for: race) })) {
+                ForEach(AgentRaceCategory.allCases) { category in
+                    Text(category.label).tag(category)
+                }
+            }
+            .fixedSize()
+            .help("What the scoreboard counts this race as when you keep a winner. Change it if it's wrong.")
             if let owner {
                 Button {
                     AgentRaces.shared.judge(race, from: owner)

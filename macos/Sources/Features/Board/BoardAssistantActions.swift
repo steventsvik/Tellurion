@@ -507,7 +507,7 @@ extension BoardController {
         case "hand_item":
             guard let found = item(action, handles) else { return "No such item" }
             if let surface = surface(action.tile, handles) {
-                hand(found.item.id, in: found.card.id, to: surface)
+                guard hand(found.item.id, in: found.card.id, to: surface) else { return "\(tileLabel(surface)) has no agent running; not sent" }
                 return "Gave “\(Self.clip(found.item.text, 40))” to \(tileLabel(surface))"
             }
             let kind: VerticalTabAgentKind = action.agent == "codex" ? .codex : .claude

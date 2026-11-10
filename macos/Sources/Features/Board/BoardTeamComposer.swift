@@ -38,6 +38,7 @@ struct BoardOrchestratorComposer: View {
     @State private var goal = ""
     @State private var installed: [BoardAgent]?
     @State private var members: [Row] = []
+    @StateObject private var worktrees = WorktreeChoice()
 
     private struct Row: Identifiable {
         let id = UUID()
@@ -61,6 +62,8 @@ struct BoardOrchestratorComposer: View {
                     Spacer()
                     Button("Choose…", action: chooseFolder)
                 }
+                WorktreeOptionRow(choice: worktrees, folder: folder.isEmpty ? nil : folder,
+                                  agents: members.filter { $0.agent != "shell" }.count)
             }
 
             if let installed {
@@ -158,9 +161,15 @@ struct BoardOrchestratorComposer: View {
         let rows = members.map { row in
             (agent: installed.first { $0.binary == row.agent }, role: row.role.trimmingCharacters(in: .whitespaces).isEmpty ? "Member" : row.role)
         }
-        isPresented = false
         let text = goal.trimmingCharacters(in: .whitespacesAndNewlines)
-        controller.launchOrchestrator(members: rows, folder: folder.isEmpty ? nil : folder, goal: text.isEmpty ? nil : text)
+        // With a worktree each, they're made first; if that fails, nothing starts and the composer says why.
+        let request = WorktreeChoice.Request(group: "Orchestrator", kinds: rows.map { $0.agent?.binary ?? "shell" },
+                                             names: rows.map { $0.role }, folder: folder.isEmpty ? nil : folder)
+        worktrees.start(request, on: controller, launch: { folders in
+            controller.launchOrchestrator(members: rows, folder: folder.isEmpty ? nil : folder, goal: text.isEmpty ? nil : text,
+                                          folders: folders)
+            return nil
+        }, done: { isPresented = false })
     }
 }
 #endif

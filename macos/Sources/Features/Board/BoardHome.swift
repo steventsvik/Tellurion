@@ -122,6 +122,13 @@ struct BoardTopBar: View {
                 }
                 .help("When your usage limit resets next. Click for accounts.")
             }
+            if BoardStore.isReadOnly(controller.workspace.id) {
+                Label("Saved by a newer Tellurion: changes here aren't kept.", systemImage: "lock")
+                    .font(Tellurion.font(11.5)).foregroundColor(Tellurion.muted)
+                    .padding(.horizontal, 10).frame(height: 28)
+                    .background(Capsule().fill(Tellurion.panel.opacity(0.95)))
+                    .overlay(Capsule().strokeBorder(Tellurion.lineStrong))
+            }
         }
         .fixedSize()
         .onReceive(model.$agentTick) { _ in DispatchQueue.main.async { refreshCounts() } }

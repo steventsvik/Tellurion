@@ -126,6 +126,8 @@ changes unless you switch.
   list; its agents keep running. Its header menu messages, pauses, tidies or closes them all.
 - **Talk to a group:** type **@** in the bar and pick a group to message every tile in it.
 
+- **A worktree per agent:** the Group composer and the orchestrator composer can give every agent its own copy of the repository on its own new branch (`tellurion/<group>/<agent>`), so they can't overwrite each other. It's on by itself for two or more agents in a git repository with a commit; uncommitted changes aren't copied. **Worktrees** (a group's menu, or the command palette) lists them: open the folder, see what the agent changed, or remove it. Removing always asks first and never throws away unmerged work unless that's the button you press.
+
 ### Orchestrator
 
 <p align="center">
@@ -200,6 +202,10 @@ Add them from the **+** menu or by right-clicking the board. Hand a checklist it
 card to an agent on the board, or to a new Claude Code or Codex tile: the card moves to In
 Progress while the agent works and to Done when it finishes. Kanban boards have Backlog, To Do,
 In Progress and Done, with due dates and priorities.
+
+- **Drag a card onto an agent:** drop a kanban card on any agent's tile and it becomes that agent's task. Right-click a card or a checklist item and pick **Send to** for an agent on the board or a new Claude Code or Codex agent.
+- **Cards follow their agent:** a sent card moves to In Progress and wears a small status: queued, working, needs you, checking…, check failed, done or failed, with the agent's name. Click it to jump to that tile. It moves to Done when its agent finishes the turn; if the project has a check, only once the check passes.
+- **Run the To Do column:** from a kanban's menu, pick an agent and how many at once (1–6). Agents start beside the kanban and each takes the next card from the top when it's free. **Stop the Queue** ends it; agents finish what they have.
 
 ### Sketches, diagrams and documents
 
@@ -474,6 +480,41 @@ findings go back to the writer, until it approves or a round limit. Every messag
 your Send unless you turn on Send automatically, and nothing is ever typed into an agent
 mid-turn or over your own typing.
 
+### Done means verified
+
+- **Give a project its check:** `npm test`, `swift build`, `make lint`, whatever proves the work. When an agent finishes a turn that changed files, Tellurion runs it in the project's root and the agent's card says **Checking…**, **Verified** or **Check failed** beside Done, in the sidebar and in Mission Control.
+- **Only what you saved runs.** The command is set in the Checks window and kept in Tellurion's own folder; nothing in a repository can set or change it. Tellurion suggests commands it finds (package.json scripts, Makefile targets, Cargo, Swift packages, Go, pytest) as one-click fills, and nothing runs until you save.
+- **Click a failed check for its log,** then **Send to agent** to queue the command, how it ended and its last 80 lines for the agent's next turn, or **Run again**.
+- **Send failures back automatically** (per project, off by default) does that for you, at most three times in a row; your next prompt starts the count again.
+- Open it from the tools panel, the command palette (**Checks**) or a card's menu (**Project check…**).
+
+### Conflict radar
+
+- **Two agents, one file:** when two agents change the same file in the same folder, both get an amber line on their sidebar card, in Mission Control and on their board tile: "2 files also edited by Otto".
+- **See which files:** click the line for the list; click a file to open it. One notification the first time two agents meet on a file, and no repeats.
+- **Tell Both Agents** sends each a one-line heads-up naming the files and the other agent, typed in once they're between turns. Only when you click it.
+- **Knows what's apart:** agents in separate worktrees never conflict, and a file stops counting once it's committed or nobody has touched it for half an hour.
+- **It only watches.** Nothing is blocked.
+
+### Budgets
+
+Give an agent session a cap, and Tellurion stops it there.
+
+- **A cap per session:** dollars, tokens, or both. Dollars are what the session's usage would cost at API prices, the same API value the Activity window shows; on a subscription plan you aren't billed them.
+- **Three places to set one:** a default for every new session, a default per project, and **Budget…** on an agent's own card, which wins over both.
+- **A meter on the card:** "$1.20 of $5" in the sidebar, Mission Control and a board tile's title bar, with a note once it passes 80%.
+- **At the cap** the agent is paused, frozen mid-turn like a board's Pause all, never killed, or Tellurion just tells you, if you'd rather. **Add $5** or **+50%** lets it carry on; **Remove budget** takes the cap off.
+- **Venice and local models:** Venice sessions use Venice's own prices; a model on this Mac costs nothing, so only a token cap counts there.
+
+### Search sessions
+
+One search box across every Claude Code and Codex session on this Mac (View → Search Sessions, or the command palette). It reads the session history the agents already keep; nothing is indexed and nothing leaves your Mac.
+
+- **Find the line:** where an agent decided something, which session touched a file, what that command was. Results are grouped by session, newest first, with the matching lines marked **You**, **Agent**, **Ran** or **Edited**.
+- **Narrow it down:** by agent, by project, by the last 7 or 30 days, and by what to search: prompts, agent messages, commands, edited files. Tool output is off until you turn it on.
+- **A small search language:** words must all be on the same line, `"quoted words"` stay together, `-word` leaves lines out, and `file:Queue.swift` keeps to edits and commands on that file. All lowercase ignores case; one capital makes it exact.
+- **Then act on it:** **Resume** the session in a new tab, reveal its transcript in Finder, or copy a snippet.
+
 ### Review changes
 
 <p align="center">
@@ -587,6 +628,7 @@ Chat with a model that runs on your Mac: nothing leaves it, and it works offline
   marks these panes **Local**, and their sessions come back on the same model after an update.
   **Search the web** is a separate switch for them, off by default: the one thing that would leave
   your Mac.
+- **Small jobs on this Mac.** Turn on **Small jobs on this Mac** in Settings and the short texts Tellurion asks a model for, starting with **Suggest** for a commit message in Review, are written by a model on your Mac when one can. A job that doesn't fit, takes too long or comes back wrong goes on to Claude Code or Codex without you doing anything. Automatic never loads a big model by surprise.
 - **From a terminal:** `tellurion local <model>`, and `tellurion local codex [-m <model>]
   [--provider ollama|lmstudio]`.
 
@@ -689,6 +731,9 @@ is installed, it starts Colima and stops it again afterwards.
 ⌃⌘R gives the same task to several agents at once (Claude Code and Codex, or several of
 one), each in its own git worktree so they can't touch each other's work or yours. Compare
 their diffs side by side and apply the one you want.
+
+- **A scoreboard that learns:** every time you keep one agent's work, that's a win for it. The race window shows each agent's track record (wins, win rate, median time to finish) for this project and everywhere, by kind of task (bug fix, new feature, refactor, tests, docs, UI, performance, config).
+- **A suggestion when the record is clear:** "For bug fixes in this project, Codex has won 7 of 9. Race 2 Codex + 1 Claude Code?" It only appears after enough races, and never changes the lineup unless you press Use. **Race Scoreboard** (command palette) lists every decided race; the history keeps a short title and the numbers, not your prompts or the changes.
 
 ### Background processes
 
