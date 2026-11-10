@@ -44,7 +44,8 @@ final class VeniceProxy: @unchecked Sendable {
         self.readKey = readKey
     }
 
-    /// Serves, and writes where. Starting again does nothing but forget the key it had read.
+    /// Serves, and writes where. Starting again does nothing but forget the key it had read,
+    /// unless the listener has failed since: then it starts a new one.
     func start() throws {
         try queue.sync {
             apiKey = nil
@@ -53,15 +54,25 @@ final class VeniceProxy: @unchecked Sendable {
             parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
             let listener = try NWListener(using: parameters)
             let ready = DispatchSemaphore(value: 0)
-            listener.stateUpdateHandler = { state in
+            listener.stateUpdateHandler = { [weak self, weak listener] state in
                 switch state {
-                case .ready, .failed: ready.signal()
+                case .ready: ready.signal()
+                case .failed:
+                    ready.signal()
+                    // It stopped serving: forget it, so the next `start()` makes a new one.
+                    self?.queue.async {
+                        guard let self, let listener, self.listener === listener else { return }
+                        listener.cancel()
+                        self.listener = nil
+                        try? FileManager.default.removeItem(at: self.infoFile)
+                    }
                 default: break
                 }
             }
             listener.newConnectionHandler = { [weak self] connection in self?.accept(connection) }
             listener.start(queue: DispatchQueue.global(qos: .userInitiated))
-            _ = ready.wait(timeout: .now() + 3)
+            // A listener on this Mac is ready at once; this is called on the main thread.
+            _ = ready.wait(timeout: .now() + 1)
             guard let port = listener.port?.rawValue else {
                 listener.cancel()
                 throw Failure(message: "Couldn't start the connection to Venice.")

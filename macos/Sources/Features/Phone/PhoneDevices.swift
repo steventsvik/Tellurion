@@ -1,6 +1,7 @@
 #if os(macOS)
 import CryptoKit
 import Foundation
+import os
 import Security
 
 /// A phone allowed to use this Mac's terminal.
@@ -16,7 +17,7 @@ struct PhoneDevice: Codable, Identifiable, Equatable {
 }
 
 /// Paired phones and the one-time code that pairs a new one. Saved (tokens hashed) in
-/// ~/Library/Application Support/Tellurion/phone-devices.json, readable only by the user.
+/// ~/Library/Application Support/GhosttyEXTREME/phone-devices.json, readable only by the user.
 final class PhoneDevices: ObservableObject {
     static let shared = PhoneDevices()
 
@@ -28,17 +29,18 @@ final class PhoneDevices: ObservableObject {
 
     static let pairingLifetime: TimeInterval = 10 * 60
 
+    private static let log = StoredFile.logger("Phone")
+
+    /// The list's file. Dev-mode test copies keep their own list, and `TELLURION_TEST_HOME`
+    /// moves the folder.
     private static var file: URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        // Dev-mode test copies keep their own list.
-        return support.appendingPathComponent(PhoneServer.devMode ? "GhosttyEXTREME/phone-devices-dev.json" : "GhosttyEXTREME/phone-devices.json")
+        AgentTools.supportFolder.appendingPathComponent(PhoneServer.devMode ? "phone-devices-dev.json" : "phone-devices.json")
     }
 
     private init() {
-        if let data = try? Data(contentsOf: Self.file),
-           let saved = try? Self.decoder.decode([PhoneDevice].self, from: data) {
-            devices = saved
-        }
+        // A list that can't be read is moved aside rather than replaced by the next save.
+        devices = StoredFile.loadList(PhoneDevice.self, from: Self.file, what: "the paired phones", log: Self.log,
+                                      decoder: Self.decoder).value ?? []
     }
 
     // MARK: Pairing
@@ -111,25 +113,40 @@ final class PhoneDevices: ObservableObject {
         if Date().timeIntervalSince(previous) > 60 { save() }
     }
 
-    func remove(_ id: String) {
+    /// Forgets a phone and disconnects it. False when the list couldn't be saved: the phone
+    /// is gone until Tellurion quits, and would be paired again after that.
+    @discardableResult
+    func remove(_ id: String) -> Bool {
         devices.removeAll { $0.id == id }
-        save()
+        let saved = save()
         PhoneServer.shared.disconnect(device: id)
+        return saved
     }
 
-    func removeAll() {
+    /// `remove` for every phone.
+    @discardableResult
+    func removeAll() -> Bool {
         let ids = devices.map(\.id)
         devices = []
-        save()
+        let saved = save()
         for id in ids { PhoneServer.shared.disconnect(device: id) }
+        return saved
     }
 
-    private func save() {
-        let file = Self.file
-        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        guard let data = try? Self.encoder.encode(devices) else { return }
-        try? data.write(to: file, options: [.atomic])
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+    @discardableResult
+    private func save() -> Bool {
+        Self.write(devices, to: Self.file)
+    }
+
+    /// Writes the list, readable only by the user. Returns whether it worked.
+    static func write(_ devices: [PhoneDevice], to file: URL) -> Bool {
+        guard StoredFile.write(json: devices, to: file, what: "the paired phones", log: log, encoder: encoder) else { return false }
+        do {
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        } catch {
+            log.error("Couldn't make the paired phones' file private: \(error.localizedDescription, privacy: .public)")
+        }
+        return true
     }
 
     // MARK: Helpers

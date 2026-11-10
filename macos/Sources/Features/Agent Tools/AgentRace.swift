@@ -177,7 +177,8 @@ final class AgentRaces: ObservableObject {
         let race = AgentRace(id: id, task: task, repoRoot: root, directory: dir.path, created: Date(), contestants: contestants)
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
-        try? encoder.encode(race).write(to: dir.appendingPathComponent("race.json"))
+        StoredFile.write(json: race, to: dir.appendingPathComponent("race.json"), what: "an agent race",
+                         log: StoredFile.logger("Race"), encoder: encoder)
         return .success(race)
     }
 

@@ -167,6 +167,7 @@ final class EditorWebView: WKWebView {
     /// (Web pages mostly refuse to load inside another page, so this is a native view.)
     private var browser: WKWebView?
     private var browserURL: String?
+    private let browserGuard = BrowserGuard()
 
     private func povBrowser(_ body: [String: Any]) {
         if body["hide"] as? Bool == true {
@@ -182,6 +183,8 @@ final class EditorWebView: WKWebView {
             let configuration = WKWebViewConfiguration()
             configuration.websiteDataStore = .nonPersistent()
             view = WKWebView(frame: .zero, configuration: configuration)
+            view.navigationDelegate = browserGuard
+            view.uiDelegate = browserGuard
             view.setValue(false, forKey: "drawsBackground")
             addSubview(view)
             browser = view
@@ -260,6 +263,39 @@ private final class EditorNavigationGuard: NSObject, WKNavigationDelegate {
     }
 }
 
+/// Keeps AI POV's browser to showing pages, like a board's web tile: only web addresses,
+/// no downloads, no camera or microphone, and a new window opens in the same view.
+private final class BrowserGuard: NSObject, WKNavigationDelegate, WKUIDelegate {
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        let scheme = action.request.url?.scheme?.lowercased() ?? ""
+        if ["http", "https", "about", "data", "blob"].contains(scheme) || action.request.url == nil {
+            decisionHandler(action.shouldPerformDownload ? .cancel : .allow)
+            return
+        }
+        decisionHandler(.cancel)
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
+                 decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        // What the page can't show would be a download: refused.
+        decisionHandler(response.canShowMIMEType ? .allow : .cancel)
+    }
+
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                 for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = action.request.url { webView.load(URLRequest(url: url)) }
+        return nil
+    }
+
+    @available(macOS 12.0, *)
+    func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                 initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+                 decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        decisionHandler(.deny)
+    }
+}
+
 /// Serves macos/EditorWeb from the app bundle under ghostty-editor://app/. A custom
 /// scheme (rather than file://) lets Monaco start its web workers.
 private final class EditorAssetHandler: NSObject, WKURLSchemeHandler {
@@ -269,7 +305,8 @@ private final class EditorAssetHandler: NSObject, WKURLSchemeHandler {
         guard let url = task.request.url else { return }
         let relative = url.path.hasPrefix("/") ? String(url.path.dropFirst()) : url.path
         let file = base.appendingPathComponent(relative).standardizedFileURL
-        guard file.path.hasPrefix(base.standardizedFileURL.path),
+        let root = base.standardizedFileURL.path
+        guard file.path == root || file.path.hasPrefix(root + "/"),
               let data = try? Data(contentsOf: file) else {
             task.didFailWithError(URLError(.fileDoesNotExist))
             return

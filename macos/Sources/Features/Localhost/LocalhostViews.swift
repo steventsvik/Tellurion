@@ -36,11 +36,17 @@ struct LocalhostFrameworkBadge: View {
     }
 }
 
-/// `localhost:5173 ↗`: the thing you click to open the app.
+/// `localhost:5173/app/ ↗`: the thing you click to open the app.
 struct LocalhostURLPill: View {
     let session: LocalhostSession
     var large = false
     @State private var hovering = false
+
+    /// Where on the server it opens, when that isn't the root. Long ones are cut short.
+    private func path(of url: URL) -> String {
+        let shown = LocalhostAddress.display(url).drop { $0 != "/" }
+        return shown.count > 28 ? String(shown.prefix(27)) + "…" : String(shown)
+    }
 
     var body: some View {
         let accent = session.project.color
@@ -48,10 +54,13 @@ struct LocalhostURLPill: View {
             LocalhostSessions.shared.openInBrowser(session.url)
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: "globe").font(.system(size: large ? 12 : 10, weight: .semibold))
-                if let port = session.url?.port {
-                    Text("localhost").foregroundColor(.primary.opacity(0.75))
+                Image(systemName: session.url?.scheme == "https" ? "lock.fill" : "globe")
+                    .font(.system(size: large ? 12 : 10, weight: .semibold))
+                if let url = session.url, let port = url.port {
+                    (Text(verbatim: url.host ?? "localhost").foregroundColor(.primary.opacity(0.75))
                         + Text(verbatim: ":\(port)").foregroundColor(.primary).bold()
+                        + Text(verbatim: path(of: url)).foregroundColor(.primary.opacity(0.75)))
+                        .lineLimit(1)
                 } else {
                     Text(session.state == .starting && !session.isQuiet ? "starting…" : "not listening")
                         .foregroundColor(.secondary)

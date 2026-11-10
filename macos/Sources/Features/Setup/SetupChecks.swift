@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import Combine
+import OSLog
 import UserNotifications
 
 /// One line of the setup check: what was checked, how it stands, and how to fix it.
@@ -408,20 +409,10 @@ final class SetupChecks: ObservableObject {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
-        process.standardInput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        let out = Pipe()
-        process.standardOutput = out
-        try process.run()
-        let deadline = DispatchTime.now() + timeout
-        let done = DispatchSemaphore(value: 0)
-        DispatchQueue.global(qos: .utility).async { process.waitUntilExit(); done.signal() }
-        if done.wait(timeout: deadline) == .timedOut {
-            process.terminate()
-            return nil
-        }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        return process.terminationStatus == 0 ? String(decoding: data, as: UTF8.self) : nil
+        // Read as it runs (a shell's startup files can print a lot), without the event token.
+        let result = ProcessRunner.run(process, timeout: timeout, discardingError: true)
+        if let failure = result.launchError { throw CocoaError(.fileNoSuchFile, userInfo: [NSLocalizedDescriptionKey: failure]) }
+        return result.ok ? result.text : nil
     }
 
     // MARK: Hook errors
@@ -549,10 +540,16 @@ final class SetupChecks: ObservableObject {
     }
 
     /// Opens a new tab (or window, or a tile on a board) that runs `command` in the user's shell.
+    /// A command with a control character in it isn't typed at all: typed, one acts as a key
+    /// and could run something other than the line it's part of.
     static func openTab(running command: String) {
+        guard let line = AgentTools.typedLine(command + "\n") else {
+            StoredFile.logger("Setup").warning("Not typing a command with control characters: \(command.debugDescription, privacy: .public)")
+            return
+        }
         guard let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty else { return }
         var config = Ghostty.SurfaceConfiguration()
-        config.initialInput = command + "\n"
+        config.initialInput = line
         TerminalWindows.newTerminal(ghostty, from: TerminalWindows.front, config: config)
     }
 }

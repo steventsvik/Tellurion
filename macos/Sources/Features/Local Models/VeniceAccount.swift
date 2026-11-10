@@ -289,7 +289,7 @@ enum VeniceCodex {
     /// What `tellurion venice codex` names the provider, which Codex records in each session.
     static let provider = "venice"
 
-    /// Resumes a session (its id already quoted) on Venice.
+    /// Resumes a session (its id already checked, see `AgentResume`) on Venice.
     static func resumeLine(_ id: String) -> String {
         " " + command("resume \(id)") + "\n"
     }

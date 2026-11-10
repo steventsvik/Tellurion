@@ -16,6 +16,9 @@ struct ListedSkill: Identifiable, Hashable, Decodable {
     var isOfficial: Bool?
 
     var id: String { source + "/" + skillId }
+    /// Whether its source and id can go on the install line; skills.sh's lists are read
+    /// from the network, so an entry that fails this is left out.
+    var isTypable: Bool { SkillInventory.isTypable(source) && SkillInventory.isTypable(skillId) }
     var official: Bool { isOfficial == true }
     var owner: String { String(source.split(separator: "/").first ?? Substring(source)) }
     /// Its skills.sh page. Skills served from a website have none that works.
@@ -87,7 +90,7 @@ enum SkillDirectory {
             guard let r = Range(match.range, in: html) else { continue }
             let json = html[r].replacingOccurrences(of: #"\""#, with: "\"").replacingOccurrences(of: #"\\"#, with: "\\")
             guard let skill = try? JSONDecoder().decode(ListedSkill.self, from: Data(json.utf8)),
-                  seen.insert(skill.id).inserted else { continue }
+                  skill.isTypable, seen.insert(skill.id).inserted else { continue }
             result.append(skill)
         }
         return result
@@ -105,7 +108,8 @@ enum SkillDirectory {
         guard let reply = try? JSONDecoder().decode(Reply.self, from: data) else {
             return .failure(Failure(message: "skills.sh's search answered in a way this version doesn't understand"))
         }
-        return .success(reply.skills.map { ListedSkill(source: $0.source, skillId: $0.skillId, name: $0.name, installs: $0.installs ?? 0) })
+        return .success(reply.skills.map { ListedSkill(source: $0.source, skillId: $0.skillId, name: $0.name, installs: $0.installs ?? 0) }
+            .filter(\.isTypable))
     }
 
     /// The one-line description skills.sh shows for a skill, or for a skill served from a

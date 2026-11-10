@@ -235,8 +235,7 @@ enum BackendProbe {
     /// via the CLI's own login. The CLI needs a "linked" folder; a private one per project
     /// (holding nothing but the project's ref) keeps the user's repository untouched.
     private static func supabaseQuery(ref: String, sql: String) -> Any {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("GhosttyEXTREME/supabase/\(ref)")
+        let support = AgentTools.supportFolder.appendingPathComponent("supabase/\(ref)")
         let temp = support.appendingPathComponent("supabase/.temp")
         try? FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         try? ref.write(to: temp.appendingPathComponent("project-ref"), atomically: true, encoding: .utf8)

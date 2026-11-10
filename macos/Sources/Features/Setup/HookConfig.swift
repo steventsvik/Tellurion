@@ -59,7 +59,26 @@ enum HookConfig {
     static func legacyHooksFolder(home: String) -> String { home + "/.ghostty-custom/agent-hooks" }
 
     static func command(script: String, agent: Agent, event: Event) -> String {
-        "\(script) \(agent.rawValue) \(event.argument)"
+        "\(shellWord(script)) \(agent.rawValue) \(event.argument)"
+    }
+
+    /// `path` as one word of a shell command: as it is when that's safe (so commands written
+    /// before stay the same, which Codex's approvals depend on), in single quotes when it
+    /// has a space or anything else a shell would act on.
+    static func shellWord(_ path: String) -> String {
+        let plain = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-+~@%:,=")
+        if !path.isEmpty, path.unicodeScalars.allSatisfy(plain.contains) { return path }
+        return "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// `shellWord` undone; a word that isn't quoted comes back as it is.
+    static func unquoted(_ word: String) -> String {
+        guard word.count >= 2 else { return word }
+        if word.hasPrefix("'"), word.hasSuffix("'") {
+            return String(word.dropFirst().dropLast()).replacingOccurrences(of: "'\\''", with: "'")
+        }
+        if word.hasPrefix("\""), word.hasSuffix("\"") { return String(word.dropFirst().dropLast()) }
+        return word
     }
 
     // MARK: State
@@ -91,9 +110,11 @@ enum HookConfig {
         var report = Report()
         for event in events(for: agent) {
             let commands = handlers(in: hooks[event.name]).compactMap { $0["command"] as? String }
-            if let ours = commands.first(where: { isOurs($0, agent: agent, event: event) }) {
-                let script = String(ours.dropLast(" \(agent.rawValue) \(event.argument)".count))
-                report.entries[event.name] = isInstalledScript(script, home: home) ? .ok : .elsewhere(script)
+            if let ours = commands.first(where: { isOurs($0, agent: agent, event: event) }),
+               let script = script(in: ours, agent: agent, event: event) {
+                // A path with a space that isn't quoted runs nothing; merging rewrites it.
+                let works = isInstalledScript(script, home: home) && !needsQuoting(ours, script: script)
+                report.entries[event.name] = works ? .ok : .elsewhere(script)
             } else {
                 report.entries[event.name] = .missing
             }
@@ -124,8 +145,8 @@ enum HookConfig {
                 for h in handlers.indices {
                     guard let command = handlers[h]["command"] as? String, isOurs(command, agent: agent, event: event) else { continue }
                     found = true
-                    let current = String(command.dropLast(" \(agent.rawValue) \(event.argument)".count))
-                    if !isInstalledScript(current, home: home) {
+                    let current = self.script(in: command, agent: agent, event: event) ?? ""
+                    if !isInstalledScript(current, home: home) || needsQuoting(command, script: current) {
                         handlers[h]["command"] = self.command(script: script, agent: agent, event: event)
                         changes.append("Repointed \(event.name)")
                     }
@@ -230,9 +251,25 @@ enum HookConfig {
         (groups as? [[String: Any]] ?? []).flatMap { $0["hooks"] as? [[String: Any]] ?? [] }
     }
 
-    /// `…/agent-hook.sh claude stop` for this agent and event, wherever the script is.
-    private static func isOurs(_ command: String, agent: Agent, event: Event) -> Bool {
-        command.hasSuffix("agent-hook.sh \(agent.rawValue) \(event.argument)")
+    /// `…/agent-hook.sh claude stop` for this agent and event, wherever the script is, quoted
+    /// or not. The script's name has to be exactly ours: someone's own `my-agent-hook.sh`
+    /// taking the same arguments isn't.
+    static func isOurs(_ command: String, agent: Agent, event: Event) -> Bool {
+        script(in: command, agent: agent, event: event) != nil
+    }
+
+    /// The script one of our commands runs (unquoted), or nil when the command isn't ours.
+    static func script(in command: String, agent: Agent, event: Event) -> String? {
+        let arguments = " \(agent.rawValue) \(event.argument)"
+        guard command.hasSuffix(arguments) else { return nil }
+        let script = unquoted(String(command.dropLast(arguments.count)))
+        return script == "agent-hook.sh" || script.hasSuffix("/agent-hook.sh") ? script : nil
+    }
+
+    /// Whether `command` names `script` bare when a shell needs it quoted (a home folder
+    /// with a space in its name, in a command written before paths were quoted).
+    private static func needsQuoting(_ command: String, script: String) -> Bool {
+        command.hasPrefix(script) && shellWord(script) != script
     }
 
     private static func isInstalledScript(_ script: String, home: String) -> Bool {

@@ -32,10 +32,10 @@ enum BoardPresets {
         builtIns + saved()
     }
 
+    /// Your presets. A file that can't be read is moved aside (and logged) rather than
+    /// replaced by the next save; a preset that can't be decoded is skipped, the rest kept.
     static func saved() -> [BoardPreset] {
-        guard let data = try? Data(contentsOf: file),
-              let presets = try? JSONDecoder().decode([BoardPreset].self, from: data) else { return [] }
-        return presets
+        StoredFile.loadList(BoardPreset.self, from: file, what: "the board presets", log: BoardStore.log).value ?? []
     }
 
     static func save(_ preset: BoardPreset) {

@@ -703,7 +703,7 @@ private struct ActivitySessionRow: View {
               let owner = TerminalWindows.front ?? TerminalWindows.all.first else { return }
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = cwd
-        let id = AgentTools.shellQuote(session.id)
+        var backend = AgentResume.Backend.plain
         if session.onVenice {
             // Back on Venice, or not at all: plain Codex would send this work to another provider.
             let venice = VeniceAccount.shared
@@ -711,14 +711,15 @@ private struct ActivitySessionRow: View {
             let isPrivate = venice.models.first { $0.id == model }?.isPrivate ?? true
             guard venice.prepareUseOrShowProblem(modelName: model, isPrivate: isPrivate) else { return }
             config.environmentVariables.merge(VeniceCodex.environment(model: model)) { $1 }
-            config.initialInput = VeniceCodex.resumeLine(id)
+            backend = .venice(model: nil)
         } else if session.onLocal, let provider = session.codexProvider {
             // Back on the model on this Mac, or at least on its host: never on another provider.
             config.environmentVariables.merge(LocalCodex.environment(model: session.codexModel ?? "", provider: provider)) { $1 }
-            config.initialInput = LocalCodex.resumeLine(id, provider: provider, model: session.codexModel)
-        } else {
-            config.initialInput = (session.agent == "codex" ? "codex resume \(id)" : "claude --resume \(id)") + "\n"
+            backend = .local(provider: provider, model: session.codexModel)
         }
+        // Nothing is typed for an id that isn't a session's.
+        guard let line = AgentResume.line(session.kind, session: session.id, on: backend) else { return }
+        config.initialInput = line
         if let surface = TerminalWindows.newTerminal(owner.ghostty, from: owner, config: config) {
             TerminalWindows.controller(for: surface)?.window?.makeKeyAndOrderFront(nil)
         }

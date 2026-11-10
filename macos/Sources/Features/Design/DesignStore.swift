@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import Combine
+import os
 import SwiftUI
 
 /// The design in use: loads and saves it, resolves the chrome's colors and the logo for
@@ -44,12 +45,8 @@ final class DesignStore: ObservableObject {
     static var mineFolder: URL { folder.appendingPathComponent("designs", isDirectory: true) }
 
     private init() {
-        let decoder = JSONDecoder()
-        if let data = try? Data(contentsOf: Self.file), let saved = try? decoder.decode(TellurionDesign.self, from: data) {
-            design = saved
-        } else {
-            design = .standard
-        }
+        // A design file that can't be read is moved aside, not replaced by the next save.
+        design = StoredFile.load(TellurionDesign.self, from: Self.file, what: "the design", log: Self.log).value ?? .standard
         mine = Self.loadMine()
         resolve(reload: false, notify: false)
         // Not from init: the views and `Tellurion` read `shared`, which is still being made.
@@ -328,24 +325,56 @@ enum GhosttyDesignConfig {
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try fragment(for: design).write(to: fragmentFile, atomically: true, encoding: .utf8)
-            let existing = (try? String(contentsOf: config, encoding: .utf8)) ?? ""
-            let included = existing.split(whereSeparator: \.isNewline).contains { line in
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                guard trimmed.hasPrefix("config-file"), let eq = trimmed.firstIndex(of: "=") else { return false }
-                var value = trimmed[trimmed.index(after: eq)...].trimmingCharacters(in: .whitespaces)
-                if value.hasPrefix("?") { value.removeFirst() }
-                return value.trimmingCharacters(in: CharacterSet(charactersIn: "\"")) == fragmentName
-            }
-            if !included {
-                var text = existing
-                if !text.isEmpty && !text.hasSuffix("\n") { text += "\n" }
-                if !text.isEmpty { text += "\n" }
-                text += marker + "\n" + includeLine + "\n"
-                try text.write(to: config, atomically: true, encoding: .utf8)
-            }
+            try include(in: config)
         } catch {
-            NSLog("Tellurion design: could not write the Ghostty config fragment: \(error)")
+            log.error("Couldn't write the design into the Ghostty config: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    private static let log = StoredFile.logger("Design")
+
+    /// Whether a config's text already includes the fragment.
+    static func includesFragment(_ text: String) -> Bool {
+        text.split(whereSeparator: \.isNewline).contains { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("config-file"), let eq = trimmed.firstIndex(of: "=") else { return false }
+            var value = trimmed[trimmed.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+            if value.hasPrefix("?") { value.removeFirst() }
+            return value.trimmingCharacters(in: CharacterSet(charactersIn: "\"")) == fragmentName
+        }
+    }
+
+    /// What the config should become so that it includes the fragment: `existing` (nil when
+    /// there's no file) with our two lines after it, or nil when it includes it already.
+    /// The config's own bytes are kept exactly, whatever their encoding.
+    static func configIncludingFragment(_ existing: Data?) -> Data? {
+        var data = existing ?? Data()
+        // Read leniently: only the include line has to be recognised.
+        if includesFragment(String(decoding: data, as: UTF8.self)) { return nil }
+        if !data.isEmpty {
+            if data.last != 0x0A { data.append(0x0A) }
+            data.append(0x0A)
+        }
+        data.append(Data((marker + "\n" + includeLine + "\n").utf8))
+        return data
+    }
+
+    /// Makes the config at `config` include the fragment. Only a file that isn't there
+    /// counts as empty: one that can't be read is left alone (the error is thrown). A
+    /// symlinked config stays a link, and the file is backed up before it's changed.
+    static func include(in config: URL) throws {
+        // A symlinked config (a dotfiles repo) stays a link: write to what it points at.
+        let url = config.resolvingSymlinksInPath()
+        var existing: Data?
+        do {
+            existing = try Data(contentsOf: url)
+        } catch {
+            guard StoredFile.isMissing(error) else { throw error }
+        }
+        guard let updated = configIncludingFragment(existing) else { return }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try HookInstaller.backUp(url)
+        try updated.write(to: url, options: .atomic)
     }
 }
 #endif

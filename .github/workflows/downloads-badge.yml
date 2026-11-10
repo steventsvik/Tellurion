@@ -25,9 +25,10 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to a commit, with the version it is beside it (see ci.yml).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: badges
           path: badges
@@ -37,15 +38,26 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # A count that couldn't be read stops here: better yesterday's badge than one
+          # saying 0 downloads.
+          set -euo pipefail
           short() { awk -v n="$1" 'BEGIN {
             if (n >= 1000000) printf "%.1fM", n / 1000000;
             else if (n >= 1000) printf "%.1fk", n / 1000;
             else printf "%d", n }'; }
-          downloads=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
-            --jq '[.[].assets[].download_count] | add // 0' | jq -s 'add // 0')
+          number() { [[ "$2" =~ ^[0-9]+$ ]] || { echo "::error::couldn't read the $1 count"; exit 1; }; }
+          pages=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq '[.[].assets[].download_count] | add // 0')
+          downloads=$(jq -s 'add // 0' <<<"$pages")
           stars=$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.stargazers_count')
           release=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.name // .tag_name')
-          upstream=$(sed -n 's/^ *\.version = "\([^"]*\)".*/\1/p' build.zig.zon | head -1)
+          number downloads "$downloads"
+          number stars "$stars"
+          # The title is whatever was typed on the release page: one line, and no more than a badge holds.
+          release=$(printf '%s' "$release" | tr -d '\r\n' | cut -c1-60)
+          [ -n "$release" ] || { echo "::error::couldn't read the latest release"; exit 1; }
+          upstream=$(sed -n 's/^ *\.version = "\([^"]*\)".*/\1/p' build.zig.zon)
+          upstream=${upstream%%$'\n'*}
           {
             echo "downloads=$(short "$downloads")"
             echo "stars=$(short "$stars")"
@@ -53,23 +65,36 @@ jobs:
             echo "upstream=${upstream:-unknown}"
           } | tee -a "$GITHUB_OUTPUT"
 
+      # The release title is text someone typed. It reaches the scripts below as environment
+      # variables, never pasted into the script itself, where it could run as a command in a
+      # job that can write to the repository.
       - name: Render the badges
         working-directory: badges
         env:
           R: ../.github/badges/render.py
+          RELEASE: ${{ steps.facts.outputs.release }}
+          STARS: ${{ steps.facts.outputs.stars }}
+          DOWNLOADS: ${{ steps.facts.outputs.downloads }}
+          UPSTREAM: ${{ steps.facts.outputs.upstream }}
         run: |
-          python3 "$R" release.svg   release        "${{ steps.facts.outputs.release }}"
-          python3 "$R" stars.svg     stars          "${{ steps.facts.outputs.stars }}"
-          python3 "$R" downloads.svg downloads      "${{ steps.facts.outputs.downloads }}"
+          set -euo pipefail
+          python3 "$R" release.svg   release        "$RELEASE"
+          python3 "$R" stars.svg     stars          "$STARS"
+          python3 "$R" downloads.svg downloads      "$DOWNLOADS"
           python3 "$R" macos.svg     macOS          "13+" --logo apple
           python3 "$R" arm64.svg     "Apple silicon" arm64
           python3 "$R" license.svg   license        "AGPL-3.0"
-          python3 "$R" ghostty.svg   "based on"     "Ghostty ${{ steps.facts.outputs.upstream }}" --color 78dceb
+          python3 "$R" ghostty.svg   "based on"     "Ghostty $UPSTREAM" --color 78dceb
           rm -f downloads.json
 
       - name: Publish
         working-directory: badges
+        env:
+          RELEASE: ${{ steps.facts.outputs.release }}
+          STARS: ${{ steps.facts.outputs.stars }}
+          DOWNLOADS: ${{ steps.facts.outputs.downloads }}
         run: |
+          set -euo pipefail
           git add -A
           if git diff --cached --quiet; then
             echo "Unchanged."
@@ -77,5 +102,5 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -q -m "badges: ${{ steps.facts.outputs.release }}, ${{ steps.facts.outputs.stars }} stars, ${{ steps.facts.outputs.downloads }} downloads"
+          git commit -q -m "badges: $RELEASE, $STARS stars, $DOWNLOADS downloads"
           git push -q origin badges

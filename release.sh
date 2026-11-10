@@ -28,8 +28,20 @@ SIGN_ID="Developer ID Application: Steven Tsvik ($TEAM_ID)"
 NOTARY_PROFILE=GhosttyEXTREME
 # Ghostty's own update key: an app that still trusts it would accept official Ghostty builds.
 GHOSTTY_ED_KEY="wsNcGf5hirwtdXMVnYoxRIX/SqZQLMOsYlD3q3imeok="
+# Sparkle's tools come with the app's build. Several builds can have them (worktrees, other
+# projects): this app's newest build wins, and only then anyone's, so it's the same one each time.
 sparkle_tool() {
-  find ~/Library/Developer/Xcode/DerivedData -path "*/SourcePackages/artifacts/sparkle/Sparkle/bin/$1" -type f 2>/dev/null | head -1
+  local found=(~/Library/Developer/Xcode/DerivedData/Ghostty-*/SourcePackages/artifacts/sparkle/Sparkle/bin/$1(N.om[1]))
+  (( $#found )) || found=(~/Library/Developer/Xcode/DerivedData/*/SourcePackages/artifacts/sparkle/Sparkle/bin/$1(N.om[1]))
+  print -r -- ${found[1]:-}
+}
+# The Developer ID certificate, if this Mac has it. Read whole and then searched: a search
+# that stops at the first match kills the command feeding it, and with pipefail that reads
+# as "not found".
+has_certificate() {
+  local identities
+  identities=$(security find-identity -v -p codesigning) || return 1
+  [[ $identities == *"\"$SIGN_ID\""* ]]
 }
 TAG="extreme-$VERSION"
 ROOT=${0:A:h}
@@ -55,7 +67,7 @@ if [[ $MODE == keys ]]; then
   print "  Back the private key up: $GENERATE --account $KEY_ACCOUNT -x ~/ghostty-extreme-update-key.txt"
   print "  (keep that file somewhere safe and offline; without the key, installed copies can't update)"
   step "Developer ID and notarization"
-  security find-identity -v -p codesigning | grep -q "\"$SIGN_ID\"" \
+  has_certificate \
     || fail "no \"$SIGN_ID\" certificate; create it in Xcode → Settings → Accounts → Manage Certificates…"
   pass "\"$SIGN_ID\" is in your keychain"
   xcrun notarytool history --keychain-profile $NOTARY_PROFILE >/dev/null 2>&1 \
@@ -82,6 +94,13 @@ if [[ $MODE == draft ]]; then
   [[ $BRANCH == custom ]] || fail "drafts are made from custom (you're on $BRANCH); merge dev into custom with a pull request first"
   [[ $(git rev-parse HEAD) == $(git rev-parse origin/custom) ]] || fail "custom isn't pushed (or is behind origin)"
   pass "custom is pushed"
+  # A draft has no tag yet, so the check above can't see one. A second draft for the same
+  # version would leave two to tell apart on GitHub.
+  DRAFTS=$(gh api --paginate "repos/$REPO/releases" --jq '.[] | select(.draft) | [.tag_name, .name // "", .html_url] | @tsv') \
+    || fail "couldn't list the releases on GitHub"
+  EXISTING=$(awk -F'\t' -v tag="$TAG" '$1 == tag {printf "%s\"%s\" (%s)", sep, $2, $3; sep = ", "}' <<<"$DRAFTS")
+  [[ -z $EXISTING ]] || fail "$TAG already has a draft release: $EXISTING. Delete it on GitHub first, or publish that one."
+  pass "no draft for $TAG yet"
 fi
 section() { awk -v v="## $1" '$0==v {on=1; next} on && /^## / {exit} on' CHANGELOG.md; }
 NOTES_BODY=$(section $VERSION)
@@ -91,30 +110,46 @@ if [[ -z ${NOTES_BODY//[[:space:]]/} && $MODE == check ]]; then
 fi
 [[ -n ${NOTES_BODY//[[:space:]]/} ]] || fail "CHANGELOG.md has no \"## $VERSION\" section"
 [[ $MODE == draft ]] && pass "release notes found in CHANGELOG.md"
-PREV=$(git tag --sort=-v:refname | grep '^extreme-' | head -1)
+TAGS=$(git tag --list 'extreme-*' --sort=-v:refname) || fail "couldn't list the tags"
+PREV=${TAGS%%$'\n'*}
+[[ -n $PREV ]] || fail "no earlier extreme-* tag, so there's nothing to compare this release's changes against"
 
 # ── Secrets ─────────────────────────────────────────────────────────────
 step "Secrets in changes since $PREV"
-PATTERNS='(sk-(ant|proj)-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY|xox[baprs]-[A-Za-z0-9-]{10,})'
-if git diff "$PREV"..HEAD | grep -E '^\+' | grep -Eq "$PATTERNS"; then
-  git diff "$PREV"..HEAD | grep -E '^\+' | grep -En "$PATTERNS" | cut -c1-120
-  fail "something that looks like a key or token was added"
-fi
+# The changes go to a file first and are searched there (release-checks.sh). Searched straight
+# from git through a pipe, a match near the top ended the search early, git died of the closed
+# pipe, and with pipefail the check read that as "nothing found".
+mkdir -p $OUT || fail "couldn't create $OUT"
+CHANGES=$OUT/changes.diff
+git diff "$PREV"..HEAD > $CHANGES || fail "couldn't read the changes since $PREV"
+# check_changes <release-checks.sh arguments…>: 0 nothing found, 1 found (shown), else stops here.
+check_changes() {
+  local found result
+  found=$(./release-checks.sh "$@" 2>&1)
+  result=$?
+  (( result == 0 )) && return 0
+  (( result == 1 )) || fail "the check couldn't run: ${found//$'\n'/ }"
+  print -r -- "$found" | sed 's/^/    /'
+  return 1
+}
+# Shown as file:line with the value hidden, so a real key isn't printed a second time.
+check_changes secrets $CHANGES || fail "something that looks like a key or token was added"
 pass "no keys or tokens added"
-if git diff "$PREV"..HEAD | grep -E '^\+' | grep -v '^+++' | grep -q "/Users/$USER"; then
-  git diff "$PREV"..HEAD | grep -E '^\+' | grep -v '^+++' | grep -n "/Users/$USER" | cut -c1-120
-  fail "a path inside your home folder was added to the code"
-fi
+check_changes mentions $CHANGES "/Users/$USER" || fail "a path inside your home folder was added to the code"
 pass "no paths to your home folder added"
+rm -f $CHANGES
 # Words that must never appear in the repo or the release notes, one per line, kept
 # outside the repo so the list itself isn't published.
 BLOCKLIST=~/.ghostty-extreme/release-blocklist
 if [[ -s $BLOCKLIST ]]; then
+  MESSAGES=$(git log "$PREV"..HEAD --format=%B) || fail "couldn't read the commit messages since $PREV"
   while IFS= read -r word || [[ -n $word ]]; do
     word=${word%$'\r'}
     [[ -z ${word//[[:space:]]/} ]] && continue
-    if git grep -qiF -- "$word" HEAD || git log "$PREV"..HEAD --format=%B | grep -qiF -- "$word" \
-      || print -r -- "$NOTES_BODY" | grep -qiF -- "$word"; then
+    git grep -qiF -e "$word" HEAD
+    IN_CODE=$?
+    (( IN_CODE <= 1 )) || fail "couldn't search the code for blocked words"
+    if (( IN_CODE == 0 )) || grep -qiF -e "$word" <<<"$MESSAGES" || grep -qiF -e "$word" <<<"$NOTES_BODY"; then
       fail "a blocked word from $BLOCKLIST appears in the code, a commit message or the release notes"
     fi
   done < $BLOCKLIST
@@ -140,8 +175,14 @@ rm -rf agent-hooks/__pycache__
   SYMROOT="$PWD/build" ARCHS=arm64 ONLY_ACTIVE_ARCH=YES TELLURION_TEST_HOOKS= build > $OUT/xcode.log 2>&1) \
   || { grep -E "error:" $OUT/xcode.log | head -10; fail "app build failed (log: $OUT/xcode.log)"; }
 pass "app"
-LINT=$(cd macos && swiftlint lint --quiet 2>/dev/null | grep -c ' error: ')
-[[ $LINT == 0 ]] || fail "SwiftLint: $LINT errors"
+# SwiftLint exits 0 when clean and 2 when it found errors. Missing, or stopped by anything
+# else (a crash, a bad configuration), it has checked nothing, and that isn't "0 errors".
+command -v swiftlint >/dev/null || fail "SwiftLint isn't installed (brew install swiftlint)"
+(cd macos && swiftlint lint --quiet > $OUT/swiftlint.log 2>&1)
+LINT_EXIT=$?
+[[ $LINT_EXIT == 0 || $LINT_EXIT == 2 ]] || { tail -5 $OUT/swiftlint.log; fail "SwiftLint couldn't run (exit $LINT_EXIT, log: $OUT/swiftlint.log)"; }
+LINT=$(grep -c ' error: ' $OUT/swiftlint.log)
+[[ $LINT_EXIT == 0 && $LINT == 0 ]] || fail "SwiftLint: $LINT errors (log: $OUT/swiftlint.log)"
 pass "SwiftLint: 0 errors"
 for js in macos/EditorWeb/*.js; do node --check $js || fail "$js has a syntax error"; done
 pass "editor scripts parse"
@@ -150,7 +191,7 @@ pass "editor scripts parse"
 step "Package"
 APP=$OUT/Tellurion.app
 rm -rf $APP $OUT/Tellurion-agent-hooks $OUT/*.zip(N)
-ditto macos/build/ReleaseLocal/Ghostty.app $APP
+ditto macos/build/ReleaseLocal/Ghostty.app $APP || fail "couldn't copy the built app"
 # Files built under ~/Desktop carry com.apple.provenance; dropped here, and the archives below
 # are made without extended attributes, so no `._` AppleDouble files ride along.
 xattr -cr $APP 2>/dev/null || true
@@ -161,7 +202,7 @@ xattr -cr $APP 2>/dev/null || true
 # The menu bar shows CFBundleName, which Xcode sets from the target name ("Ghostty").
 /usr/libexec/PlistBuddy -c "Set :CFBundleName Tellurion" $APP/Contents/Info.plist
 # Debug info carries the build machine's paths; the release doesn't need it.
-find $APP -type f -perm +111 -exec sh -c 'file "$1" | grep -q Mach-O && strip -S -x "$1" 2>/dev/null; true' _ {} \;
+find $APP -type f -perm +111 -exec sh -c 'case "$(file -b "$1")" in *Mach-O*) strip -S -x "$1" 2>/dev/null ;; esac; true' _ {} \;
 LEAKS=$(LC_ALL=C grep -rl -a "/Users/$USER" $APP | wc -l | xargs)
 [[ $LEAKS == 0 ]] || { LC_ALL=C grep -rl -a "/Users/$USER" $APP | head -5; fail "$LEAKS files in the app contain your home path"; }
 pass "no home-folder paths in the app"
@@ -172,8 +213,10 @@ SWITCHES=$(./release-checks.sh test-switches $BIN macos/Sources 2>&1) || fail "t
 LC_ALL=C grep -a -q 'TELLURION_TEST_HOME' $BIN || fail "the app lost TELLURION_TEST_HOME, which test copies and the launch test need"
 pass "no test or demo switches in the app (TELLURION_TEST_HOME kept)"
 # Ghostty's icons are its trademark; the only icon file in the app is Tellurion's.
-ICONS=$(cd $APP/Contents/Resources && ls *.icns(N) | grep -vx Tellurion.icns | xargs)
-[[ -z $ICONS ]] || fail "the app contains other icons: $ICONS"
+[[ -f $APP/Contents/Resources/Tellurion.icns ]] || fail "the app has no Tellurion.icns"
+ICONS=($APP/Contents/Resources/*.icns(N:t))
+ICONS=(${ICONS:#Tellurion.icns})
+(( $#ICONS == 0 )) || fail "the app contains other icons: $ICONS"
 pass "only Tellurion's icon in the app"
 [[ -z $(find $APP -name "*.profraw" | head -1) ]] || fail "the app contains a profiling file (*.profraw)"
 # Signed inside out with the hardened runtime and a secure timestamp, as notarization requires:
@@ -193,7 +236,7 @@ sign_app() {  # sign_app <app> <identity> <entitlements>
     && codesign $opts --entitlements $3 $a \
     && codesign --verify --deep --strict $a
 }
-if security find-identity -v -p codesigning | grep -q "\"$SIGN_ID\""; then
+if has_certificate; then
   sign_app $APP "$SIGN_ID" macos/Ghostty.entitlements 2>$OUT/codesign.log || { tail -5 $OUT/codesign.log; fail "signing failed"; }
   pass "signed with \"$SIGN_ID\" (hardened runtime) and verified"
   SIGNED=1
@@ -209,6 +252,7 @@ APP_ED_KEY=$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" $APP/Contents/Inf
 SIGN_UPDATE=$(sparkle_tool sign_update)
 GENERATE=$(sparkle_tool generate_keys)
 [[ -n $SIGN_UPDATE && -n $GENERATE ]] || fail "Sparkle's sign_update / generate_keys not found (build the app in Xcode once)"
+pass "Sparkle's tools: ${SIGN_UPDATE:h}"
 [[ $($GENERATE --account $KEY_ACCOUNT -p 2>/dev/null) == $APP_ED_KEY ]] \
   || fail "the app's SUPublicEDKey isn't the key in your keychain (\"$KEY_ACCOUNT\"); updates would be rejected"
 pass "updates signed with your key ($KEY_ACCOUNT) will be accepted"
@@ -217,14 +261,30 @@ pass "version $VERSION"
 
 HOOKS=$OUT/Tellurion-agent-hooks
 mkdir -p $HOOKS
-for f in agent-hook.sh ghostty-extreme.zsh tellurion ghostty-extreme install.sh localhost localhost-run codex-hook.py memory_context.py install-codex.py agent-event.py opencode-plugin.js venice-catalog.py venice-search.py; do
+# One list for the zip, the syntax checks and the comparison with the app: every file of
+# agent-hooks/ in this commit except its tests. A list kept by hand left out files `tellurion`
+# needs (local-chat.py, local-catalog.py), and nothing compared them with the app's copies.
+HOOK_LISTING=$(git ls-tree HEAD agent-hooks/) || fail "couldn't list agent-hooks/"
+HOOK_FILES=()
+HOOK_EXECUTABLES=()
+for line in ${(f)HOOK_LISTING}; do
+  f=${${line#*$'\t'}:t}
+  [[ $f == test_* ]] && continue
+  [[ $line == 100* ]] || fail "agent-hooks/$f isn't a plain file"
+  HOOK_FILES+=($f)
+  [[ $line == 100755* ]] && HOOK_EXECUTABLES+=($f)
+done
+for f in tellurion localhost agent-hook.sh codex-hook.py local-chat.py local-catalog.py venice-search.py; do
+  (( ${HOOK_FILES[(Ie)$f]} )) || fail "agent-hooks/$f missing"
+done
+for f in $HOOK_FILES; do
   git show HEAD:agent-hooks/$f > $HOOKS/$f || fail "agent-hooks/$f missing"
 done
-chmod +x $HOOKS/{agent-hook.sh,tellurion,ghostty-extreme,install.sh,localhost,localhost-run,codex-hook.py,install-codex.py,agent-event.py}
+(cd $HOOKS && chmod +x $HOOK_EXECUTABLES) || fail "couldn't mark the hooks executable"
 grep -rqE "/Users/|$USER" $HOOKS && fail "the hooks contain a personal path or name"
 for f in $HOOKS/*.sh $HOOKS/localhost $HOOKS/localhost-run $HOOKS/tellurion $HOOKS/ghostty-extreme; do bash -n $f || fail "$f has a syntax error"; done
 # The app installs these itself (welcome window, Check Setup).
-for f in agent-hook.sh ghostty-extreme.zsh tellurion ghostty-extreme codex-hook.py memory_context.py localhost localhost-run agent-event.py opencode-plugin.js venice-catalog.py venice-search.py; do
+for f in $HOOK_FILES; do
   cmp -s $HOOKS/$f $APP/Contents/Resources/agent-hooks/$f || fail "the app's bundled agent-hooks/$f doesn't match the repo"
 done
 # Parse only: py_compile would leave a __pycache__ folder in the release.
@@ -277,8 +337,9 @@ if [[ $SIGNED == 1 ]]; then
   # What a downloaded copy goes through: quarantined, then judged by Gatekeeper.
   GK=$OUT/gatekeeper && rm -rf $GK && mkdir -p $GK && ditto $APP $GK/Tellurion.app
   xattr -w com.apple.quarantine "0081;$(printf %x $(date +%s));Safari;" $GK/Tellurion.app
-  spctl --assess --type execute -vv $GK/Tellurion.app 2>&1 | grep -q 'source=Notarized Developer ID' \
-    || { spctl --assess --type execute -vv $GK/Tellurion.app; fail "Gatekeeper wouldn't open a downloaded copy"; }
+  VERDICT=$(spctl --assess --type execute -vv $GK/Tellurion.app 2>&1)
+  [[ $? == 0 && $VERDICT == *'source=Notarized Developer ID'* ]] \
+    || { print -r -- "$VERDICT"; fail "Gatekeeper wouldn't open a downloaded copy"; }
   rm -rf $GK
   pass "Gatekeeper opens a downloaded copy (Notarized Developer ID)"
 else
@@ -292,21 +353,26 @@ HOOKZIP=Tellurion-$VERSION-agent-hooks.zip
 # --norsrc --noextattr: a zip with AppleDouble (`._`) entries opens fine in Archive Utility, but
 # other unarchivers (The Unarchiver, Keka, unzip) leave them inside the bundle, which breaks the
 # signature, and macOS then refuses the app as unverifiable. 1.7.1 shipped that way.
-(cd $OUT && ditto -c -k --keepParent --norsrc --noextattr Tellurion.app $APPZIP && ditto -c -k --keepParent --norsrc --noextattr Tellurion-agent-hooks $HOOKZIP)
-! unzip -l $OUT/$APPZIP | grep -q '/\._' || fail "the app zip carries AppleDouble files; third-party unarchivers would break the signature"
+(cd $OUT && ditto -c -k --keepParent --norsrc --noextattr Tellurion.app $APPZIP && ditto -c -k --keepParent --norsrc --noextattr Tellurion-agent-hooks $HOOKZIP) \
+  || fail "couldn't make the archives"
+LISTING=$(unzip -l $OUT/$APPZIP) || fail "couldn't read back the app zip"
+[[ $LISTING == *Tellurion.app/Contents/MacOS/ghostty* ]] || fail "the app zip doesn't contain the app"
+[[ $LISTING != *'/._'* ]] || fail "the app zip carries AppleDouble files; third-party unarchivers would break the signature"
 if [[ $SIGNED == 1 ]]; then
   # What a third-party unarchiver produces: a plain unzip, quarantined, judged by Gatekeeper.
-  GK=$OUT/gatekeeper-unzip && rm -rf $GK && mkdir -p $GK && (cd $GK && unzip -q $OUT/$APPZIP)
+  GK=$OUT/gatekeeper-unzip && rm -rf $GK && mkdir -p $GK && (cd $GK && unzip -q $OUT/$APPZIP) || fail "couldn't unpack the app zip"
   xattr -w com.apple.quarantine "0081;$(printf %x $(date +%s));Safari;" $GK/Tellurion.app
   codesign --verify --deep --strict $GK/Tellurion.app 2>/dev/null || fail "the app zip, unpacked with unzip, has a broken signature"
-  spctl --assess --type execute -vv $GK/Tellurion.app 2>&1 | grep -q 'source=Notarized Developer ID' \
-    || { spctl --assess --type execute -vv $GK/Tellurion.app; fail "Gatekeeper wouldn't open the zip as a third-party unarchiver unpacks it"; }
+  VERDICT=$(spctl --assess --type execute -vv $GK/Tellurion.app 2>&1)
+  [[ $? == 0 && $VERDICT == *'source=Notarized Developer ID'* ]] \
+    || { print -r -- "$VERDICT"; fail "Gatekeeper wouldn't open the zip as a third-party unarchiver unpacks it"; }
   rm -rf $GK
   pass "the zip opens whichever unarchiver unpacks it (no AppleDouble files, Notarized Developer ID)"
 fi
 APPSHA=$(shasum -a 256 $OUT/$APPZIP | cut -d' ' -f1)
 HOOKSHA=$(shasum -a 256 $OUT/$HOOKZIP | cut -d' ' -f1)
-(cd $OUT && shasum -a 256 $APPZIP $HOOKZIP > SHA256SUMS)
+[[ ${#APPSHA} == 64 && ${#HOOKSHA} == 64 ]] || fail "couldn't take the archives' checksums"
+(cd $OUT && shasum -a 256 $APPZIP $HOOKZIP > SHA256SUMS) || fail "couldn't write SHA256SUMS"
 pass "SHA256SUMS (install.sh checks downloads against it)"
 # The update feed: one item, this release, its zip signed with the update key.
 SIGNATURE=$($SIGN_UPDATE --account $KEY_ACCOUNT $OUT/$APPZIP) || fail "couldn't sign the update"

@@ -28,6 +28,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 DIM, BOLD, GOLD, RED, RESET = "\033[2m", "\033[1m", "\033[38;5;179m", "\033[31m", "\033[0m"
@@ -43,6 +44,7 @@ def clean(text):
 
 
 def tellurion_home():
+    """Where the app keeps .ghostty-extreme: the home folder, or a test copy's own."""
     return os.environ.get("TELLURION_TEST_HOME") or os.path.expanduser("~")
 
 
@@ -77,7 +79,7 @@ def configure(provider, base):
     elif provider == "openai":
         BASE = (base or "http://127.0.0.1:8080").rstrip("/")
     elif provider == "apple":
-        with open(os.path.join(os.path.expanduser("~"), ".ghostty-extreme", "apple-model.json")) as handle:
+        with open(os.path.join(tellurion_home(), ".ghostty-extreme", "apple-model.json")) as handle:
             server = json.load(handle)
         BASE = f"http://127.0.0.1:{int(server['port'])}"
         HEADERS["Authorization"] = "Bearer " + server["token"]
@@ -111,7 +113,7 @@ def report(model, event, detail=""):
         pass
 
 
-FEED = os.path.join(os.path.expanduser("~"), ".ghostty-extreme", "feeds", f"local-{os.getpid()}.jsonl")
+FEED = os.path.join(tellurion_home(), ".ghostty-extreme", "feeds", f"local-{os.getpid()}.jsonl")
 
 
 def record(kind, content):
@@ -126,16 +128,32 @@ def record(kind, content):
         block = {"type": "thinking", "thinking": content} if kind == "thinking" else {"type": "text", "text": content}
         entry = {"type": "assistant", "timestamp": stamp, "message": {"role": "assistant", "content": [block]}}
     try:
-        os.makedirs(os.path.dirname(FEED), exist_ok=True)
-        with open(FEED, "a", encoding="utf-8") as feed:
+        # The conversation itself: for this user only.
+        os.makedirs(os.path.dirname(FEED), mode=0o700, exist_ok=True)
+        descriptor = os.open(FEED, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(descriptor, "a", encoding="utf-8") as feed:
+            os.fchmod(descriptor, 0o600)
             feed.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except OSError:
         pass
 
 
+def on_this_mac(url):
+    host = urllib.parse.urlsplit(url).hostname or ""
+    return host in ("localhost", "::1") or re.fullmatch(r"127(\.\d{1,3}){3}", host) is not None
+
+
+def send(request, timeout):
+    """Opens a request. To a server on this Mac it goes direct, whatever proxy the environment
+    names (http_proxy): through one, the chat and its token would go to the proxy instead."""
+    if on_this_mac(request.full_url):
+        return urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=timeout)
+    return urllib.request.urlopen(request, timeout=timeout)
+
+
 def post(path, payload, timeout=600):
     request = urllib.request.Request(BASE + path, data=json.dumps(payload).encode(), headers=HEADERS)
-    return urllib.request.urlopen(request, timeout=timeout)
+    return send(request, timeout)
 
 
 NOT_SERVING = "Tellurion isn't connected to Venice right now. Open Tellurion, or connect your account in Tools → Local models."
@@ -191,7 +209,7 @@ def venice_check(model):
     request = urllib.request.Request(BASE + "/v1/models?type=text", headers=HEADERS)
     spec = {}
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
+        with send(request, 20) as response:
             for row in json.load(response).get("data", []):
                 if row.get("id") == model:
                     spec = row.get("model_spec") or {}

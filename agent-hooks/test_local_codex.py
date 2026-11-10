@@ -197,6 +197,9 @@ class TellurionLocalCodexTests(unittest.TestCase):
     def argv(self):
         return Path(str(self.log) + ".argv").read_text().splitlines()
 
+    def child_env(self):
+        return dict(line.split("=", 1) for line in Path(str(self.log) + ".env").read_text().splitlines() if "=" in line)
+
     def codex_ran(self):
         return Path(str(self.log) + ".argv").exists()
 
@@ -291,12 +294,35 @@ class TellurionLocalCodexTests(unittest.TestCase):
         self.assertEqual(argv[argv.index("-m") + 1], "zeta:27b")
         self.assertNotIn("--provider", argv)
         self.assertNotIn("--base", argv)
+        self.assertEqual(self.child_env()["CODEX_OSS_BASE_URL"], f"http://{self.address}/v1",
+                         "Codex goes to the server that was checked, not to LM Studio's usual port")
         written = json.loads((self.root / "local/codex-catalog.json").read_text())
         self.assertEqual([entry["slug"] for entry in written["models"]], ["zeta:27b", "alpha:7b", "plain:latest", "tiny:1b"],
                          "LM Studio doesn't say which can call tools, so all are offered, and no embedding models")
         self.assertEqual(written["models"][0]["context_window"], 32768)
         self.assertEqual(written["models"][1]["context_window"], 262144)
         self.assertNotIn(("POST", "/api/generate", "zeta:27b"), Server.seen)
+
+    def test_codex_is_sent_to_the_ollama_that_was_checked(self):
+        # Codex doesn't read OLLAMA_HOST: left alone it would talk to 127.0.0.1:11434 whatever was checked.
+        self.run_cli()
+        self.assertEqual(self.child_env()["CODEX_OSS_BASE_URL"], f"http://{self.address}/v1")
+        self.assertFalse(any("model_providers" in a for a in self.argv()))
+
+    def test_base_moves_ollama_too(self):
+        result = self.run_cli("--base", f"http://{self.address}/", OLLAMA_HOST="127.0.0.1:%d" % closed_port())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.child_env()["CODEX_OSS_BASE_URL"], f"http://{self.address}/v1")
+        self.assertEqual(self.argv()[self.argv().index("--local-provider") + 1], "ollama")
+        self.assertIn(("POST", "/api/generate", "zeta:27b"), Server.seen)
+
+    def test_a_folder_with_a_quote_in_its_name_stays_one_setting(self):
+        odd = self.home / 'we"ird \\ place'
+        (odd / ".ghostty-extreme").mkdir(parents=True)
+        result = self.run_cli(TELLURION_TEST_HOME=str(odd))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.setting(self.argv(), "model_catalog_json"),
+                         '"' + str(odd).replace("\\", "\\\\").replace('"', '\\"') + '/.ghostty-extreme/local/codex-catalog.json"')
 
     def test_base_needs_a_web_address(self):
         result = self.run_cli("--provider", "lmstudio", "--base", "ls -la")

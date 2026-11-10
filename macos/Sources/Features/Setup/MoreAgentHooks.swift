@@ -151,11 +151,17 @@ enum MoreAgent: String, CaseIterable, Identifiable {
     }
 
     func command(script: String, event: String) -> String {
-        "\(script) \(rawValue) \(event)"
+        "\(HookConfig.shellWord(script)) \(rawValue) \(event)"
+    }
+
+    /// Whether `text` has our command for this agent in it (for `event`, or any), with the
+    /// script's path quoted or not.
+    func mentioned(in text: String, event: String = "") -> Bool {
+        text.contains("agent-event.py \(rawValue) \(event)") || text.contains("agent-event.py' \(rawValue) \(event)")
     }
 
     fileprivate func isOurs(_ command: String) -> Bool {
-        command.contains("agent-event.py \(rawValue) ")
+        mentioned(in: command)
     }
 }
 
@@ -266,7 +272,7 @@ enum MoreAgentConfig {
     /// Whether every one of our hooks is in the config.
     static func isConnected(_ agent: MoreAgent, config: [String: Any]) -> Bool {
         let text = (try? JSONSerialization.data(withJSONObject: config)).flatMap { String(bytes: $0, encoding: .utf8) } ?? ""
-        return agent.events.allSatisfy { text.contains("agent-event.py \(agent.rawValue) \($0.name)") }
+        return agent.events.allSatisfy { agent.mentioned(in: text, event: $0.name) }
     }
 }
 
@@ -307,7 +313,7 @@ enum MoreAgentTOML {
     }
 
     static func isConnected(_ agent: MoreAgent, text: String) -> Bool {
-        text.contains(begin) && agent.events.allSatisfy { text.contains("agent-event.py \(agent.rawValue) \($0.name)") }
+        text.contains(begin) && agent.events.allSatisfy { agent.mentioned(in: text, event: $0.name) }
     }
 
     /// A TOML basic string.
@@ -334,7 +340,7 @@ extension HookInstaller {
     static func hasAnyHook(_ agent: MoreAgent) -> Bool {
         let url = agent.file(home: home)
         guard let data = FileManager.default.contents(atPath: url.path) else { return false }
-        return agent.ownsFile || (String(bytes: data, encoding: .utf8) ?? "").contains("agent-event.py \(agent.rawValue) ")
+        return agent.ownsFile || agent.mentioned(in: String(bytes: data, encoding: .utf8) ?? "")
     }
 
     static func connect(_ agent: MoreAgent) throws {

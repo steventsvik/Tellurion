@@ -844,10 +844,16 @@ Apple silicon MacBook).
 ## Security and privacy
 
 - **Nothing leaves your Mac unless you ask.** There's no account of ours, telemetry or server.
-  What goes elsewhere is what you send to a cloud provider yourself: your agents' own sign-ins
-  and, once you've connected a Venice account and opened a model, those chats and Codex sessions.
-  Agent tracking and
-  shared memory read the files Claude Code and Codex already write.
+  What goes elsewhere is what your agents send through their own sign-ins, and what a feature
+  you turned on sends to the service you chose for it: chats and Codex sessions on a Venice
+  account you connected, web searches (to Exa, or to a SearXNG of your own), downloads of
+  local models, the skills directory when you browse it, web pages you open in a board, and
+  your phone over your own Tailscale network if you set that up. The app also checks this
+  project's releases on GitHub for updates.
+- **Agent activity stays in files on your Mac.** Tracking and shared memory read the files
+  Claude Code and Codex already write, and Tellurion keeps its own record of each session's
+  activity (prompts, tool calls) in `~/.ghostty-extreme/`, readable only by you and removed
+  after two weeks without use.
 - **Your Venice key stays in the keychain.** It isn't in any terminal's environment, command line
   or file. Agents and chats reach Venice through a small server inside the app, on 127.0.0.1 with a
   token made each launch, which only passes on model requests and the model list. It leaves out
@@ -861,8 +867,11 @@ Apple silicon MacBook).
 - **The Backend view never stores credentials.** It runs your providers' own CLIs with
   their existing logins, read-only commands only. It reads only the *names* of your env
   variables, never their values, and so does the Environment window.
-- **Agent hooks only observe.** They report status and never approve, block or change what
-  an agent does. Any agent settings file is backed up before it's changed.
+- **Agent hooks only observe,** with one exception. They report status and never approve or
+  block what an agent does. The exception is localhost sessions: a command that starts a known
+  dev server inside the project is changed to start it in a localhost session instead (switch
+  Localhost off in Settings → Features to stop that). Any agent settings file is backed up
+  before it's changed.
 - **The editor stays local.** It can only show its own pages, and Visual Fix only talks
   to your local dev server.
 

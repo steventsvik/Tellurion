@@ -26,9 +26,11 @@ struct LocalhostSession: Identifiable, Equatable {
     let created: Date
     var state: State = .starting
     var ports: [Int] = []
-    /// The port it went live on (the lowest then): its address. Other ports come and go,
-    /// like a dev server's internal ones.
+    /// The port of its address: the one the server announced, or else the lowest when it
+    /// went live. Other ports come and go, like a dev server's internal ones.
     var mainPort: Int?
+    /// The address the server printed in its log (`Local: http://localhost:5173/app/`).
+    var announced: URL?
     var runnerPID: Int32?
     var liveSince: Date?
     var cpu: Double = 0
@@ -37,8 +39,16 @@ struct LocalhostSession: Identifiable, Equatable {
     var project: LocalhostProject { LocalhostProject(folder: cwd) }
     var framework: LocalhostFramework { LocalhostFramework.detect(command: command, cwd: cwd) }
     var url: URL? {
+        if let announced, hasAnnouncedPort { return announced }
         let port = mainPort == nil ? ports.first : ports.first { $0 == mainPort }
         return port.map { URL(string: "http://localhost:\($0)")! }
+    }
+    private var hasAnnouncedPort: Bool { announced?.port.map { ports.contains($0) } ?? false }
+    /// Whether to look in the log for its address: while it's starting and for a minute
+    /// after it goes live (some servers print it late), until one is found that's listening.
+    var wantsAddress: Bool {
+        guard isRunning, !ports.isEmpty, !hasAnnouncedPort else { return false }
+        return state == .starting || liveSince.map { Date().timeIntervalSince($0) < 60 } ?? true
     }
     var isRunning: Bool { state == .starting || state == .live }
     /// It was live, but its port isn't listening any more while its processes keep running
@@ -225,6 +235,10 @@ final class LocalhostSessions: ObservableObject {
     private var tabs: [String: Weak<Ghostty.SurfaceView>] = [:]
     private var timer: Timer?
     private var polling = false
+    private var lastPoll = Date.distantPast
+    /// Until then a server is expected to start listening, so polls stay frequent.
+    private var hurryUntil = Date.distantPast
+    private var activeObserver: NSObjectProtocol?
     private let queue = DispatchQueue(label: "com.steventsvik.ghostty-extreme.localhost", qos: .utility)
     private var toastDismiss: DispatchWorkItem?
     /// Polls in a row that a live session wasn't listening, by id.
@@ -246,6 +260,11 @@ final class LocalhostSessions: ObservableObject {
             where controller.titleOverride?.hasPrefix("localhost") == true && self.session(for: controller) == nil {
                 controller.titleOverride = nil
             }
+        }
+        // Polls are spaced out while the app is in the background; catch up on the way back.
+        activeObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            if self?.timer != nil { self?.poll() }
         }
     }
 
@@ -313,6 +332,7 @@ final class LocalhostSessions: ObservableObject {
                 $0.state = .starting
                 $0.ports = []
                 $0.mainPort = nil
+                $0.announced = nil
                 $0.liveSince = nil
             }
             // Adopt the tab if the session was opened before (e.g. restart after "shell here").
@@ -557,8 +577,7 @@ final class LocalhostSessions: ObservableObject {
         writeStatus(session)
         if before.state != .live, session.state == .live, before.liveSince == nil { announce(session) }
         if let surface = surface(for: session) {
-            let port = session.url?.port.map { ":\($0)" } ?? ""
-            TerminalWindows.setTitle("localhost\(port) · \(session.project.name)", of: surface)
+            TerminalWindows.setTitle("\(session.tabAddress) · \(session.project.name)", of: surface)
         }
     }
 
@@ -583,7 +602,10 @@ final class LocalhostSessions: ObservableObject {
             status["code"] = code
         case .detached: status["state"] = "exited"
         }
-        if let url = session.url { status["url"] = url.absoluteString }
+        if let url = session.url {
+            status["url"] = url.absoluteString
+            if let port = url.port { status["port"] = port }
+        }
         if let data = try? JSONSerialization.data(withJSONObject: status) {
             try? data.write(to: Self.directory.appendingPathComponent("\(session.id).status.json"), options: .atomic)
         }
@@ -591,12 +613,30 @@ final class LocalhostSessions: ObservableObject {
 
     // MARK: Watching ports
 
+    /// Called whenever a server is started or starts again.
     private func ensureTimer() {
+        hurryUntil = Date().addingTimeInterval(60)
         guard timer == nil else { return }
-        let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in self?.poll() }
+        let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in self?.tick() }
         timer.tolerance = 0.5
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
+    }
+
+    /// Each poll runs `ps` and `lsof`. In the background, with nothing just started, one
+    /// every ten seconds is enough.
+    private func tick() {
+        let waiting = Date() < hurryUntil && sessions.contains { $0.state == .starting && !$0.isQuiet }
+        if !waiting, !NSApplication.shared.isActive, Date().timeIntervalSince(lastPoll) < 9 { return }
+        poll()
+    }
+
+    /// What a poll found out about one session.
+    private struct Reading {
+        let ports: [Int]
+        let cpu: Double
+        let mem: Double
+        let announced: URL?
     }
 
     struct ProcessInfoRow {
@@ -625,12 +665,13 @@ final class LocalhostSessions: ObservableObject {
         }
         guard !polling else { return }
         polling = true
+        lastPoll = Date()
         let snapshot = sessions
         let scanOthers = self.scanOthers
         queue.async {
             let table = Self.processTable()
             let listening = Self.listeningPorts()
-            var results: [String: (ports: [Int], cpu: Double, mem: Double)] = [:]
+            var results: [String: Reading] = [:]
             var claimed: Set<Int32> = []
             for session in snapshot {
                 guard let runner = session.runnerPID, session.isRunning else { continue }
@@ -640,7 +681,12 @@ final class LocalhostSessions: ObservableObject {
                 let ports = Set(family.flatMap { listening[$0] ?? [] }).sorted()
                 let cpu = family.compactMap { table[$0]?.cpu }.reduce(0, +)
                 let mem = family.compactMap { table[$0]?.rssKB }.reduce(0, +) / 1024
-                results[session.id] = (ports, cpu, mem)
+                // The address it printed, read here since it's a file (and the server's own text).
+                var probe = session
+                probe.ports = ports
+                let announced = probe.wantsAddress
+                    ? LocalhostAddress.announced(in: LocalhostAddress.read(logAt: session.log), listening: ports) : nil
+                results[session.id] = Reading(ports: ports, cpu: cpu, mem: mem, announced: announced)
             }
             let others = scanOthers ? Self.otherServers(listening: listening, table: table, excluding: claimed) : []
             DispatchQueue.main.async {
@@ -648,7 +694,7 @@ final class LocalhostSessions: ObservableObject {
                 for (id, result) in results {
                     // A live server whose port stays closed for a few polls in a row (not just
                     // a dev server's quick reload) isn't live any more.
-                    let main = self.sessions.first { $0.id == id }?.mainPort
+                    let main = result.announced?.port ?? self.sessions.first { $0.id == id }?.mainPort
                     let closed = main.map { !result.ports.contains($0) } ?? false
                     let quiet = closed ? (self.quietPolls[id] ?? 0) + 1 : 0
                     self.quietPolls[id] = quiet
@@ -656,6 +702,10 @@ final class LocalhostSessions: ObservableObject {
                         session.ports = result.ports
                         session.cpu = result.cpu
                         session.memoryMB = result.mem
+                        if let announced = result.announced {
+                            session.announced = announced
+                            session.mainPort = announced.port
+                        }
                         if session.state == .starting, let first = result.ports.first, !closed {
                             session.state = .live
                             session.mainPort = session.mainPort ?? first
@@ -805,6 +855,14 @@ final class LocalhostSessions: ObservableObject {
 extension LocalhostSession {
     /// Exit codes from Ctrl-C and our own stop (SIGTERM) mean it was stopped, not crashed.
     private static func isCleanExit(_ code: Int32) -> Bool { [0, 130, 143].contains(code) }
+
+    /// The start of its tab's title: `localhost:5173/app/`, or `localhost` before it listens.
+    var tabAddress: String {
+        guard let url else { return "localhost" }
+        let address = LocalhostAddress.display(url)
+        // Restored tabs are told apart by this word (see `LocalhostSessions.init`).
+        return address.hasPrefix("localhost") ? address : "localhost · \(address)"
+    }
 
     var statusLabel: String {
         switch state {

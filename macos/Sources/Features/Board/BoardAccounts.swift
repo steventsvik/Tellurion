@@ -68,13 +68,24 @@ final class BoardAccounts: ObservableObject {
         var removedVenice: [UUID]?
     }
 
+    /// `Saved` as it's read: one profile that can't be decoded doesn't lose the others.
+    private struct Stored: Decodable {
+        var accounts: LossyArray<BoardAccount>
+        var active: [String: UUID]?
+        var removedVenice: [UUID]?
+    }
+
     private init() { load() }
 
     private func load() {
-        guard let data = try? Data(contentsOf: file), let saved = try? JSONDecoder().decode(Saved.self, from: data) else { return }
-        accounts = saved.accounts
+        guard let saved = StoredFile.load(Stored.self, from: file, what: "the account profiles", log: Self.log).value else { return }
+        if saved.accounts.skipped > 0 {
+            // The next save writes the list without them, so the file as it was is kept.
+            StoredFile.setAside(file, what: "the account profiles", log: Self.log, keepingOriginal: true)
+        }
+        accounts = saved.accounts.elements
         removedVenice = Set(saved.removedVenice ?? [])
-        active = Dictionary(uniqueKeysWithValues: saved.active.compactMap { key, value in
+        active = Dictionary(uniqueKeysWithValues: (saved.active ?? [:]).compactMap { key, value in
             BoardAccount.Provider(rawValue: key).map { ($0, value) }
         })
     }

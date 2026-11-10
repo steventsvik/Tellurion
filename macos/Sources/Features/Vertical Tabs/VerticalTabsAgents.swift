@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import os
 
 /// What a coding agent running in a pane is doing, as reported by its hooks.
 enum VerticalTabAgentActivity: Equatable {
@@ -134,11 +135,26 @@ final class VerticalTabsAgents {
         box.info.unseen = false
     }
 
+    private static let log = StoredFile.logger("Events")
+    /// Printed text can look like an event as often as it likes; the log gets a few a minute.
+    private var ignoredLog = LogBudget(limit: 5, window: 60)
+
+    /// Logs that an event was ignored and why: never its body, which isn't ours and may
+    /// hold a token.
+    private func noteIgnored(_ why: String, title: String) {
+        guard let skipped = ignoredLog.take() else { return }
+        let kind = title == Self.agentTitle ? "agent" : title == LocalhostSessions.eventTitle ? "localhost" : "unknown"
+        Self.log.error("Ignored an event (\(kind, privacy: .public)): \(why, privacy: .public); \(skipped) more not logged before it")
+    }
+
     /// Returns true if the notification was an agent event (and so should not be shown).
     func handle(title: String, body: String, surface: Ghostty.SurfaceView) -> Bool {
         guard title.hasPrefix(Self.titlePrefix) else { return false }
         // Only events from this app's own hooks; printed text can't fake one (see EventToken).
-        guard EventToken.verify(body) else { return true }
+        guard EventToken.verify(body) else {
+            noteIgnored("it doesn't carry this launch's token", title: title)
+            return true
+        }
         if title == LocalhostSessions.eventTitle {
             LocalhostSessions.shared.handle(body: body, from: surface)
             return true
@@ -147,6 +163,7 @@ final class VerticalTabsAgents {
               let data = body.data(using: .utf8),
               let event = try? JSONDecoder().decode(Event.self, from: data) else {
             // Unknown or malformed custom event: swallow it rather than show raw JSON.
+            noteIgnored("it couldn't be understood", title: title)
             return true
         }
         // `tellurion doctor`'s test event: proves the hooks reach the app, changes nothing.

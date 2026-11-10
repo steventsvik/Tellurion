@@ -23,9 +23,13 @@ def transcript_metadata(path):
     try:
         with open(path, encoding="utf-8") as stream:
             record = json.loads(stream.readline(65536))
-        return record.get("payload", {}) if record.get("type") == "session_meta" else {}
     except (OSError, ValueError, TypeError):
         return {}
+    # Any JSON can be on that line: only an object holding an object is what's expected.
+    if not isinstance(record, dict) or record.get("type") != "session_meta":
+        return {}
+    meta = record.get("payload")
+    return meta if isinstance(meta, dict) else {}
 
 
 def tty_path():
@@ -65,8 +69,13 @@ def prompt_text(prompt):
     return text
 
 
+def tool_name(payload):
+    name = payload.get("tool_name")
+    return name if isinstance(name, str) else ""
+
+
 def compact_detail(payload, event):
-    tool = payload.get("tool_name", "")
+    tool = tool_name(payload)
     arguments = payload.get("tool_input") or {}
     if not isinstance(arguments, dict):
         arguments = {}
@@ -77,8 +86,36 @@ def compact_detail(payload, event):
         detail = f"{tool}: {argument}" if argument else tool
     else:
         detail = ""
-    # ASCII encoding makes the byte limit independent of non-ASCII prompt text.
     return " ".join(str(detail).split())[:48]
+
+
+# Each session's events are kept for the editor's live view, and nothing else removed them.
+TRACKING_DAYS = 14
+
+
+def prune_tracking(directory):
+    """Removes tracking files no event has touched for two weeks. At most once a day, told by
+    a stamp file, so a hook normally pays one stat for it. Never the hook's problem."""
+    try:
+        stamp = directory / ".pruned"
+        now = time.time()
+        try:
+            if now - stamp.stat().st_mtime < 86400:
+                return
+        except OSError:
+            pass
+        # Stamped first: hooks running at the same moment don't all go through the folder.
+        stamp.touch(mode=0o600)
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                try:
+                    if entry.name != stamp.name and entry.is_file(follow_symlinks=False) \
+                            and now - entry.stat(follow_symlinks=False).st_mtime > TRACKING_DAYS * 86400:
+                        os.remove(entry.path)
+                except OSError:
+                    pass
+    except Exception:  # noqa: BLE001 - tidying up must never fail a hook
+        pass
 
 
 def codex_background_session(payload, home):
@@ -105,6 +142,7 @@ def record_event(payload, event, home):
     directory = home / ".ghostty-extreme" / "codex-tracking"
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(directory, 0o700)
+    prune_tracking(directory)
     record = {"event": event, "timestamp": time.time(), "session": actual,
               "parent": session if actual != session else None,
               "child": child, "payload": payload}
@@ -124,15 +162,23 @@ def record_event(payload, event, home):
         return None
     mapped = {"pre_tool_use": "tool_start", "interrupt": "input_needed"}.get(event, event)
     detail = compact_detail(payload, event)
-    if event == "pre_tool_use" and payload.get("tool_name", "").split(".")[-1] in (
+    if event == "pre_tool_use" and tool_name(payload).split(".")[-1] in (
             "request_user_input", "request_user_input_async"):
         mapped = "input_needed"
         detail = "Waiting for your answer"
-    result = {"agent": "codex", "event": mapped, "session": session, "detail": detail}
-    while len(json.dumps(result, ensure_ascii=True, separators=(",", ":")).encode()) > 250:
-        detail = detail[:-1]
-        result["detail"] = detail
+    # This launch's secret, so the app can tell real events from printed text. Added before the
+    # trim: the terminal caps a notification body at 255 bytes, and what counts is everything
+    # that's sent, as it's sent (a Cyrillic letter is six bytes escaped, an emoji twelve).
+    result = {"agent": "codex", "event": mapped, "session": session, "detail": detail,
+              "t": os.environ.get("GHOSTTY_EXTREME_EVENT_TOKEN", "")}
+    while result["detail"] and len(encoded(result)) > 250:
+        result["detail"] = result["detail"][:-1]
     return result
+
+
+def encoded(status):
+    """The notification body exactly as it goes to the terminal."""
+    return json.dumps(status, ensure_ascii=True, separators=(",", ":")).encode()
 
 
 def localhost_context(payload, event, home):
@@ -163,13 +209,14 @@ def localhost_context(payload, event, home):
     rewritten = rewritten.replace("/bin/localhost start ", "/bin/localhost start --agent codex ", 1)
     updated = dict(arguments)
     updated["command" if "command" in arguments else "cmd"] = rewritten
-    # Codex requires 'allow' on PreToolUse to accept updatedInput. This allows the
-    # rewrite, not a PermissionRequest: retain all tool sandbox/escalation arguments.
+    # Codex (as of 0.166) takes a changed command from a hook only together with "allow", and
+    # has no "ask". `localhost rewrite` only changes known dev-server commands inside the
+    # project, so that is all this allows. The tool's sandbox and escalation arguments are kept.
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow",
         "updatedInput": updated, "additionalContext":
         "The dev server command now opens a Tellurion localhost session: a separate "
         "terminal tab that keeps running after you finish. The command prints the URL and "
-        "log commands. Do not start another copy. The usual tool approval flow still applies."}}
+        "log commands. Do not start another copy."}}
 
 
 def shared_memory(payload):
@@ -195,13 +242,12 @@ def main():
         payload = json.load(sys.stdin)
         if not isinstance(payload, dict):
             return
-        home = Path.home()
+        # Where the app keeps .ghostty-extreme: the home folder, or a test copy's own.
+        home = Path(os.environ.get("TELLURION_TEST_HOME") or Path.home())
         status = record_event(payload, event, home)
         if status:
             namespace = "ghostty-extreme" if os.environ.get("GHOSTTY_EXTREME_AGENT_EVENTS") == "1" else "ghostty-custom"
-            # This launch's secret, so the app can tell real events from printed text.
-            status["t"] = os.environ.get("GHOSTTY_EXTREME_EVENT_TOKEN", "")
-            sequence = f"\x1b]777;notify;{namespace}://agent;{json.dumps(status, ensure_ascii=True, separators=(',', ':'))}\x07"
+            sequence = f"\x1b]777;notify;{namespace}://agent;{encoded(status).decode()}\x07"
             tty = tty_path()
             if tty:
                 try:
@@ -214,8 +260,9 @@ def main():
             context = shared_memory(payload)
         if context:
             print(json.dumps(context))
-    except (OSError, ValueError, TypeError):
-        # Observability must never fail a tool, delay an exit, or block a turn.
+    except Exception:  # noqa: BLE001
+        # Observability must never fail a tool, delay an exit, or block a turn, whatever
+        # shape the payload turns out to have.
         pass
 
 

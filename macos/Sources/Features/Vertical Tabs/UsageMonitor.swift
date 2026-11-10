@@ -164,7 +164,8 @@ final class UsageMonitor: ObservableObject {
             defer { try? handle.close() }
             let size = (try? handle.seekToEnd()) ?? 0
             try? handle.seek(toOffset: size > 262_144 ? size - 262_144 : 0)
-            guard let text = String(data: handle.readDataToEndOfFile(), encoding: .utf8) else { continue }
+            // The cut can land inside a character; only whole lines are used.
+            let text = String(decoding: handle.readDataToEndOfFile(), as: UTF8.self)
             for line in text.split(separator: "\n").reversed() where line.contains("\"rate_limits\"") {
                 guard let json = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
                       let payload = json["payload"] as? [String: Any],

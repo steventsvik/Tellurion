@@ -22,9 +22,7 @@ final class AppleModelServer {
         return false
     }()
 
-    static var infoFile: URL {
-        URL(fileURLWithPath: NSHomeDirectory() + "/.ghostty-extreme/apple-model.json")
-    }
+    static var infoFile: URL { AgentTools.root.appendingPathComponent("apple-model.json") }
 
     private let queue = DispatchQueue(label: "com.steventsvik.ghostty-extreme.apple-model")
     private var listener: NWListener?
@@ -77,9 +75,12 @@ final class AppleModelServer {
                 return
             }
             let head = String(bytes: buffer[..<split.lowerBound], encoding: .utf8) ?? ""
+            // The key comes first: without it nothing is waited for and no body is read.
+            guard Self.authorized(head, key: self.key) else {
+                return self.respond(connection, status: "401 Unauthorized", json: ["error": ["message": "Wrong key"]])
+            }
             let body = buffer[split.upperBound...]
-            let length = head.split(separator: "\r\n").first { $0.lowercased().hasPrefix("content-length:") }
-                .flatMap { Int($0.split(separator: ":")[1].trimmingCharacters(in: .whitespaces)) } ?? 0
+            let length = Self.bodyLength(head)
             if body.count < length, !done {
                 self.receive(on: connection, buffer: buffer)
                 return
@@ -88,10 +89,22 @@ final class AppleModelServer {
         }
     }
 
+    /// Whether the request's head carries this launch's key.
+    static func authorized(_ head: String, key: String) -> Bool {
+        head.components(separatedBy: "\r\n").dropFirst().contains { line in
+            guard line.lowercased().hasPrefix("authorization:") else { return false }
+            return line.dropFirst("authorization:".count).trimmingCharacters(in: .whitespaces) == "Bearer " + key
+        }
+    }
+
+    /// How much body the head announces: none when the length is missing, empty, negative
+    /// or not a number, and never more than a request may be in all.
+    static func bodyLength(_ head: String) -> Int {
+        min(VeniceProxy.contentLength(head), 1_048_576)
+    }
+
     private func handle(head: String, body: Data, on connection: NWConnection) {
         let lines = head.split(separator: "\r\n")
-        let authorized = lines.contains { $0.lowercased().hasPrefix("authorization:") && $0.hasSuffix("Bearer " + key) }
-        guard authorized else { return respond(connection, status: "401 Unauthorized", json: ["error": ["message": "Wrong key"]]) }
         guard lines.first?.hasPrefix("POST /v1/chat/completions") == true,
               let request = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
               let messages = request["messages"] as? [[String: Any]], !messages.isEmpty else {
