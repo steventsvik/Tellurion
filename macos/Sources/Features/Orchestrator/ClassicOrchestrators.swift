@@ -34,6 +34,8 @@ final class ClassicOrchestrator: ObservableObject, Identifiable, OrchestratorHos
     weak var owner: ClassicOrchestrators?
     /// Where the tabs it opened were started, until their shells say.
     private var launchFolders: [UUID: String] = [:]
+    /// Agents you unwired by hand: they aren't wired again by themselves.
+    private(set) var leftOut: Set<UUID> = []
     /// The engine chosen for this project, if one was.
     private var chosenEngine: HeadlessAgent.Engine?
 
@@ -61,14 +63,17 @@ final class ClassicOrchestrator: ObservableObject, Identifiable, OrchestratorHos
         let fresh = panes.filter { !isWired($0) }
         guard !fresh.isEmpty else { return }
         team.members += fresh.map { BoardTeam.Member(tile: $0, role: role) }
+        leftOut.subtract(fresh)
         for pane in fresh { owner?.wiredPane(pane) }
         changed()
     }
 
+    /// Your own choice, so the pane stays out until you wire it again.
     func unwire(_ pane: UUID) {
         guard isWired(pane) else { return }
         team.members.removeAll { $0.tile == pane }
         launchFolders[pane] = nil
+        leftOut.insert(pane)
         changed()
     }
 
@@ -97,6 +102,7 @@ final class ClassicOrchestrator: ObservableObject, Identifiable, OrchestratorHos
         guard team.members.contains(where: { !open.contains($0.tile) }) else { return }
         team.members.removeAll { !open.contains($0.tile) }
         launchFolders = launchFolders.filter { open.contains($0.key) }
+        leftOut.formIntersection(open)
         changed()
     }
 
@@ -233,6 +239,7 @@ final class ClassicOrchestrator: ObservableObject, Identifiable, OrchestratorHos
 
     /// Your command, once your CLIs have been found (the first one may come before that).
     func command(_ text: String) {
+        owner?.adopt(for: self)
         guard brain.engines == nil else { return brain.command(text) }
         // Finding them can take a few seconds the first time: say so instead of sitting silent.
         brain.add(.event, "Looking for Claude Code and Codex on this Mac…")
@@ -423,6 +430,7 @@ final class ClassicOrchestrators: ObservableObject {
         let orchestrator = ClassicOrchestrator(root: root, record: records[root], owner: self)
         orchestrator.origin = origin
         list.append(orchestrator)
+        adopt(for: orchestrator)
         // After the brain's change has landed, not while it's being made.
         watching[orchestrator.id] = orchestrator.brain.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async { self?.pulse.send() }
@@ -491,8 +499,44 @@ final class ClassicOrchestrators: ObservableObject {
 
     // MARK: Agents
 
+    /// The agents already running in an orchestrator's project are its agents: each one that
+    /// isn't wired anywhere is wired to it, unless you unwired it yourself. Plain terminals are
+    /// left for you to wire.
+    func adopt(for orchestrator: ClassicOrchestrator) {
+        guard live else { return }
+        let fresh = Self.adoptable(adoptablePanes(), root: orchestrator.root, wired: wired, leftOut: orchestrator.leftOut)
+        if !fresh.isEmpty { orchestrator.wire(fresh) }
+    }
+
+    /// Every classic pane with where it is and whether an agent runs in it.
+    private func adoptablePanes() -> [AdoptablePane] {
+        ClassicPanes.all.compactMap { controller, surface -> AdoptablePane? in
+            guard !HermesSessions.shared.isHermes(controller), LocalhostSessions.shared.session(for: controller) == nil,
+                  let folder = surface.pwd else { return nil }
+            return AdoptablePane(id: surface.id, root: root(of: folder), isAgent: VerticalTabsAgents.shared.info(for: surface) != nil)
+        }
+    }
+
+    struct AdoptablePane: Equatable {
+        let id: UUID
+        let root: String
+        let isAgent: Bool
+    }
+
+    /// Which panes an orchestrator takes on by itself: agents in its project that no
+    /// orchestrator has and that you haven't taken off it.
+    static func adoptable(_ panes: [AdoptablePane], root: String, wired: Set<UUID>, leftOut: Set<UUID>) -> [UUID] {
+        panes.filter { $0.isAgent && $0.root == root && !wired.contains($0.id) && !leftOut.contains($0.id) }.map(\.id)
+    }
+
     private func agentChanged(_ surface: Ghostty.SurfaceView) {
-        guard wired.contains(surface.id), TellurionSettings.isOn(.orchestrator) else { return }
+        guard TellurionSettings.isOn(.orchestrator) else { return }
+        // An agent that starts in a project with an orchestrator joins it.
+        if !wired.contains(surface.id), VerticalTabsAgents.shared.info(for: surface) != nil,
+           let folder = surface.pwd, let orchestrator = orchestrator(root: root(of: folder)) {
+            adopt(for: orchestrator)
+        }
+        guard wired.contains(surface.id) else { return }
         guard let event = relay.note(surface.id, info: VerticalTabsAgents.shared.info(for: surface)) else { return }
         for orchestrator in list where orchestrator.isWired(surface.id) {
             relay.schedule(event, for: orchestrator.id) { [weak orchestrator] events in orchestrator?.agentsChanged(events) }
@@ -534,6 +578,8 @@ final class ClassicOrchestrators: ObservableObject {
         var glance = OrchestratorGlance(root: root, project: ProjectPath.displayName(root))
         guard let orchestrator = orchestrator(root: root) else {
             glance.goal = records[root]?.goal
+            // The agents it would start with, so the field says how many a command reaches.
+            if live { glance.status.wired = Self.adoptable(adoptablePanes(), root: root, wired: wired, leftOut: []).count }
             return glance
         }
         glance.goal = orchestrator.team.goal

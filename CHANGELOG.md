@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **The orchestrator starts with the agents you have.** In tabs, it used to begin with nobody wired, even with agents already running in the project. Now every agent in the project is wired to it when you open it or send a command, agents that start later join by themselves, and the sidebar's command field says how many a command will reach before you send one. Plain terminals are still yours to wire, and an agent you unwire stays out until you wire it back.
+
 ## 1.9.3
 
 The orchestrator comes to tabs, with checks that make done mean verified, conflict radar, budgets, task cards and session search, and a round of fixes for crashes, lost files and the release checks.
