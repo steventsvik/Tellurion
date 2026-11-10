@@ -161,7 +161,7 @@ extension UserDefaults {
 // MARK: - Menu
 
 /// Installs "Toggle Vertical Tabs" (⌃⌘S), "Toggle Code Editor" (⌃⌘E), a ⌘P command
-/// palette shortcut, "Mission Control" (⌃⌘M), "Race Agents…" (⌃⌘R), "Localhost Manager"
+/// palette shortcut, "Mission Control" (⌃⌘M), "Orchestrator" (⌃⌘O), "Race Agents…" (⌃⌘R), "Localhost Manager"
 /// (⌃⌘L), "Review Changes" (⌃⌘I), "Command History" (⌃⌘B), "Agent Activity" (⌃⌘A),
 /// "Project Memory" (⌃⌘Y) and "Keyboard Shortcuts" (⌃⌘/) in the View menu, and
 /// Tellurion's Settings (⌘,), Check Setup and Welcome in the app menu. Items of features turned off in Settings are hidden, which
@@ -204,6 +204,7 @@ final class VerticalTabsMenu: NSObject {
         featureItems.append((race, .races))
         struct Extra { let title: String; let action: Selector; let key: String; let feature: TellurionFeature? }
         let extras: [Extra] = [
+            Extra(title: "Orchestrator", action: #selector(showOrchestrator(_:)), key: "o", feature: .orchestrator),
             Extra(title: "Localhost Manager", action: #selector(showLocalhost(_:)), key: "l", feature: .localhost),
             Extra(title: "Review Changes", action: #selector(showReview(_:)), key: "i", feature: .review),
             Extra(title: "Command History", action: #selector(toggleCommandBlocks(_:)), key: "b", feature: .commandHistory),
@@ -304,6 +305,10 @@ final class VerticalTabsMenu: NSObject {
         ActivityDashboard.toggle()
     }
 
+    @objc func showOrchestrator(_ sender: Any?) {
+        ClassicOrchestrators.toggleForFrontTab()
+    }
+
     @objc func showSessionSearch(_ sender: Any?) {
         SessionSearch.toggle()
     }
@@ -355,6 +360,8 @@ extension VerticalTabsMenu: NSMenuItemValidation {
             return true
         }
         if menuItem.action == #selector(raceAgents(_:)) { return !TerminalWindows.all.isEmpty }
+        // A board has its orchestrator cards.
+        if menuItem.action == #selector(showOrchestrator(_:)) { return !(TerminalWindows.front is BoardController) }
         if menuItem.action == #selector(showLocalhost(_:)) || menuItem.action == #selector(showReview(_:))
             || menuItem.action == #selector(showActivity(_:)) { return true }
         if menuItem.action == #selector(toggleVisualFix(_:)) {

@@ -28,6 +28,10 @@ import AppKit
 ///     checkset <n> <command>  save a check command for tab n's project
 ///     budgets | scoreboard | worktrees | search
 ///     budget <n> <dollars>    give tab n's agent a budget
+///     orch <n>                open the Orchestrator window for tab n's project (making its orchestrator)
+///     orchwire <n>            wire tab n's focused pane to its project's orchestrator
+///     orchcanned <n> <reply JSON>   that orchestrator's next turn answers this instead of running its engine
+///     orchcmd <n> <text>      send that orchestrator a command
 ///     snap <folder>           draw every visible window into <folder>/<title>.png
 @MainActor
 enum DemoDirector {
@@ -61,6 +65,12 @@ enum DemoDirector {
         let windows = window.tabGroup?.windows ?? [window]
         guard index >= 1, index <= windows.count else { return nil }
         return windows[index - 1].windowController as? TerminalController
+    }
+
+    /// The orchestrator of a tab's project, made if it has none.
+    private static func orchestrator(of tab: TerminalController) -> ClassicOrchestrator? {
+        guard TellurionSettings.isOn(.orchestrator) else { return nil }
+        return ClassicOrchestrators.shared.open(root: ClassicOrchestrators.shared.root(for: tab), from: tab)
     }
 
     private static func run(_ command: String, in controller: TerminalController, marks: String?) {
@@ -156,6 +166,24 @@ enum DemoDirector {
             AgentWorktreesWindow.show()
         case "search":
             SessionSearch.toggle()
+        case "orch":
+            let shown = target.flatMap { ClassicOrchestrators.show(from: $0) }
+            note("orch \(shown.map { "\($0.projectName) wired=\($0.team.members.count)" } ?? "no project")")
+        case "orchwire":
+            guard let target, let surface = target.focusedSurface, let orchestrator = orchestrator(of: target) else { return }
+            orchestrator.wire([surface.id])
+            note("orchwire \(orchestrator.paneLabel(surface.id)) wired=\(orchestrator.team.members.count)")
+        case "orchcanned":
+            guard let target, let orchestrator = orchestrator(of: target) else { return }
+            guard let reply = try? JSONDecoder().decode(OrchestratorReply.self, from: Data(rest.utf8)) else {
+                note("orch bad reply")
+                return
+            }
+            orchestrator.brain.canned.append(reply)
+        case "orchcmd":
+            guard let target, let orchestrator = orchestrator(of: target) else { return }
+            orchestrator.command(rest)
+            note("orchcmd \(orchestrator.status.line)")
         case "snap":
             for (index, window) in NSApp.windows.enumerated() where window.isVisible {
                 guard let view = window.contentView?.superview ?? window.contentView,

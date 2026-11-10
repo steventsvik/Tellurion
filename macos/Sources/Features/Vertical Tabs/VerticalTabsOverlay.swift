@@ -307,6 +307,11 @@ private struct VerticalTabsMenuPanel: View {
                 guard let surface = pane.surface else { return }
                 PipelineSetup.show(writer: surface, in: controller)
             }
+            if TellurionSettings.isOn(.orchestrator), let surface = pane.surface {
+                item(ClassicOrchestrators.shared.wired.contains(surface.id) ? "Unwire from orchestrator" : "Wire to orchestrator") {
+                    ClassicOrchestrators.shared.toggleWire(surface, in: controller)
+                }
+            }
             if TellurionSettings.isOn(.budgets), let surface = pane.surface, AgentBudgets.canMeasure(pane.agent) {
                 item("Budget…") { AgentBudgetPopover.show(for: surface) }
             }

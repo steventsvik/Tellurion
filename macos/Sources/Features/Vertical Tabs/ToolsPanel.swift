@@ -100,6 +100,11 @@ private struct ToolsPanel: View {
         } else {
             add(.missionControl, PixelIcon.grid.symbol, "Mission Control", "Every agent as a live card", MissionControl.toggle)
         }
+        if board == nil {
+            add(.orchestrator, "point.3.connected.trianglepath.dotted", "Orchestrator", "One command for this project's agents") {
+                ClassicOrchestrators.show(from: owner)
+            }
+        }
         if !hermes {
             add(.races, "flag.checkered.2.crossed", "Agent races", "One task, several agents, keep the best") { AgentRaces.showSetup(from: owner) }
         }

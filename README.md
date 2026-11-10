@@ -146,7 +146,7 @@ and logo when you start them.
 </tr>
 <tr>
 <td valign="top"><b><a href="#boards">Boards</a></b><br><sub>Every terminal a tile, on a board you can zoom</sub></td>
-<td valign="top"><b><a href="#orchestrator">Orchestrator</a></b><br><sub>One card runs a group of agents for you</sub></td>
+<td valign="top"><b><a href="#orchestrator-1">Orchestrator card</a></b><br><sub>One card runs a group of agents for you</sub></td>
 <td valign="top"><b><a href="#agent-map">Agent Map</a></b><br><sub>Every agent as a dot on the project's files</sub></td>
 </tr>
 </table>
@@ -195,6 +195,16 @@ The **command palette** (⌘P) puts waiting agents at the top too, so you can an
 two keystrokes. It also starts new sessions and opens every tool.
 
 <br>
+
+### Orchestrator
+
+One command for a project's agents, from the sidebar. Your own Claude Code (or Codex) splits the work, sends each agent its part, reads what they answer and hands out the next steps until the command is done, its turn limit is reached, or you stop it.
+
+- **In the sidebar:** the Orchestrator section shows the goal and where it's at ("Turn 3 of 12 · 2 working", or who is waiting on you) and takes a command. The window button, or ⌃⌘O, opens it in full: the wired agents, everything it said and did, and its settings.
+- **Wire the tabs you have:** **Wire…** lists every pane by project, or use **Wire to orchestrator** in a pane's ⋮ menu. Wired panes wear a small link.
+- **New agents open as tabs** in the project's folder, with a short name (Ada, Otto…), and you stay in the tab you're in.
+- **It only messages agents.** A wired terminal with no agent is never typed into, and permission prompts still come to you. When an agent's project check fails, the orchestrator hears about it and can send it back to fix it.
+- One orchestrator per project. On a [board](#orchestrator-1) it's a card you wire terminals to instead.
 
 ### Your terminal on your phone
 
@@ -1020,6 +1030,7 @@ Hold ⌃⌘ for a moment to see them all over the window.
 | ⌘, | Settings (Ghostty's config file is under Tellurion → Edit Config File…) |
 | ⌃⌘S | Show or hide the sidebar |
 | ⌃⌘M | Mission Control |
+| ⌃⌘O | Orchestrator |
 | ⌃⌘E | Code editor |
 | ⌃⌘Y | Project memory |
 | ⌃⌘V | Visual Fix |

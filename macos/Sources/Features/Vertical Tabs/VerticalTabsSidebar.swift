@@ -89,6 +89,7 @@ struct VerticalTabsLayout<Content: View>: View {
             ReviewInbox.start()
             TurnCheckpoints.start()
             ProjectChecks.start()
+            ClassicOrchestrators.start()
             VerticalTabsTestSupport.openTestTabsIfRequested(from: controller)
         }
     }
@@ -230,6 +231,11 @@ struct VerticalTabsSidebar: View {
                 }
                 .padding(.bottom, 10)
                 .animation(.spring(response: 0.45, dampingFraction: 0.85), value: groupLayout)
+            }
+
+            // One command for the project's agents.
+            if settings.isOn(.orchestrator) {
+                OrchestratorSidebarSection(owner: owner)
             }
 
             // What's listening on which port (only when something is).
@@ -848,6 +854,7 @@ private struct VerticalTabPaneRow: View {
                 HStack(spacing: 6) {
                     VerticalTabKindLabel(agent: pane.agent, palette: palette)
                     ProjectCheckMark(surface: pane.surface, activity: pane.agent?.activity, compact: true)
+                    OrchestratorWireMark(surface: pane.surface)
                     Spacer(minLength: 4)
                     // A pending review already counts the changes.
                     ReviewOrDiffChip(surface: pane.surface) { diffChip }
