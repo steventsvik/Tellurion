@@ -152,7 +152,7 @@ export function createLink({ origin, WebSocket, fetch, storage, timers = globalT
     mine.onopen = () => {
       if (socket !== mine) return;
       lastHeard = now();
-      mine.send(JSON.stringify({ t: "hello", token, client: "glasses", v: 1 }));
+      mine.send(JSON.stringify({ t: "hello", token, client: "glasses", v: 2 }));
     };
     mine.onmessage = (event) => {
       if (socket !== mine || typeof event.data !== "string") return;

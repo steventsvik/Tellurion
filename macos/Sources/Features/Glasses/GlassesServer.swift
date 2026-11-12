@@ -3,8 +3,9 @@ import AppKit
 import CryptoKit
 import os
 
-/// Tellurion on Even G2 glasses: who needs you, answering a permission prompt, an agent's
-/// latest output, and talking to an agent or a project's orchestrator.
+/// Tellurion on Even G2 glasses: the sidebar's projects and tabs, the chosen tab's screen,
+/// answering a permission prompt, pressing a key in an agent's pane, and talking to an
+/// agent or a project's orchestrator.
 ///
 /// It's a second kind of client of the phone server (see `PhoneServer`), with the same
 /// protection: the same local listener behind `tailscale serve`, the owner's Tailscale
@@ -12,15 +13,18 @@ import os
 /// - A permission answer names the prompt it's for, and is dropped if the agent is showing
 ///   another one by then (`GlassesRules.answerRefusal`), or if the prompt isn't on screen.
 /// - Text only ever goes to a pane with an agent in it, never one with a bare shell, and
-///   never with control characters (`GlassesRules.sayRefusal`).
+///   never with control characters (`GlassesRules.sayRefusal`). The same goes for the few
+///   keys the glasses may press (`GlassesKey`), which are also refused while the agent
+///   shows a permission prompt (`GlassesRules.keyRefusal`).
 /// - What the glasses hear is turned into text on this Mac and sent back to the glasses.
 ///   Nothing is done with it here: the glasses send a separate message once you confirm.
 /// - Answers, messages and audio are limited per device.
 final class GlassesServer {
     static let shared = GlassesServer()
 
-    /// The protocol's version, in the hello reply.
-    static let version = 1
+    /// The protocol's version, in the hello reply. Glasses that say 1 in theirs are still
+    /// sent version 1's list of agents.
+    static let version = 2
     static let actionsPerMinute = 30.0
     /// A minute and a half of sound each minute.
     static let audioBytesPerMinute = Double(GlassesAudio.bytesPerSecond * 90)
@@ -29,36 +33,56 @@ final class GlassesServer {
     struct Peer {
         let id: ObjectIdentifier
         let device: PhoneDevice
+        /// The protocol version its hello gave.
+        var version = 1
         let send: (String) -> Void
         let isBackedUp: () -> Bool
         let close: () -> Void
     }
 
-    private final class Session {
+    /// The pane a device is reading: its last answer, or (`screen`) its screen as it is,
+    /// `before` lines back.
+    struct Reading {
+        var id: UUID
+        var lines: Int
+        var screen = false
+        var before = 0
+    }
+
+    final class Session {
         let peer: Peer
         var glance = false
         var orchestrators = false
-        var tail: (id: UUID, lines: Int)?
+        var tools = false
+        var tail: Reading?
         var lastAgents = ""
         var lastTail = ""
         var lastOrchestrators = ""
+        var lastTools = ""
+        /// The tool whose page is open, what was last sent for it and when it was last built.
+        var toolPage: GlassesTool?
+        var lastToolPage = ""
+        var toolPageBuilt = Date.distantPast
+        /// What its last search found.
+        var found: [GlassesSearchHit] = []
+        var searching = false
         var utterance: Utterance?
         init(peer: Peer) { self.peer = peer }
     }
 
-    private final class Utterance {
+    final class Utterance {
         let transcriber: SpeechTranscriber
         var bytes = 0
         var lastPartial = Date.distantPast
         init(transcriber: SpeechTranscriber) { self.transcriber = transcriber }
     }
 
-    private var sessions: [ObjectIdentifier: Session] = [:]
+    private(set) var sessions: [ObjectIdentifier: Session] = [:]
     private var timer: Timer?
     /// Per device: answers and messages, and bytes of sound.
     private var actions: [String: GlassesRateLimiter] = [:]
     private var audio: [String: GlassesRateLimiter] = [:]
-    private static let log = StoredFile.logger("Glasses")
+    static let log = StoredFile.logger("Glasses")
 
     private init() {}
 
@@ -88,10 +112,33 @@ final class GlassesServer {
             session.orchestrators = on
             session.lastOrchestrators = ""
         case .tail(let id, let lines):
-            session.tail = (id, lines)
+            session.tail = Reading(id: id, lines: lines)
+            session.lastTail = ""
+        case .screen(let id, let lines, let before):
+            session.tail = Reading(id: id, lines: lines, screen: true, before: before)
             session.lastTail = ""
         case .untail:
             session.tail = nil
+        case .tools(let on):
+            session.tools = on
+            session.lastTools = ""
+        case .key(let id, let key):
+            guard allowAction(session) else { return }
+            press(key, in: id, for: session)
+        case .tool(let tool):
+            guard allowAction(session) else { return }
+            open(tool, for: session)
+        case .toolPage(let tool):
+            session.toolPage = tool
+            session.lastToolPage = ""
+            session.toolPageBuilt = .distantPast
+            if let tool { prepare(tool) }
+        case .toolAction(let tool, let row, let action, let text):
+            guard allowAction(session) else { return }
+            perform(action, on: row, of: tool, text: text, for: session)
+        case .orchestratorAction(let id, let action):
+            guard allowAction(session) else { return }
+            orchestrate(action, project: id, for: session)
         case .answer(let id, let allow, let prompt):
             guard allowAction(session) else { return }
             answer(id, allow: allow, prompt: prompt, for: session)
@@ -152,7 +199,7 @@ final class GlassesServer {
         GlassesRoutes.json(["t": "error", "code": code, "message": message])
     }
 
-    private func allowAction(_ session: Session) -> Bool {
+    func allowAction(_ session: Session) -> Bool {
         let device = session.peer.device.id
         var limiter = actions[device] ?? GlassesRateLimiter(capacity: Self.actionsPerMinute, per: 60)
         let allowed = limiter.allow()
@@ -163,17 +210,47 @@ final class GlassesServer {
 
     // MARK: Agents
 
-    /// Every pane with an agent in an open classic window or board.
-    private func agents() -> [(agent: GlassesAgent, surface: Ghostty.SurfaceView)] {
+    /// Open classic windows and boards with each window's tabs in their own order.
+    private func orderedControllers() -> [BaseTerminalController] {
+        let open = PhoneServer.shared.openControllers
+        var byWindow: [ObjectIdentifier: BaseTerminalController] = [:]
+        var windows: [ObjectIdentifier] = []
+        var groups: [ObjectIdentifier: [ObjectIdentifier]] = [:]
+        for controller in open {
+            guard let window = controller.window else { continue }
+            let id = ObjectIdentifier(window)
+            byWindow[id] = controller
+            windows.append(id)
+            if let tabs = window.tabGroup?.windows, tabs.count > 1 { groups[id] = tabs.map { ObjectIdentifier($0) } }
+        }
+        return GlassesOrder.tabOrder(windows) { groups[$0] }.compactMap { byWindow[$0] }
+    }
+
+    /// Every pane in an open classic window or board, in the app's own order: one with an
+    /// agent, or a plain terminal.
+    func panes() -> [(agent: GlassesAgent, surface: Ghostty.SurfaceView)] {
         var found: [(GlassesAgent, Ghostty.SurfaceView)] = []
-        for controller in PhoneServer.shared.openControllers {
+        let home = NSHomeDirectory()
+        for controller in orderedControllers() {
             let board = controller as? BoardController
             for surface in controller.surfaceTree {
-                guard let info = VerticalTabsAgents.shared.info(for: surface) else { continue }
-                var agent = GlassesAgent(id: surface.id, name: TerminalWindows.title(of: surface, in: controller) ?? info.name,
-                                         kind: info.kind.rawValue, activity: info.activity, unseen: info.unseen,
-                                         task: info.task, detail: info.detail, since: info.since)
-                agent.project = surface.pwd.map { ProjectPath.displayName(ClassicOrchestrators.shared.root(of: $0)) }
+                let info = VerticalTabsAgents.shared.info(for: surface)
+                let title = TerminalWindows.title(of: surface, in: controller)
+                var agent = GlassesAgent(id: surface.id, name: title ?? info?.name ?? (surface.title.isEmpty ? "Terminal" : surface.title),
+                                         kind: info?.kind.rawValue ?? "", activity: info?.activity ?? .ready,
+                                         unseen: info?.unseen ?? false, task: info?.task, detail: info?.detail,
+                                         since: info?.since ?? Date(timeIntervalSince1970: 0))
+                agent.isAgent = info != nil
+                agent.agentName = info?.name
+                if let folder = surface.pwd {
+                    let root = ClassicOrchestrators.shared.root(of: folder)
+                    agent.project = ProjectPath.displayName(root)
+                    agent.group = GlassesProjects.project(root: root, name: ProjectPath.displayName(root), home: home)
+                }
+                guard info != nil else {
+                    found.append((agent, surface))
+                    continue
+                }
                 if let result = ProjectChecks.shared.result(for: surface) {
                     let state: String
                     switch result.state {
@@ -202,7 +279,7 @@ final class GlassesServer {
         return found
     }
 
-    private func surface(_ id: UUID) -> Ghostty.SurfaceView? {
+    func surface(_ id: UUID) -> Ghostty.SurfaceView? {
         for controller in PhoneServer.shared.openControllers {
             if let match = controller.surfaceTree.first(where: { $0.id == id }) { return match }
         }
@@ -210,7 +287,7 @@ final class GlassesServer {
     }
 
     private func answer(_ id: UUID, allow: Bool, prompt: String, for session: Session) {
-        let found = agents().first { $0.agent.id == id }
+        let found = panes().first { $0.agent.id == id && $0.agent.isAgent }
         var message = GlassesRules.answerRefusal(agent: found?.agent, prompt: prompt)
         var sent = false
         if message == nil, let surface = found?.surface {
@@ -244,6 +321,58 @@ final class GlassesServer {
         session.peer.send(GlassesRoutes.json(["t": "said", "id": id.uuidString, "ok": sent, "message": message ?? ""]))
     }
 
+    /// One of the few keys the glasses may press, in a pane with an agent that isn't asking
+    /// for permission. Logged without saying which key.
+    private func press(_ key: GlassesKey, in id: UUID, for session: Session) {
+        let target = surface(id)
+        let info = target.flatMap { VerticalTabsAgents.shared.info(for: $0) }
+        var message = GlassesRules.keyRefusal(hasAgent: info != nil, waitingForPermission: info?.activity == .needsPermission, key: key)
+        var sent = false
+        if message == nil, let target {
+            sent = MainActor.assumeIsolated { Self.press(key, on: target) }
+            message = sent ? "Pressed \(key.label)" : "That tab isn't ready for keys."
+        }
+        Self.log.info("Key from \(session.peer.device.id, privacy: .public): pressed \(sent)")
+        session.peer.send(GlassesRoutes.json(["t": "keyed", "id": id.uuidString, "ok": sent, "message": message ?? ""]))
+    }
+
+    @MainActor
+    private static func press(_ key: GlassesKey, on surface: Ghostty.SurfaceView) -> Bool {
+        guard let model = surface.surfaceModel else { return false }
+        let input: Ghostty.Input.Key
+        var text: String?
+        var mods: Ghostty.Input.Mods = []
+        var codepoint: UInt32 = 0
+        switch key {
+        case .enter:
+            input = .enter
+            text = "\r"
+        case .escape:
+            input = .escape
+            text = "\u{1b}"
+        case .tab:
+            input = .tab
+            text = "\t"
+        case .up: input = .arrowUp
+        case .down: input = .arrowDown
+        case .y:
+            input = .y
+            text = "y"
+            codepoint = 121
+        case .n:
+            input = .n
+            text = "n"
+            codepoint = 110
+        case .interrupt:
+            input = .c
+            mods = [.ctrl]
+            codepoint = 99
+        }
+        model.sendKeyEvent(.init(key: input, action: .press, text: text, mods: mods, unshiftedCodepoint: codepoint))
+        model.sendKeyEvent(.init(key: input, action: .release, mods: mods, unshiftedCodepoint: codepoint))
+        return true
+    }
+
     /// One line typed into an agent's input box, then Enter.
     private static func typeLine(_ line: String, into surface: Ghostty.SurfaceView) {
         MainActor.assumeIsolated {
@@ -259,13 +388,11 @@ final class GlassesServer {
 
     // MARK: Orchestrators
 
-    /// A project's id on the wire: not its path.
-    static func projectID(_ root: String) -> String {
-        SHA256.hash(data: Data(root.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
-    }
+    /// A project's id on the wire: not its path. A pane's project goes by the same one.
+    static func projectID(_ root: String) -> String { GlassesProjects.id(root) }
 
     /// The projects that have an orchestrator, or classic panes with agents it could run.
-    private func projectRoots() -> [String] {
+    func projectRoots() -> [String] {
         guard TellurionSettings.isOn(.orchestrator) else { return [] }
         var roots = ClassicOrchestrators.shared.list.map(\.root)
         for (_, surface) in ClassicPanes.all where VerticalTabsAgents.shared.info(for: surface) != nil {
@@ -279,21 +406,61 @@ final class GlassesServer {
     private func orchestratorsMessage() -> String {
         let projects: [[String: Any]] = projectRoots().map { root in
             let orchestrator = ClassicOrchestrators.shared.orchestrator(root: root)
-            var project: [String: Any] = [
-                "id": Self.projectID(root),
-                "name": GlassesAgents.clip(ProjectPath.displayName(root), GlassesAgents.nameLength),
-                "status": orchestrator?.status.line ?? "Not started",
-            ]
-            if let goal = orchestrator?.team.goal ?? ClassicOrchestrators.shared.record(root: root)?.goal, !goal.isEmpty {
-                project["goal"] = GlassesAgents.clip(goal, GlassesAgents.detailLength)
+            var project = GlassesOrchestrator(id: Self.projectID(root), name: ProjectPath.displayName(root),
+                                              status: orchestrator?.status.line ?? "Not started")
+            project.goal = orchestrator?.team.goal ?? ClassicOrchestrators.shared.record(root: root)?.goal
+            guard let orchestrator else { return project.item() }
+            let log = orchestrator.brain.log
+            project.running = orchestrator.brain.running || orchestrator.brain.busy
+            project.log = log.map { entry in
+                (entry.kind == .user ? "You: " : entry.kind == .error ? "! " : "") + entry.text
             }
-            project["log"] = (orchestrator?.brain.log.suffix(6) ?? []).map { entry -> String in
-                let prefix = entry.kind == .user ? "You: " : entry.kind == .error ? "! " : ""
-                return GlassesAgents.clip(prefix + entry.text, 160)
+            project.says = log.last { $0.kind == .say }?.text
+            project.last = log.last { $0.kind == .action }?.text
+            project.members = orchestrator.labels().map { entry in
+                let info = orchestrator.agentInfo(entry.pane)
+                return .init(id: entry.pane, name: entry.label, role: orchestrator.role(of: entry.pane),
+                             activity: info.map { GlassesAgents.activity($0.activity) }, detail: info?.detail ?? info?.task)
             }
-            return project
+            return project.item()
         }
         return GlassesRoutes.json(["t": "orch", "projects": projects])
+    }
+
+    /// Stop, carry on, wire all, clear: what the orchestrator's window has buttons for.
+    private func orchestrate(_ action: GlassesOrchestratorAction, project id: String, for session: Session) {
+        var message = "That project has no orchestrator or agents now."
+        var done = false
+        if let root = projectRoots().first(where: { PhoneDevices.equal(Self.projectID($0), id) }) {
+            let existing = ClassicOrchestrators.shared.orchestrator(root: root)
+            switch action {
+            case .stop:
+                existing?.brain.stop()
+                done = existing != nil
+                message = done ? "Stopped" : "It isn't running."
+            case .clear:
+                existing?.brain.clear()
+                done = existing != nil
+                message = done ? "Cleared" : "Nothing to clear."
+            case .carryOn:
+                if let goal = existing?.team.goal ?? ClassicOrchestrators.shared.record(root: root)?.goal, !goal.isEmpty {
+                    ClassicOrchestrators.shared.open(root: root).command(goal)
+                    done = true
+                    message = "Carrying on"
+                } else {
+                    message = "It has no goal yet. Hold to give it one."
+                }
+            case .wireAll:
+                let orchestrator = ClassicOrchestrators.shared.open(root: root)
+                let agents = ClassicOrchestrators.shared.wireChoices(for: orchestrator).first { $0.id == orchestrator.root }?.agents ?? []
+                let fresh = agents.filter { !orchestrator.isWired($0) }
+                if !fresh.isEmpty { orchestrator.wire(fresh) }
+                done = !fresh.isEmpty
+                message = fresh.isEmpty ? "Everyone is wired already." : "Wired \(fresh.count)"
+            }
+        }
+        Self.log.info("Orchestrator \(action.rawValue, privacy: .public) from \(session.peer.device.id, privacy: .public): done \(done)")
+        session.peer.send(GlassesRoutes.json(["t": "did", "ok": done, "message": message]))
     }
 
     private func command(_ text: String, project id: String, for session: Session) {
@@ -344,7 +511,7 @@ final class GlassesServer {
     // MARK: Pushing
 
     private func updateTimer() {
-        let wanted = sessions.values.contains { $0.glance || $0.orchestrators || $0.tail != nil }
+        let wanted = sessions.values.contains { $0.glance || $0.orchestrators || $0.tools || $0.tail != nil || $0.toolPage != nil }
         if wanted, timer == nil {
             // Twice a second, sent only when something changed.
             let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in self?.push() }
@@ -360,18 +527,20 @@ final class GlassesServer {
     private func push() {
         guard TellurionSettings.isOn(.glasses), !sessions.isEmpty else { return }
         // Each is built once a tick, however many glasses are connected.
-        var agentsContent: (core: String, message: [String: Any])?
+        var agentsContent: [Int: (core: String, message: [String: Any])] = [:]
         var orchestrators: String?
-        var all: [(agent: GlassesAgent, surface: Ghostty.SurfaceView)]?
+        var tools: String?
+        var all: [GlassesAgent]?
         for session in sessions.values where !session.peer.isBackedUp() {
             if session.glance {
-                if agentsContent == nil {
-                    let found = all ?? agents()
+                let version = min(max(session.peer.version, 1), Self.version)
+                if agentsContent[version] == nil {
+                    let found = all ?? panes().map(\.agent)
                     all = found
-                    let message = GlassesAgents.message(found.map(\.agent))
-                    agentsContent = (GlassesRoutes.json(message), message)
+                    let message = GlassesAgents.message(found, version: version)
+                    agentsContent[version] = (GlassesRoutes.json(message), message)
                 }
-                if let content = agentsContent, content.core != session.lastAgents {
+                if let content = agentsContent[version], content.core != session.lastAgents {
                     session.lastAgents = content.core
                     // The clock goes with what's sent, so "for 3m" can be counted on the glasses.
                     var message = content.message
@@ -387,14 +556,79 @@ final class GlassesServer {
                     session.peer.send(message)
                 }
             }
+            if session.tools {
+                let message = tools ?? toolsMessage(all ?? panes().map(\.agent))
+                tools = message
+                if message != session.lastTools {
+                    session.lastTools = message
+                    session.peer.send(message)
+                }
+            }
+            // A tool's page: looked at again once a second, sent when it changed.
+            if let tool = session.toolPage, Date().timeIntervalSince(session.toolPageBuilt) >= 1 {
+                session.toolPageBuilt = Date()
+                let message = GlassesRoutes.json(page(tool, for: session, panes: all ?? panes().map(\.agent)).message())
+                if message != session.lastToolPage {
+                    session.lastToolPage = message
+                    session.peer.send(message)
+                }
+            }
             if let tail = session.tail {
-                let message = tailMessage(tail.id, lines: tail.lines)
+                let message = tail.screen ? screenMessage(tail.id, lines: tail.lines, before: tail.before)
+                    : tailMessage(tail.id, lines: tail.lines)
                 if message != session.lastTail {
                     session.lastTail = message
                     session.peer.send(message)
                 }
             }
         }
+    }
+
+    /// A pane's screen as it is: what's showing, or `before` lines up into its scrollback.
+    private func screenMessage(_ id: UUID, lines: Int, before: Int) -> String {
+        guard let surface = surface(id) else {
+            return GlassesRoutes.json(["t": "tail", "id": id.uuidString, "text": "", "gone": true])
+        }
+        // What's on screen is the cheap one to read; the whole scrollback only to look back.
+        // There may always be more above the screen: asking for it is how the glasses find out.
+        let found = before == 0
+            ? (text: GlassesText.screen(surface.cachedVisibleContents.get(), lines: lines).text, more: true)
+            : GlassesText.screen(surface.cachedScreenContents.get(), lines: lines, before: before)
+        var message: [String: Any] = ["t": "tail", "id": id.uuidString, "src": "screen", "before": before,
+                                      "text": found.text, "more": found.more]
+        // The agent's own last words, for when its screen is mostly its input box and status bar.
+        if before == 0, let answer = OrchestratorAnswers.last(surface), !answer.isEmpty {
+            message["ans"] = GlassesText.tail(answer, lines: 8, limit: 600)
+        }
+        return GlassesRoutes.json(message)
+    }
+
+    /// The Tools row's numbers, from what the sidebar and the tools already keep.
+    private func toolsMessage(_ panes: [GlassesAgent]) -> String {
+        var tools = GlassesTools()
+        if TellurionSettings.isOn(.usage) {
+            tools.usage = UsageMonitor.shared.entries.map { entry in
+                .init(name: entry.name, windows: entry.windows.map { .init(label: $0.label, percent: $0.usedPercent, resets: $0.resetsAt) })
+            }
+        }
+        if TellurionSettings.isOn(.localhost) {
+            tools.servers = LocalhostSessions.shared.sessions.filter { $0.state == .live }.compactMap { session in
+                guard let url = session.url, let host = url.host else { return nil }
+                let address = host + (url.port.map { ":\($0)" } ?? "") + (url.path == "/" ? "" : url.path)
+                return .init(name: session.project.name, address: address,
+                             project: GlassesProjects.id(ClassicOrchestrators.shared.root(of: session.cwd)))
+            }
+        }
+        if TellurionSettings.isOn(.review) { tools.review = ReviewInbox.shared.items.filter { $0.stage == .ready }.count }
+        let names = GlassesAgents.names(panes)
+        for (pane, name) in zip(panes, names) where pane.isAgent {
+            if pane.check?.state == "failed" { tools.failedChecks.append(name) }
+            if let budget = pane.budget { tools.budgets.append(.init(name: name, fraction: budget.fraction)) }
+        }
+        tools.conflicts = Set(AgentConflicts.shared.byPane.values.flatMap { $0.map(\.id) }).count
+        var message = tools.message()
+        message["list"] = toolList(tools, panes: panes)
+        return GlassesRoutes.json(message)
     }
 
     /// An agent's latest words: its last answer from its transcript when it has one, or

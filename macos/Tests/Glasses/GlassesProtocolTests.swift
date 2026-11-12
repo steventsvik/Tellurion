@@ -148,7 +148,8 @@ struct GlassesProtocolTests {
 
     @Test func unknownMessagesAreNotOurs() {
         #expect(GlassesRequest.parse(["t": "text", "id": UUID().uuidString, "text": "ls\n"]) == .unknown)
-        #expect(GlassesRequest.parse(["t": "key", "key": "enter"]) == .unknown)
+        #expect(GlassesRequest.parse(["t": "keys", "key": "enter"]) == .unknown)
+        #expect(GlassesRequest.parse(["t": "paste", "id": UUID().uuidString, "text": "ls"]) == .unknown)
         #expect(GlassesRequest.parse(["t": "launch"]) == .unknown)
         #expect(GlassesRequest.parse([:]) == .unknown)
         #expect(GlassesRequest.parse(["t": 7]) == .unknown)

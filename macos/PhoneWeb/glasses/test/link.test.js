@@ -25,12 +25,17 @@ test("a pairing code is read from a scanned address", () => {
 });
 
 test("subscriptions are sent when new and stopped when dropped", () => {
-  const home = [{ t: "glance" }, { t: "orch" }];
+  const home = [{ t: "glance" }, { t: "orch" }, { t: "tools" }];
   const agent = [...home, { t: "tail", id: "a", lines: 30 }];
   assert.deepEqual(subscriptionChanges([], home), home);
   assert.deepEqual(subscriptionChanges(home, agent), [{ t: "tail", id: "a", lines: 30 }]);
   assert.deepEqual(subscriptionChanges(agent, [...home, { t: "tail", id: "b", lines: 30 }]), [{ t: "tail", id: "b", lines: 30 }]);
   assert.deepEqual(subscriptionChanges(agent, home), [{ t: "untail" }]);
+  // The same pane further back is asked for anew; a row with no screen stops it.
+  const pane = (before) => [...home, { t: "tail", id: "a", lines: 40, src: "screen", before }];
+  assert.deepEqual(subscriptionChanges(pane(0), pane(16)), [{ t: "tail", id: "a", lines: 40, src: "screen", before: 16 }]);
+  assert.deepEqual(subscriptionChanges(pane(16), home), [{ t: "untail" }]);
+  assert.deepEqual(subscriptionChanges(home, [{ t: "glance" }]), [{ t: "unorch" }, { t: "untools" }]);
 });
 
 // A clock, timers and sockets that only move when the test says.
@@ -97,7 +102,7 @@ test("the stored token is sent first, and what the screen needs is asked for aft
   assert.equal(socket.url, "wss://mac.example/glasses/ws");
   assert.equal(w.link.send({ t: "say" }), false, "nothing goes out before hello");
   socket.open();
-  assert.deepEqual(socket.sent, [{ t: "hello", token: "secret", client: "glasses", v: 1 }]);
+  assert.deepEqual(socket.sent, [{ t: "hello", token: "secret", client: "glasses", v: 2 }]);
   socket.say({ t: "hello", mac: "Studio", v: 1, glasses: true });
   assert.deepEqual(socket.sent.slice(1), [{ t: "glance" }, { t: "orch" }]);
   assert.deepEqual(w.states, ["connecting", "ok"]);
@@ -130,7 +135,7 @@ test("a dropped connection comes back by itself, slower each time, and asks agai
   w.sockets[2].open();
   w.sockets[2].say({ t: "hello", glasses: true });
   assert.equal(w.states.at(-1), "ok");
-  assert.deepEqual(w.sockets[2].sent, [{ t: "hello", token: "secret", client: "glasses", v: 1 }, { t: "glance" }]);
+  assert.deepEqual(w.sockets[2].sent, [{ t: "hello", token: "secret", client: "glasses", v: 2 }, { t: "glance" }]);
 });
 
 test("glasses turned off on the Mac is told apart from a Mac that's away", async () => {

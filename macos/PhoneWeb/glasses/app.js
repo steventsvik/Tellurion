@@ -1,10 +1,13 @@
-// Tellurion on Even G2 glasses: who needs you, answering a permission prompt, an agent's
-// latest output, and talking to an agent or the orchestrator. This file only wires the
-// parts together; what's shown is decided in screens.js and what input does in input.js.
+// Tellurion on Even G2 glasses: the Mac's window through the lens. The sidebar with the
+// projects and their tabs; a tab's terminal, a project's orchestrator and the Mac's tools
+// each on the whole display; answering a permission prompt, pressing a key, and talking
+// to an agent or the orchestrator. This
+// file only wires the parts together; what's shown is decided in screens.js and what
+// input does in input.js.
 
 import {
-  AudioInputSource, CreateStartUpPageContainer, ListContainerProperty, ListItemContainerProperty, RebuildPageContainer,
-  TextContainerProperty, TextContainerUpgrade, waitForEvenAppBridge,
+  AudioInputSource, CreateStartUpPageContainer, ListContainerProperty, ListItemContainerProperty, MenuContainerProperty,
+  MenuItemProperty, RebuildPageContainer, TextContainerProperty, TextContainerUpgrade, waitForEvenAppBridge,
 } from "./vendor/even_hub_sdk/index.js";
 import { TELLURION_ORIGIN } from "./config.js";
 import { createGlass } from "./glass.js";
@@ -29,6 +32,10 @@ let link = null;
 let voice = null;
 let bridge = null;
 const fresh = createDebouncer();
+/// Until when the glasses' "close this app?" question may be up. It clears the page, and
+/// says so with the events for coming to the front and leaving it.
+let exitAsked = 0;
+const EXIT_QUESTION = 15_000;
 
 /// The page's own storage, for when the Even app's isn't there (a plain browser).
 const pageStore = {
@@ -67,7 +74,7 @@ function advance(event) {
   const now = Date.now();
   let result;
   try { result = step(ui, model, event, now); } catch (error) { console.error("step", error); return; }
-  const screenChanged = result.ui.stack !== ui.stack;
+  const placeChanged = result.ui.sel !== ui.sel || result.ui.folded !== ui.folded;
   ui = result.ui;
   for (const message of result.out) {
     if (!link?.send(message)) ui = { ...ui, flash: { text: "Not connected", until: now + 3000 } };
@@ -77,12 +84,12 @@ function advance(event) {
       if (effect.fx === "listen") voice?.begin();
       else if (effect.fx === "stop") voice?.end();
       else if (effect.fx === "cancel") voice?.cancel();
-      else if (effect.fx === "exit") glass?.exit(1);
+      else if (effect.fx === "exit") { exitAsked = now + EXIT_QUESTION; glass?.exit(1); }
     } catch (error) { console.error(effect.fx, error); }
   }
   link?.subscribe(subscriptions(ui));
   // Where you were survives the page being put away and brought back.
-  if (screenChanged) storage.set(UI_KEY, JSON.stringify({ stack: ui.stack, sel: ui.sel })).catch(() => {});
+  if (placeChanged) storage.set(UI_KEY, JSON.stringify({ sel: ui.sel, folded: ui.folded })).catch(() => {});
   draw();
 }
 
@@ -94,14 +101,22 @@ function onEvent(raw) {
   const now = Date.now();
   if (!fresh(event, now)) return;
   if (event.type === "up" || event.type === "down") glass?.noteScroll();
-  if (event.type === "foreground") link?.wake();
   if (event.type === "abnormal") glass?.forget();
+  if ((event.type === "foreground" || event.type === "background") && now < exitAsked) {
+    // The exit question came up, or was answered "no": the page under it is put back, and
+    // nothing here was put away.
+    if (event.type === "background") exitAsked = 0;
+    glass?.redraw();
+    draw();
+    return;
+  }
+  if (event.type === "foreground") link?.wake();
   advance(event);
 }
 
 function onMessage(message) {
   if (message.t === "heard") { advance({ type: "heard", text: message.text, final: message.final === true, error: message.error }); return; }
-  if (message.t === "answered" || message.t === "said" || message.t === "orchsent") {
+  if (message.t === "answered" || message.t === "said" || message.t === "orchsent" || message.t === "keyed" || message.t === "did") {
     advance({ type: "reply", ok: message.ok === true, message: message.message });
     return;
   }
@@ -119,10 +134,14 @@ function onState(state, extra) {
 async function restore() {
   try {
     const saved = JSON.parse((await storage.get(UI_KEY)) || "null");
-    if (saved && Array.isArray(saved.stack) && saved.stack.length && saved.stack[0]?.name === "home") {
-      ui = { ...ui, stack: saved.stack.slice(0, 4), sel: typeof saved.sel === "string" ? saved.sel : null };
+    if (saved && typeof saved === "object") {
+      ui = {
+        ...ui,
+        sel: typeof saved.sel === "string" ? saved.sel : null,
+        folded: Array.isArray(saved.folded) ? saved.folded.filter((id) => typeof id === "string").slice(0, 40) : [],
+      };
     }
-  } catch { /* starts on Home */ }
+  } catch { /* starts at the top of the sidebar */ }
 }
 
 async function main() {
@@ -169,11 +188,13 @@ async function main() {
 
 /// A page with the SDK's own container classes inside.
 function shaped(page) {
-  return {
+  const made = {
     containerTotalNum: page.containerTotalNum,
     textObject: page.textObject.map((item) => new TextContainerProperty(item)),
     listObject: page.listObject.map((item) => new ListContainerProperty({ ...item, itemContainer: new ListItemContainerProperty(item.itemContainer) })),
   };
+  if (page.menuObject) made.menuObject = new MenuContainerProperty({ menuItems: page.menuObject.menuItems.map((item) => new MenuItemProperty(item)) });
+  return made;
 }
 
 main().catch((error) => {

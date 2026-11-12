@@ -6,7 +6,7 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 
 ## Unreleased
 
-- **Glasses.** Tellurion on Even G2 glasses, through phone access: see who needs you, allow or deny a permission prompt with a tap, read an agent's latest output, and talk to an agent or the orchestrator (speech becomes text on your Mac, and nothing is sent until you confirm). Pair in **Phone → Glasses**; a command shown there builds the app for your Mac's address so it can live on the glasses' menu as your own beta build.
+- **Glasses.** Tellurion on Even G2 glasses, through phone access. Browse your projects and their tabs in a sidebar, grouped by project like on the Mac; tap a tab and its terminal takes the whole display, cleaned up for reading. A permission prompt shows in the tab that's asking: tap to allow, double-tap to deny. Each project's orchestrator has its own screen (status, goal, the team, its latest word; Stop, Carry on, Wire all and Clear), and Tools lists the Mac's tools: Review, Checks, Budgets, Localhost, Usage, Activity, session search by voice and more have a page on the glasses, and the rest open on your Mac. Hold to talk from anywhere: speech becomes text on your Mac, and nothing is sent or changed without a confirming tap. Pair in **Phone → Glasses**; a command shown there builds the app for your Mac's address so it can live on the glasses' menu as your own beta build.
 
 ## 1.9.3
 

@@ -24,7 +24,7 @@ struct GlassesBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             TellurionSectionLabel("Glasses")
-            Text("On Even G2 glasses: who needs you, Allow or Deny for a permission prompt, an agent's latest output, and talking to an agent or the orchestrator. What you say is turned into text on this Mac.")
+            Text("On Even G2 glasses: your projects and tabs with each tab's terminal, the orchestrator's own screen, the tools, Allow or Deny for a permission prompt, a few keys (Enter, Esc, Ctrl-C) for an agent's pane, and talking to an agent or the orchestrator. What you say is turned into text on this Mac.")
                 .font(Tellurion.font(11)).foregroundColor(Tellurion.muted)
                 .fixedSize(horizontal: false, vertical: true)
             if let request = requests.pending {

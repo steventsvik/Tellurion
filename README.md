@@ -226,12 +226,16 @@ project, with agents that need you at the top.
 
 ### Glasses
 
-With phone access on, Tellurion also runs on Even G2 glasses. A glance shows who needs you; a tap opens an agent, its task and its latest output. When an agent asks for permission the prompt comes up by itself: tap to allow, double-tap to deny, swipe to leave it for later. Hold the temple to talk: what you say is turned into text on your Mac, shown back to you, and sent to the agent or the project's orchestrator only after you tap.
+With phone access on, Tellurion also runs on Even G2 glasses: your Mac's window through the lens.
 
-- **Pair them in Phone → Glasses.** Scan the QR from the Even app (Even Hub → Scan QR) to try it. To keep it on the glasses' menu, build the app for your Mac's address with the command shown there and upload it to your own Even Hub account as a beta build. The glasses then ask to pair, and your Mac shows the same four digits to approve.
-- **Private.** Everything goes over your own Tailscale network to your own Mac, and nothing the glasses hear leaves it.
-- **When your Mac is asleep or offline** the glasses say so and reconnect by themselves when it's back.
-- Turn it off in **Settings → Features → Glasses**.
+- **Browse like the sidebar.** Your projects and their tabs down the left, grouped by project, with a short look at the chosen one on the right. Tap a project to fold it.
+- **A tab takes the whole display.** Tap a tab and its terminal fills the lens, cleaned up for reading: what the agent said and did, without its input box and status bars. Swipe to read back; double-tap always goes back.
+- **Answer where it's asked.** A permission prompt shows in the tab it belongs to, with the command: tap to allow, double-tap to deny, swipe to leave it for later.
+- **An orchestrator screen per project:** status, goal, the team and what each agent is doing, its latest word and log, with Stop, Carry on, Wire all and Clear a tap away. Hold to give it a command.
+- **Tools, in the Mac's order.** Mission Control, Review (send feedback by voice), Checks (run now), Budgets, Localhost, Ports, Usage, Activity, Conflicts, Worktrees and session search by voice have a page on the glasses; the rest open on your Mac for when you sit down.
+- **Hold to talk from anywhere.** What you say is turned into text on your Mac and shown back to you. Nothing is sent, and nothing on the Mac is changed, without a confirming tap.
+- **Pair them in Phone → Glasses.** Scan the QR from the Even app (Even Hub → Scan QR) to try it. To keep it on the glasses' menu, build the app for your Mac's address with the command shown there and upload it to your own Even Hub account as a beta build; the glasses then ask to pair, and your Mac shows the same four digits to approve.
+- **Private.** Everything goes over your own Tailscale network to your own Mac, and nothing the glasses hear leaves it. When your Mac is asleep or offline the glasses say so and reconnect by themselves. Turn it off in **Settings → Features → Glasses**.
 
 ### A code editor that follows the agent
 
