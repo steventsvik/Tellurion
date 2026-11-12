@@ -58,6 +58,9 @@ enum TestHooks {
     /// `TELLURION_PHONE_DEV_CODE=<code>`: in phone dev mode, the pairing code, so a test pairs
     /// without the window.
     static var phonePairingCode: String? { value("TELLURION_PHONE_DEV_CODE") }
+    /// `TELLURION_PHONE_DEV_PORT=<port>`: in phone dev mode, the port to listen on, so a test
+    /// copy doesn't take the one the installed app is serving.
+    static var phonePort: UInt16? { value("TELLURION_PHONE_DEV_PORT").flatMap { UInt16($0) } }
     /// `TELLURION_PHONE_TEST=on|off`: presses Turn on or Turn off at launch (test bundle id only).
     static var phoneSwitch: String? { value("TELLURION_PHONE_TEST") }
 
@@ -81,6 +84,7 @@ enum TestHooks {
     static var showsBackgroundSample: Bool { false }
     static let motionOff: Set<String> = []
     static var phoneDev: Bool { false }
+    static var phonePort: UInt16? { nil }
     static var phonePairingCode: String? { nil }
     static var phoneSwitch: String? { nil }
     static func note(_ line: @autoclosure () -> String) {}

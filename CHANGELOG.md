@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Glasses.** Tellurion on Even G2 glasses, through phone access: see who needs you, allow or deny a permission prompt with a tap, read an agent's latest output, and talk to an agent or the orchestrator (speech becomes text on your Mac, and nothing is sent until you confirm). Pair in **Phone → Glasses**; a command shown there builds the app for your Mac's address so it can live on the glasses' menu as your own beta build.
+
 ## 1.9.3
 
 The orchestrator comes to tabs, with checks that make done mean verified, conflict radar, budgets, task cards and session search, and a round of fixes for crashes, lost files and the release checks.

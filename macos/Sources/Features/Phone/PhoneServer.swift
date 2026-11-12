@@ -23,7 +23,7 @@ final class PhoneServer: ObservableObject {
 
     static let enabledKey = "PhoneAccessEnabled"
     /// The local port `tailscale serve` forwards to.
-    static let localPort: UInt16 = 47_811
+    static let localPort: UInt16 = TestHooks.phonePort ?? 47_811
     /// Test copies can talk to it from this Mac without Tailscale (TELLURION_PHONE_DEV=1).
     /// Always false in a release: the switch only exists in builds with the test hooks.
     static let devMode = TestHooks.phoneDev
@@ -62,7 +62,7 @@ final class PhoneServer: ObservableObject {
     }
 
     /// Classic windows and boards that are open now.
-    private var openControllers: [BaseTerminalController] {
+    var openControllers: [BaseTerminalController] {
         TerminalWindows.all.filter { controller in
             guard let window = controller.window else { return false }
             return !closedWindows.contains(window)
@@ -177,6 +177,8 @@ final class PhoneServer: ObservableObject {
         guard caller(request) != nil else {
             return .text("This Tellurion only answers its owner's Tailscale devices.", status: 403)
         }
+        // The glasses app's own paths (pairing, and nothing at all while glasses are off).
+        if let response = GlassesHTTP.response(for: request) { return response }
         switch (request.method, request.path) {
         case ("POST", "/api/pair"):
             return pair(request)
@@ -213,17 +215,30 @@ final class PhoneServer: ObservableObject {
         /// The serial of the screen it was last sent (see `ScreenCache`); 0 for none.
         var lastScreen = 0
         var lastTabs = ""
-        init(socket: PhoneSocket) { self.socket = socket }
+        /// Connected on the glasses' path: it speaks the glasses' messages only (see `GlassesServer`).
+        let glasses: Bool
+        init(socket: PhoneSocket, glasses: Bool) {
+            self.socket = socket
+            self.glasses = glasses
+        }
     }
 
     private func accept(_ request: PhoneHTTPServer.Request, _ socket: PhoneSocket) -> Bool {
-        guard request.path == "/api/ws", caller(request) != nil, originAllowed(request.headers["origin"]) else { return false }
-        let client = Client(socket: socket)
+        // The phone's path keeps its own-origin rule. The glasses' path takes any origin while
+        // glasses are on: the packaged app runs from the Even app's origin.
+        guard caller(request) != nil,
+              GlassesRoutes.acceptsSocket(path: request.path, phoneOriginOK: originAllowed(request.headers["origin"]),
+                                          glassesOn: TellurionSettings.isOn(.glasses)) else { return false }
+        let client = Client(socket: socket, glasses: request.path == GlassesRoutes.socket)
         let id = ObjectIdentifier(client)
         clients[id] = client
         socket.onMessage = { [weak self, weak client] text in
             guard let self, let client else { return }
             self.receive(text, from: client)
+        }
+        socket.onBinary = { [weak self, weak client] data in
+            guard let self, let client else { return }
+            self.receive(data, from: client)
         }
         socket.onClose = { [weak self] in self?.dropClient(id) }
         // It has a few seconds to say who it is.
@@ -243,6 +258,7 @@ final class PhoneServer: ObservableObject {
     }
 
     private func dropClient(_ id: ObjectIdentifier) {
+        GlassesServer.shared.dropped(id)
         guard let client = clients.removeValue(forKey: id) else { return }
         if let device = client.device {
             connected[device.id, default: 1] -= 1
@@ -251,14 +267,26 @@ final class PhoneServer: ObservableObject {
         updateTimers()
     }
 
+    /// A binary message: the glasses' sound. Before the device has said who it is, it's
+    /// turned away like anything else that isn't its token.
+    private func receive(_ data: Data, from client: Client) {
+        guard client.device != nil else {
+            receive("", from: client)
+            return
+        }
+        if client.glasses { GlassesServer.shared.receiveAudio(data, from: ObjectIdentifier(client)) }
+    }
+
     private func receive(_ text: String, from client: Client) {
         let message = (try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]) ?? [:]
         let type = message["t"] as? String
 
         guard let device = client.device else {
             // The first message must be the device's token; anything else closes the socket.
+            // Each kind of token only works on its own path: glasses never type keys, and a
+            // phone's token doesn't open the glasses' socket, which takes any origin.
             guard type == "hello", let token = message["token"] as? String,
-                  let device = PhoneDevices.shared.device(for: token) else {
+                  let device = PhoneDevices.shared.device(for: token), client.glasses == device.isGlasses else {
                 client.socket.send(Self.json(["t": "error", "code": "unpaired", "message": "This phone isn't paired any more."]))
                 client.socket.close()
                 return
@@ -267,14 +295,25 @@ final class PhoneServer: ObservableObject {
             connected[device.id, default: 0] += 1
             PhoneDevices.shared.touch(device.id)
             client.socket.send(Self.json(["t": "hello", "mac": Host.current().localizedName ?? "Mac", "device": device.name,
-                                          "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""]))
-            client.lastTabs = tabsMessage()
-            client.socket.send(client.lastTabs)
+                                          "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+                                          "v": GlassesServer.version, "glasses": TellurionSettings.isOn(.glasses)]))
+            if !client.glasses {
+                client.lastTabs = tabsMessage()
+                client.socket.send(client.lastTabs)
+            }
             updateTimers()
             return
         }
         PhoneDevices.shared.touch(device.id)
         guard let type else { return }
+        if client.glasses {
+            if type == "ping" { client.socket.send(Self.json(["t": "pong"])); return }
+            let socket = client.socket
+            GlassesServer.shared.receive(message, from: .init(id: ObjectIdentifier(client), device: device,
+                                                              send: { socket.send($0) }, isBackedUp: { socket.isBackedUp },
+                                                              close: { socket.close() }))
+            return
+        }
 
         switch type {
         case "watch":
@@ -395,7 +434,7 @@ final class PhoneServer: ObservableObject {
     // MARK: Screens
 
     private func updateTimers() {
-        let authed = clients.values.contains { $0.device != nil }
+        let authed = clients.values.contains { $0.device != nil && !$0.glasses }
         let watching = clients.values.contains { $0.watching != nil }
         if watching, screenTimer == nil {
             // 10 times a second, sent only when the screen changed.
@@ -420,7 +459,7 @@ final class PhoneServer: ObservableObject {
 
     private func pushTabs() {
         let message = tabsMessage()
-        for client in clients.values where client.device != nil && client.lastTabs != message {
+        for client in clients.values where client.device != nil && !client.glasses && client.lastTabs != message {
             client.lastTabs = message
             client.socket.send(message)
         }
@@ -582,7 +621,8 @@ enum PhoneWebFiles {
     private static let base = Bundle.main.resourceURL!.appendingPathComponent("PhoneWeb", isDirectory: true)
 
     static func response(for path: String) -> PhoneHTTPServer.Response {
-        let relative = path == "/" ? "index.html" : String(path.drop { $0 == "/" })
+        // A folder's address is its index page ("/glasses/").
+        let relative = path == "/" ? "index.html" : String(path.drop { $0 == "/" }) + (path.hasSuffix("/") ? "index.html" : "")
         // Only plain names inside the folder.
         guard !relative.contains(".."), !relative.contains("\\"),
               relative.range(of: "^[A-Za-z0-9._/-]+$", options: .regularExpression) != nil else {

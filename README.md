@@ -224,6 +224,15 @@ project, with agents that need you at the top.
 
 <br>
 
+### Glasses
+
+With phone access on, Tellurion also runs on Even G2 glasses. A glance shows who needs you; a tap opens an agent, its task and its latest output. When an agent asks for permission the prompt comes up by itself: tap to allow, double-tap to deny, swipe to leave it for later. Hold the temple to talk: what you say is turned into text on your Mac, shown back to you, and sent to the agent or the project's orchestrator only after you tap.
+
+- **Pair them in Phone → Glasses.** Scan the QR from the Even app (Even Hub → Scan QR) to try it. To keep it on the glasses' menu, build the app for your Mac's address with the command shown there and upload it to your own Even Hub account as a beta build. The glasses then ask to pair, and your Mac shows the same four digits to approve.
+- **Private.** Everything goes over your own Tailscale network to your own Mac, and nothing the glasses hear leaves it.
+- **When your Mac is asleep or offline** the glasses say so and reconnect by themselves when it's back.
+- Turn it off in **Settings → Features → Glasses**.
+
 ### A code editor that follows the agent
 
 Each tab has its own VS Code–style editor (Monaco, ⌃⌘E) on that tab's folder, in your
