@@ -14,6 +14,11 @@ struct PhoneDevice: Codable, Identifiable, Equatable {
     var lastSeen: Date?
     /// The Tailscale account it paired from.
     var login: String?
+    /// "glasses" for Even G2 glasses; nothing for a phone (and in lists saved before there were glasses).
+    var kind: String?
+
+    static let glassesKind = "glasses"
+    var isGlasses: Bool { kind == Self.glassesKind }
 }
 
 /// Paired phones and the one-time code that pairs a new one. Saved (tokens hashed) in
@@ -77,7 +82,7 @@ final class PhoneDevices: ObservableObject {
     }
 
     /// Trades a valid code for a new device token.
-    func pair(code: String, name: String, login: String?) -> PairResult {
+    func pair(code: String, name: String, login: String?, kind: String? = nil) -> PairResult {
         guard let current = pairingCode, Date() < pairingExpires else { return .invalid }
         guard Self.equal(Self.normalized(code), Self.normalized(current)) else {
             failedAttempts += 1
@@ -88,13 +93,21 @@ final class PhoneDevices: ObservableObject {
             return .invalid
         }
         pairingCode = nil
+        let (token, device) = add(name: name, login: login, kind: kind)
+        return .paired(token: token, device: device)
+    }
+
+    /// A new device and its token, once it has shown it may pair: with a code, or approved
+    /// on the Mac (see `GlassesPairing`).
+    func add(name: String, login: String?, kind: String? = nil) -> (token: String, device: PhoneDevice) {
         let token = Self.random(bytes: 32)
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let device = PhoneDevice(id: UUID().uuidString, name: trimmed.isEmpty ? "Phone" : String(trimmed.prefix(40)),
-                                 tokenHash: Self.hash(token), paired: Date(), lastSeen: Date(), login: login)
+        let fallback = kind == PhoneDevice.glassesKind ? "Glasses" : "Phone"
+        let device = PhoneDevice(id: UUID().uuidString, name: trimmed.isEmpty ? fallback : String(trimmed.prefix(40)),
+                                 tokenHash: Self.hash(token), paired: Date(), lastSeen: Date(), login: login, kind: kind)
         devices.append(device)
         save()
-        return .paired(token: token, device: device)
+        return (token, device)
     }
 
     // MARK: Devices
