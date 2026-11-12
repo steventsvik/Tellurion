@@ -49,6 +49,12 @@ jobs:
       - name: Editor scripts
         run: node --check macos/EditorWeb/*.js
 
+      - name: Glasses app
+        run: |
+          for f in macos/PhoneWeb/glasses/*.js macos/PhoneWeb/glasses/test/*.js; do node --check "$f"; done
+          sh -n macos/PhoneWeb/glasses/pack/pack.sh
+          node --test macos/PhoneWeb/glasses/test/*.test.js
+
       - name: Shell scripts
         run: |
           # Every script by its shebang: the hooks and commands in agent-hooks/, and the

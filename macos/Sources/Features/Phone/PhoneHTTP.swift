@@ -194,20 +194,22 @@ final class PhoneHTTPServer {
     }
 }
 
-/// One WebSocket connection: text messages in and out. Events arrive on the main queue.
+/// One WebSocket connection: text messages in and out, and binary ones in (the glasses'
+/// sound). Events arrive on the main queue.
 final class PhoneSocket {
     var onMessage: (String) -> Void = { _ in }
+    var onBinary: (Data) -> Void = { _ in }
     var onClose: () -> Void = {}
 
     private let connection: NWConnection
     private let queue: DispatchQueue
     private var buffer = Data()
-    private var fragments = Data()
+    private var assembler = MessageAssembler()
     private var closed = false
     /// Messages handed to the network and not yet sent (read and written on `queue`).
     private var pending = 0
 
-    private static let maxMessage = 1024 * 1024
+    static let maxMessage = 1024 * 1024
 
     init(connection: NWConnection, queue: DispatchQueue) {
         self.connection = connection
@@ -305,6 +307,41 @@ final class PhoneSocket {
         return .header(FrameHeader(fin: bytes[0] & 0x80 != 0, opcode: bytes[0] & 0x0F, offset: offset, length: Int(length)))
     }
 
+    /// Puts a message together from its frames: one text or binary frame, then any
+    /// continuations. Held to `maxMessage` in all, like a single frame.
+    struct MessageAssembler {
+        enum Output: Equatable {
+            /// More frames to come.
+            case none
+            case text(String)
+            case binary(Data)
+            /// Not how messages are framed, or too long; the connection closes.
+            case invalid
+        }
+
+        private var fragments = Data()
+        /// Whether the message being put together is binary; nil between messages.
+        private var binary: Bool?
+
+        mutating func add(opcode: UInt8, fin: Bool, payload: [UInt8], limit: Int = PhoneSocket.maxMessage) -> Output {
+            switch opcode {
+            case 0x0: guard binary != nil else { return .invalid }
+            case 0x1, 0x2:
+                guard binary == nil else { return .invalid }
+                binary = opcode == 0x2
+            default: return .invalid
+            }
+            fragments.append(contentsOf: payload)
+            guard fragments.count <= limit else { return .invalid }
+            guard fin else { return .none }
+            let whole = fragments
+            let wasBinary = binary == true
+            fragments = Data()
+            binary = nil
+            return wasBinary ? .binary(whole) : .text(String(decoding: whole, as: UTF8.self))
+        }
+    }
+
     /// Reads whole frames out of `buffer` (on `queue`).
     private func parse() {
         while buffer.count >= 2 {
@@ -322,13 +359,12 @@ final class PhoneSocket {
             buffer.removeFirst(header.size)
 
             switch header.opcode {
-            case 0x0, 0x1:
-                fragments.append(contentsOf: payload)
-                guard fragments.count <= Self.maxMessage else { finish(); return }
-                if header.fin {
-                    let text = String(decoding: fragments, as: UTF8.self)
-                    fragments = Data()
-                    DispatchQueue.main.async { self.onMessage(text) }
+            case 0x0, 0x1, 0x2:
+                switch assembler.add(opcode: header.opcode, fin: header.fin, payload: payload) {
+                case .none: break
+                case .text(let text): DispatchQueue.main.async { self.onMessage(text) }
+                case .binary(let data): DispatchQueue.main.async { self.onBinary(data) }
+                case .invalid: finish(); return
                 }
             case 0x8:
                 write(Self.frame(opcode: 0x8, payload: Data(payload.prefix(2))))
