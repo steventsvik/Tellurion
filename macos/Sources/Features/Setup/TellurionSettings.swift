@@ -117,7 +117,7 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
         case .media: return "Video and music files playing in a tile on a board"
         case .budgets: return "A cap on what one agent session may cost at API prices or use in tokens, which pauses the agent when it's reached"
         case .smallJobs: return "Short texts Tellurion asks a model for, such as a commit message, are written by a model on this Mac when one can; the rest go to Claude Code or Codex as before"
-        case .glasses: return "Even G2 glasses, through phone access: who needs you, Allow or Deny for a permission prompt, an agent's latest output, and talking to an agent or the orchestrator"
+        case .glasses: return "Even G2 glasses, through phone access: your projects and tabs with each tab's terminal, the orchestrator's screen, the tools, Allow or Deny for a permission prompt, a few keys for an agent's pane, and talking to an agent or the orchestrator"
         }
     }
 

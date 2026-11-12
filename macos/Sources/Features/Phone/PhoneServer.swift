@@ -217,6 +217,8 @@ final class PhoneServer: ObservableObject {
         var lastTabs = ""
         /// Connected on the glasses' path: it speaks the glasses' messages only (see `GlassesServer`).
         let glasses: Bool
+        /// The glasses' protocol version, from their hello.
+        var glassesVersion = 1
         init(socket: PhoneSocket, glasses: Bool) {
             self.socket = socket
             self.glasses = glasses
@@ -292,6 +294,7 @@ final class PhoneServer: ObservableObject {
                 return
             }
             client.device = device
+            client.glassesVersion = message["v"] as? Int ?? 1
             connected[device.id, default: 0] += 1
             PhoneDevices.shared.touch(device.id)
             client.socket.send(Self.json(["t": "hello", "mac": Host.current().localizedName ?? "Mac", "device": device.name,
@@ -310,7 +313,7 @@ final class PhoneServer: ObservableObject {
             if type == "ping" { client.socket.send(Self.json(["t": "pong"])); return }
             let socket = client.socket
             GlassesServer.shared.receive(message, from: .init(id: ObjectIdentifier(client), device: device,
-                                                              send: { socket.send($0) }, isBackedUp: { socket.isBackedUp },
+                                                              version: client.glassesVersion, send: { socket.send($0) }, isBackedUp: { socket.isBackedUp },
                                                               close: { socket.close() }))
             return
         }
