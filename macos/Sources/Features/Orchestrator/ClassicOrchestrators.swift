@@ -217,6 +217,7 @@ final class ClassicOrchestrator: ObservableObject, Identifiable, OrchestratorHos
             }
         }
         config.initialInput = command
+        AgentTrust.prepare(folder: config.workingDirectory, agent: agent?.kind)
         // Agents get a short name, as on a board, so you can tell them apart and @mention them.
         let name = agent == nil ? nil : BoardAgentNames.next(taken: Set(TerminalController.all.compactMap(\.titleOverride)))
         // A new tab is always selected: note where you were, and go back there right after.

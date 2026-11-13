@@ -371,6 +371,8 @@ extension BoardController {
             config.initialInput = member.agent.map { $0.binary + "\n" }
             let accounts = applyAccounts(&config)
             VeniceCodex.adapt(&config)
+            AgentTrust.prepare(folder: config.workingDirectory, agent: member.agent?.kind,
+                               worktreeOf: folders == nil ? nil : start, environment: config.environmentVariables)
             let view = Ghostty.SurfaceView(app, baseConfig: config)
             if !accounts.isEmpty { model.tileAccounts[view.id] = accounts }
             model.frames[view.id] = CGRect(x: area.minX + CGFloat(col) * (size.width + Self.gap),
