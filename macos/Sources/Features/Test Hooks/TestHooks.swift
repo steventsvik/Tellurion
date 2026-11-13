@@ -52,6 +52,11 @@ enum TestHooks {
     /// off, to measure what each costs the window server.
     static let motionOff = Set((value("TELLURION_TEST_NOANIM") ?? "").split(separator: ",").map(String.init))
 
+    /// `TELLURION_TEST_DRAW_HIDDEN=1`: terminals keep drawing while their window can't be seen,
+    /// so a test copy behind other work (or on another desktop) can have its frames checked
+    /// with the demo script's `shot`.
+    static let drawsHidden = flag("TELLURION_TEST_DRAW_HIDDEN")
+
     /// `TELLURION_PHONE_DEV=1`: the phone server serves on this Mac only, without Tailscale,
     /// and lets in local requests that carry no login. Its paired phones are a separate list.
     static var phoneDev: Bool { flag("TELLURION_PHONE_DEV") }
@@ -79,6 +84,7 @@ enum TestHooks {
     static var welcome: Bool { false }
     static var tool: String? { nil }
     static var showsBackgroundSample: Bool { false }
+    static let drawsHidden = false
     static let motionOff: Set<String> = []
     static var phoneDev: Bool { false }
     static var phonePairingCode: String? { nil }

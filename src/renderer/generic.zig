@@ -179,6 +179,17 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         /// cells for the draw call.
         cells_rebuilt: bool = false,
 
+        /// How far the grid is drawn above its usual place, in pixels, while
+        /// the viewport is scrolled to a point between two rows. The row
+        /// below the viewport is drawn too, to fill the gap this leaves.
+        /// See `renderer.State.Scroll`.
+        scroll_offset: f32 = 0,
+
+        /// True while a wheel scroll is being played out, and when its last
+        /// step was taken.
+        scroll_animating: bool = false,
+        scroll_animation_last: ?std.Io.Timestamp = null,
+
         /// Set to true after the Kitty image placements are rebuilt. Like
         /// `cells_rebuilt`, this means the next frame must be drawn. This
         /// matters when the images change but no cell does, for example
@@ -1162,6 +1173,13 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 break :kitty @max(next -| now_ms, draw_interval_ms);
             };
 
+            // A wheel scroll moves the viewport a little every frame until
+            // it has played out.
+            if (self.scroll_animating) return .{
+                .delay_ms = draw_interval_ms,
+                .kind = .update,
+            };
+
             // An update wake includes a draw, so it wins ties.
             if (kitty_delay) |k| {
                 if (shader_delay == null or k <= shader_delay.?) {
@@ -1403,6 +1421,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 preedit: ?renderer.State.Preedit,
                 scrollbar: terminal.Scrollbar,
                 overlay_features: []const Overlay.Feature,
+                scroll_offset: f32,
             };
 
             // Update all our data as tightly as possible within the mutex.
@@ -1476,6 +1495,27 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     break :next now_ms + delay;
                 };
 
+                // Play out the next step of a wheel scroll, before the
+                // update so this frame shows it.
+                if (comptime renderer.State.smooth_scroll) {
+                    const now: std.Io.Timestamp = .now(global.io(), .awake);
+                    const dt_ms: f64 = if (self.scroll_animation_last) |last|
+                        @as(f64, @floatFromInt(last.durationTo(now).nanoseconds)) /
+                            std.time.ns_per_ms
+                    else
+                        @floatFromInt(draw_interval_ms);
+                    self.scroll_animating = state.scroll.animate(
+                        state.terminal,
+                        @floatFromInt(self.grid_metrics.cell_height),
+                        dt_ms,
+                    );
+                    self.scroll_animation_last = if (self.scroll_animating) now else null;
+
+                    // Capture the row below the viewport as well, which
+                    // shows at the bottom while scrolled between two rows.
+                    self.terminal_state.overscan_request = .{ .above = 0, .below = 1 };
+                }
+
                 // Begin the update of our terminal state. Work that
                 // doesn't require terminal access (e.g. style
                 // denormalization) is deferred to the endUpdate call
@@ -1485,6 +1525,21 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     self.alloc,
                     state.terminal,
                 );
+
+                // Where the viewport is between two rows. Without a row
+                // below it there's nothing to scroll into view, so the
+                // viewport is on its row, whatever moved it there (typing,
+                // new output, a cleared screen).
+                const scroll_offset: f32 = if (comptime !renderer.State.smooth_scroll)
+                    0
+                else if (self.terminal_state.overscan.below == 0) offset: {
+                    state.scroll.offset = 0;
+                    break :offset 0;
+                } else @floatCast(@floor(std.math.clamp(
+                    state.scroll.offset,
+                    0,
+                    @as(f64, @floatFromInt(self.grid_metrics.cell_height -| 1)),
+                )));
 
                 // If our terminal state is dirty at all we need to redo
                 // the viewport search.
@@ -1558,6 +1613,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     .preedit = preedit,
                     .scrollbar = scrollbar,
                     .overlay_features = overlay_features,
+                    .scroll_offset = scroll_offset,
                 };
             };
 
@@ -1663,6 +1719,13 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     comptime assert(@TypeOf(err) == error{OutOfMemory});
                     log.warn("error rebuilding GPU cells err={}", .{err});
                 };
+
+                // Draw the grid where the scroll position puts it.
+                if (self.scroll_offset != critical.scroll_offset) {
+                    self.scroll_offset = critical.scroll_offset;
+                    self.updateScreenSizeUniforms();
+                    self.cells_rebuilt = true;
+                }
 
                 // The scrollbar is only emitted during draws so we also
                 // check the scrollbar cache here and update if needed.
@@ -2265,7 +2328,12 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             log.debug("screen size size={}", .{size});
         }
 
-        /// Update uniforms that are based on the screen size.
+        /// The rows kept in the cell contents after the viewport's.
+        const overscan_rows: terminal.size.CellCountInt =
+            if (renderer.State.smooth_scroll) 1 else 0;
+
+        /// Update uniforms that are based on the screen size and the
+        /// scroll offset.
         ///
         /// Caller must hold the draw mutex.
         fn updateScreenSizeUniforms(self: *Self) void {
@@ -2276,7 +2344,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 self.size.padding,
                 .{
                     .columns = self.cells.size.columns,
-                    .rows = self.cells.size.rows,
+                    .rows = self.cells.size.rows -| overscan_rows,
                 },
                 .{
                     .width = self.grid_metrics.cell_width,
@@ -2284,13 +2352,20 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 },
             ).add(self.size.padding);
 
-            // Setup our uniforms
+            // Setup our uniforms. Everything positioned on the grid (text,
+            // images) goes through the projection, so shifting it is what
+            // scrolls them by less than a row.
             self.uniforms.projection_matrix = @bitCast(math.ortho2d(
                 -1 * @as(f32, @floatFromInt(self.size.padding.left)),
                 @floatFromInt(terminal_size.width + self.size.padding.right),
-                @floatFromInt(terminal_size.height + self.size.padding.bottom),
-                -1 * @as(f32, @floatFromInt(self.size.padding.top)),
+                @as(f32, @floatFromInt(terminal_size.height + self.size.padding.bottom)) +
+                    self.scroll_offset,
+                -1 * @as(f32, @floatFromInt(self.size.padding.top)) +
+                    self.scroll_offset,
             ));
+            if (comptime renderer.State.smooth_scroll) {
+                self.uniforms.scroll_offset_y = self.scroll_offset;
+            }
             self.uniforms.grid_padding = .{
                 @floatFromInt(blank.top),
                 @floatFromInt(blank.right),
@@ -2635,19 +2710,25 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         ) Allocator.Error!void {
             const state: *terminal.RenderState = &self.terminal_state;
 
+            // The cell contents have a row after the viewport's for the row
+            // below it, which shows while scrolled between two rows. The
+            // shaders are still given the size of the viewport.
             const grid_size_diff =
-                self.cells.size.rows != state.rows or
+                self.cells.size.rows != state.rows + overscan_rows or
                 self.cells.size.columns != state.cols;
 
             if (grid_size_diff) {
                 var new_size = self.cells.size;
-                new_size.rows = state.rows;
+                new_size.rows = state.rows + overscan_rows;
                 new_size.columns = state.cols;
                 try self.cells.resize(self.alloc, new_size);
 
                 // Update our uniforms accordingly, otherwise
                 // our background cells will be out of place.
-                self.uniforms.grid_size = .{ new_size.columns, new_size.rows };
+                self.uniforms.grid_size = .{ new_size.columns, state.rows };
+
+                // The blank space around the grid depends on its size.
+                self.updateScreenSizeUniforms();
             }
 
             const rebuild = state.dirty == .full or grid_size_diff;
@@ -2688,8 +2769,10 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             // we render the rows that fit, starting from the bottom. If instead
             // the viewport is shorter than the cell contents buffer, we align
             // the top of the viewport with the top of the contents buffer.
+            //
+            // This includes the row below the viewport, when there is one.
             const row_len: usize = @min(
-                state.rows,
+                state.rowDataRange().end,
                 self.cells.size.rows,
             );
 
@@ -2959,7 +3042,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                         &state.colors.palette,
                         state.colors.background,
                     );
-                } else if (y == self.cells.size.rows - 1) {
+                } else if (y == state.rows -| 1) {
                     self.uniforms.padding_extend.down = !rowNeverExtendBg(
                         row,
                         cells_raw,

@@ -1,5 +1,7 @@
 #if os(macOS)
 import AppKit
+import CoreImage
+import IOSurface
 
 #if TELLURION_TEST_HOOKS
 /// Test-only: `TELLURION_DEMO=<file>` plays a timed script against the first window so
@@ -33,6 +35,13 @@ import AppKit
 ///     orchcanned <n> <reply JSON>   that orchestrator's next turn answers this instead of running its engine
 ///     orchcmd <n> <text>      send that orchestrator a command
 ///     snap <folder>           draw every visible window into <folder>/<title>.png
+///     scroll <n> <points>     scroll tab n as a trackpad would, by that many points (positive
+///                             shows earlier lines); `scroll <n> <steps> wheel` turns a mouse
+///                             wheel that many steps instead
+///     shot <n> <file>         write the frame tab n's terminal last drew, as a PNG
+///
+/// With `TELLURION_DEMO_BACKGROUND=1` the script leaves the app where it is instead of
+/// bringing it to the front before every line, for tests that run behind other work.
 @MainActor
 enum DemoDirector {
     private static var started = false
@@ -81,7 +90,7 @@ enum DemoDirector {
         let target = tab(arg, of: controller)
 
         // Keep the demo in front even if something else took focus.
-        NSApp.activate(ignoringOtherApps: true)
+        if !TestHooks.flag("TELLURION_DEMO_BACKGROUND") { NSApp.activate(ignoringOtherApps: true) }
 
         switch action {
         case "frame" where arg == "visible":
@@ -192,6 +201,38 @@ enum DemoDirector {
                 let name = window.title.isEmpty ? "window" : window.title.filter { $0.isLetter || $0.isNumber }
                 try? rep.representation(using: .png, properties: [:])?
                     .write(to: URL(fileURLWithPath: arg).appendingPathComponent("\(index)-\(name).png"))
+            }
+        case "scroll":
+            // The event goes straight to the terminal's own handler, so this is the path a
+            // real trackpad or wheel takes, without moving the pointer or needing focus.
+            guard let surface = target?.focusedSurface else { return }
+            let parts = rest.split(separator: " ")
+            guard let amount = parts.first.flatMap({ Double($0) }) else { return }
+            let wheel = parts.dropFirst().first == "wheel"
+            if let bar = surface.scrollbar {
+                note("scroll before row=\(bar.offset) of=\(bar.total) rows=\(bar.len)")
+            }
+            guard let event = CGEvent(
+                scrollWheelEvent2Source: nil, units: wheel ? .line : .pixel,
+                wheelCount: 1, wheel1: Int32(amount.rounded()), wheel2: 0, wheel3: 0
+            ), let scroll = NSEvent(cgEvent: event) else { return }
+            note("scroll \(wheel ? "wheel" : "trackpad") dy=\(scroll.scrollingDeltaY) precise=\(scroll.hasPreciseScrollingDeltas)")
+            surface.scrollWheel(with: scroll)
+        case "shot":
+            // The terminal draws into an IOSurface that its layer shows as is, so this is the
+            // exact frame, whether or not the window is on screen.
+            guard let surface = target?.focusedSurface, let contents = surface.layer?.contents,
+                  CFGetTypeID(contents as CFTypeRef) == IOSurfaceGetTypeID() else {
+                note("shot: no frame")
+                return
+            }
+            // swiftlint:disable:next force_cast
+            let image = CIImage(ioSurface: contents as! IOSurfaceRef)
+            let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+            try? CIContext().writePNGRepresentation(
+                of: image, to: URL(fileURLWithPath: rest), format: .RGBA8, colorSpace: space)
+            if let bar = surface.scrollbar {
+                note("shot \(rest) row=\(bar.offset) of=\(bar.total) rows=\(bar.len)")
             }
         case "mark":
             guard let marks else { return }

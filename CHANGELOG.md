@@ -6,6 +6,8 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 
 ## Unreleased
 
+- **Scrolling is smooth.** The terminal used to scroll a whole line at a time, so a slow drag on the trackpad did nothing and then jumped. Now the text follows your fingers to the pixel and glides to a stop like any other Mac app, and a mouse wheel eases through its lines instead of jumping. Typing still takes you straight back to the bottom, and programs that handle scrolling themselves (`less`, `vim`, anything using the mouse) get it as before.
+
 - **The orchestrator starts with the agents you have.** In tabs, it used to begin with nobody wired, even with agents already running in the project. Now every agent in the project is wired to it when you open it or send a command, agents that start later join by themselves, and the sidebar's command field says how many a command will reach before you send one. Plain terminals are still yours to wire, and an agent you unwire stays out until you wire it back.
 
 ## 1.9.3

@@ -254,6 +254,11 @@ pub const Uniforms = extern struct {
         use_linear_correction: bool align(1) = false,
     },
 
+    /// How far the grid is drawn above its usual place, in pixels, while
+    /// scrolled between two rows. The cell backgrounds then have one more
+    /// row than `grid_size`, for the row below the viewport.
+    scroll_offset_y: f32 align(4) = 0,
+
     const PaddingExtend = packed struct(u8) {
         left: bool = false,
         right: bool = false,

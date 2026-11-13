@@ -1092,11 +1092,12 @@ extension Ghostty {
             let precision = event.hasPreciseScrollingDeltas
 
             if precision {
-                // We do a 2x speed multiplier. This is subjective, it "feels" better to me.
-                x *= 2
-                y *= 2
-
-                // TODO(mitchellh): do we have to scale the x/y here by window scale factor?
+                // The deltas are in points and the core scrolls in pixels, so
+                // this makes the content follow the fingers exactly, as it
+                // does in any other scroll view.
+                let scale = window?.backingScaleFactor ?? 2
+                x *= scale
+                y *= scale
             }
 
             let scrollEvent = Ghostty.Input.MouseScrollEvent(
