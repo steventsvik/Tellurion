@@ -4,6 +4,10 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 **Unreleased**; at release time that heading becomes the version number, and
 `./release.sh` uses the section as the release notes.
 
+## Unreleased
+
+- **Fixed: memory that grew until the Mac ran out.** On some macOS versions, a terminal or local model chat in a folder outside any repository could send Tellurion's search for the repository past the top of the disk and never stop, using a whole processor core and tens of gigabytes of memory, and freezing the window when the code editor opened that folder. The search now always ends at the top of the disk. ([#135](https://github.com/steventsvik/Tellurion/issues/135))
+
 ## 1.9.4
 
 Tellurion on Even G2 glasses: your Mac's window through the lens, with voice.
