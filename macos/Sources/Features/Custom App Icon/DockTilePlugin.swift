@@ -37,8 +37,9 @@ class DockTilePlugin: NSObject, NSDockTilePlugIn {
             }
 
             let parent = url.deletingLastPathComponent()
-            if parent.path == url.path {
-                // Safety stop: this should only happen at filesystem root.
+            if parent.path.count >= url.path.count {
+                // Safety stop at the filesystem root, where the parent is `/` again or,
+                // on some macOS versions, `/..` (which would otherwise never end).
                 return nil
             }
 
