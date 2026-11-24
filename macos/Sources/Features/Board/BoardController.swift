@@ -617,6 +617,10 @@ final class BoardController: BaseTerminalController {
             config.initialInput = line.command.isEmpty ? nil : line.command
             let accounts = applyAccounts(&config)
             VeniceCodex.adapt(&config)
+            // A folder of its own is a worktree of the folder asked for.
+            AgentTrust.prepare(folder: config.workingDirectory, agent: line.agent?.kind,
+                               worktreeOf: folders == nil ? nil : folder ?? workspace.folder,
+                               environment: config.environmentVariables)
             let view = Ghostty.SurfaceView(app, baseConfig: config)
             if !accounts.isEmpty { model.tileAccounts[view.id] = accounts }
             let col = index % columns, row = index / columns

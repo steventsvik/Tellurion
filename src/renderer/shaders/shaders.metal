@@ -24,7 +24,18 @@ struct Uniforms {
   bool use_display_p3;
   bool use_linear_blending;
   bool use_linear_correction;
+  float scroll_offset_y;
 };
+
+// While scrolled between two rows the grid is drawn shifted up, with the
+// row below the viewport after it. True for what then falls outside the
+// rows of the viewport, which must not be drawn over the padding.
+bool outside_scrolled_grid(float y, Uniforms uniforms) {
+  if (uniforms.scroll_offset_y <= 0.0) return false;
+  float top = uniforms.grid_padding.x;
+  float bottom = top + float(uniforms.grid_size.y) * uniforms.cell_size.y;
+  return y < top || y >= bottom;
+}
 
 //-------------------------------------------------------------------
 // Color Functions
@@ -453,7 +464,8 @@ fragment float4 cell_bg_fragment(
   constant Uniforms& uniforms [[buffer(1)]],
   constant uchar4 *cells [[buffer(2)]]
 ) {
-  int2 grid_pos = int2(floor((in.position.xy - uniforms.grid_padding.wx) / uniforms.cell_size));
+  float2 pos = in.position.xy - uniforms.grid_padding.wx;
+  int2 grid_pos = int2(floor(pos / uniforms.cell_size));
 
   float4 bg = float4(0.0);
 
@@ -485,6 +497,10 @@ fragment float4 cell_bg_fragment(
     } else {
       return bg;
     }
+  } else {
+    // Inside the grid, the rows are shifted up by the scroll offset. The
+    // last one can be the row below the viewport, which is in the buffer.
+    grid_pos.y = int(floor((pos.y + uniforms.scroll_offset_y) / uniforms.cell_size.y));
   }
 
   // Load the color for the cell.
@@ -687,6 +703,8 @@ fragment float4 cell_text_fragment(
     filter::nearest
   );
 
+  if (outside_scrolled_grid(in.position.y, uniforms)) discard_fragment();
+
   switch (in.atlas) {
     default:
     case ATLAS_GRAYSCALE: {
@@ -839,6 +857,8 @@ fragment float4 image_fragment(
     address::clamp_to_edge,
     filter::linear
   );
+
+  if (outside_scrolled_grid(in.position.y, uniforms)) discard_fragment();
 
   float4 rgba = image.sample(textureSampler, in.tex_coord);
 

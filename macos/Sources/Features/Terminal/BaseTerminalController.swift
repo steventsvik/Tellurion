@@ -1293,7 +1293,7 @@ class BaseTerminalController: NSWindowController,
     }
 
     private func syncSurfaceTreeOcclusionState() {
-        let visible = self.window?.occlusionState.contains(.visible) ?? false
+        let visible = TestHooks.drawsHidden || (self.window?.occlusionState.contains(.visible) ?? false)
         for view in surfaceTree {
             if let surface = view.surface, view.isWindowVisible != visible {
                 ghostty_surface_set_occlusion(surface, visible)

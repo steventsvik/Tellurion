@@ -228,6 +228,7 @@ final class AgentRaces: ObservableObject {
             var config = Ghostty.SurfaceConfiguration()
             config.workingDirectory = contestant.worktree
             config.initialInput = AgentTools.agentCommand(contestant.kind, promptFile: promptFile)
+            AgentTrust.prepare(folder: contestant.worktree, agent: contestant.kind, worktreeOf: race.repoRoot)
             guard let surface = open(config, title: "Race · \(contestant.name)", from: owner) else { continue }
             tabs["\(race.id)/\(contestant.id)"] = Weak(surface)
         }

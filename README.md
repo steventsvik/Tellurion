@@ -201,7 +201,8 @@ two keystrokes. It also starts new sessions and opens every tool.
 One command for a project's agents, from the sidebar. Your own Claude Code (or Codex) splits the work, sends each agent its part, reads what they answer and hands out the next steps until the command is done, its turn limit is reached, or you stop it.
 
 - **In the sidebar:** the Orchestrator section shows the goal and where it's at ("Turn 3 of 12 · 2 working", or who is waiting on you) and takes a command. The window button, or ⌃⌘O, opens it in full: the wired agents, everything it said and did, and its settings.
-- **Wire the tabs you have:** **Wire…** lists every pane by project, or use **Wire to orchestrator** in a pane's ⋮ menu. Wired panes wear a small link.
+- **It starts with the agents you have:** every agent already running in the project is wired to it, and agents that start later join by themselves. Wired panes wear a small link.
+- **Wire anything else by hand:** **Wire…** lists every other pane by project (plain terminals, agents elsewhere), or use **Wire to orchestrator** in a pane's ⋮ menu. An agent you unwire stays out until you wire it back.
 - **New agents open as tabs** in the project's folder, with a short name (Ada, Otto…), and you stay in the tab you're in.
 - **It only messages agents.** A wired terminal with no agent is never typed into, and permission prompts still come to you. When an agent's project check fails, the orchestrator hears about it and can send it back to fix it.
 - One orchestrator per project. On a [board](#orchestrator-1) it's a card you wire terminals to instead.

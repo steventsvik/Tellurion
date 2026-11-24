@@ -54,7 +54,11 @@ The maintainer runs Tellurion all day with live agent sessions.
 - Test-only switches: `TELLURION_TEST_TABS=N`, `TELLURION_DEMO=<script>`
   (see `DemoDirector.swift`), `TELLURION_TEST_BOARD=<script>` (see `BoardTest.swift`),
   `TELLURION_TEST_LOG=<file>`, `TELLURION_TEST_VENICE=<url>` (a mock in place of Venice),
-  `TELLURION_PHONE_DEV=1` (phone access on this Mac only, without Tailscale; `TELLURION_PHONE_DEV_PORT=<port>` moves it off the installed app's port). They're read through `TestHooks.swift` and exist only
+  `TELLURION_PHONE_DEV=1` (phone access on this Mac only, without Tailscale; `TELLURION_PHONE_DEV_PORT=<port>` moves it off the installed app's port),
+  `TELLURION_TEST_DRAW_HIDDEN=1` (terminals keep drawing in a window nobody can see) and
+  `TELLURION_DEMO_BACKGROUND=1` (the demo script doesn't bring the app to the front); with
+  those two and `open -g`, a script's `scroll` and `shot` lines test the terminal without
+  showing anything on screen. They're read through `TestHooks.swift` and exist only
   in builds made with the `TELLURION_TEST_HOOKS` flag: Debug, and ReleaseLocal as built
   above. `release.sh` builds without it and checks that the shipped app has none of them.
 - Always set `TELLURION_TEST_HOME=<empty folder>` on a test copy: it moves

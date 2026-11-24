@@ -231,4 +231,29 @@ struct ClassicOrchestratorTests {
         #expect(none.panes.isEmpty)
         #expect(none.rest == "ship the form")
     }
+
+    @Test func agentsAlreadyInTheProjectAreItsAgents() {
+        let here = UUID(), shell = UUID(), elsewhere = UUID(), taken = UUID(), removed = UUID()
+        let panes = [
+            ClassicOrchestrators.AdoptablePane(id: here, root: "/work/app", isAgent: true),
+            ClassicOrchestrators.AdoptablePane(id: shell, root: "/work/app", isAgent: false),
+            ClassicOrchestrators.AdoptablePane(id: elsewhere, root: "/work/other", isAgent: true),
+            ClassicOrchestrators.AdoptablePane(id: taken, root: "/work/app", isAgent: true),
+            ClassicOrchestrators.AdoptablePane(id: removed, root: "/work/app", isAgent: true),
+        ]
+        let adopted = ClassicOrchestrators.adoptable(panes, root: "/work/app", wired: [taken], leftOut: [removed])
+        // Not a plain terminal, another project's agent, one already wired, or one you took off.
+        #expect(adopted == [here])
+    }
+
+    @Test func anAgentYouUnwiredStaysOutUntilYouWireItAgain() {
+        let orchestrator = ClassicOrchestrator(root: "/work/app")
+        let pane = UUID()
+        orchestrator.wire([pane])
+        #expect(orchestrator.leftOut.isEmpty)
+        orchestrator.unwire(pane)
+        #expect(orchestrator.leftOut == [pane])
+        orchestrator.wire([pane])
+        #expect(orchestrator.leftOut.isEmpty)
+    }
 }

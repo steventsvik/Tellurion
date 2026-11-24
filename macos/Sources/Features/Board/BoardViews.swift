@@ -809,7 +809,10 @@ private struct BoardComposer: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         if !folder.isEmpty { panel.directoryURL = URL(fileURLWithPath: folder) }
-        if panel.runModal() == .OK, let url = panel.url { folder = url.path }
+        if panel.runModal() == .OK, let url = panel.url {
+            folder = url.path
+            AgentTrust.chose(url.path)
+        }
     }
 
     private func launch() {

@@ -72,7 +72,10 @@ enum BoardHome {
         panel.canChooseFiles = false
         panel.prompt = "Open Project"
         panel.begin { response in
-            if response == .OK, let url = panel.url { newBoard(in: url.path) }
+            if response == .OK, let url = panel.url {
+                AgentTrust.chose(url.path)
+                newBoard(in: url.path)
+            }
         }
     }
 }
