@@ -54,7 +54,7 @@ The maintainer runs Tellurion all day with live agent sessions.
 - Test-only switches: `TELLURION_TEST_TABS=N`, `TELLURION_DEMO=<script>`
   (see `DemoDirector.swift`), `TELLURION_TEST_BOARD=<script>` (see `BoardTest.swift`),
   `TELLURION_TEST_LOG=<file>`, `TELLURION_TEST_VENICE=<url>` (a mock in place of Venice),
-  `TELLURION_PHONE_DEV=1` (phone access on this Mac only, without Tailscale),
+  `TELLURION_PHONE_DEV=1` (phone access on this Mac only, without Tailscale; `TELLURION_PHONE_DEV_PORT=<port>` moves it off the installed app's port),
   `TELLURION_TEST_DRAW_HIDDEN=1` (terminals keep drawing in a window nobody can see) and
   `TELLURION_DEMO_BACKGROUND=1` (the demo script doesn't bring the app to the front); with
   those two and `open -g`, a script's `scroll` and `shot` lines test the terminal without

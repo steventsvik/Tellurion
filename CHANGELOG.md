@@ -7,9 +7,20 @@ What changed in each Tellurion (formerly GhosttyEXTREME) release. Work in progre
 ## Unreleased
 
 - **Scrolling is smooth.** The terminal used to scroll a whole line at a time, so a slow drag on the trackpad did nothing and then jumped. Now the text follows your fingers to the pixel and glides to a stop like any other Mac app, and a mouse wheel eases through its lines instead of jumping. Typing still takes you straight back to the bottom, and programs that handle scrolling themselves (`less`, `vim`, anything using the mouse) get it as before.
-
 - **Fewer "do you trust this folder?" questions.** When Tellurion starts Claude Code or Codex somewhere you've already vouched for, the agent no longer stops to ask: in Tellurion's own working folder (where an orchestrator's agents start when they have no project), in a folder you just picked in a folder chooser to start agents in, and in a worktree Tellurion made of a project that agent already trusts. Everything else still asks, and your home folder, Downloads, temporary folders and anything macOS marked as downloaded are never trusted for you. To turn it off: `defaults write com.steventsvik.ghostty-extreme AgentPreTrust -bool false`.
 - **The orchestrator starts with the agents you have.** In tabs, it used to begin with nobody wired, even with agents already running in the project. Now every agent in the project is wired to it when you open it or send a command, agents that start later join by themselves, and the sidebar's command field says how many a command will reach before you send one. Plain terminals are still yours to wire, and an agent you unwire stays out until you wire it back.
+
+## 1.9.4.1
+
+A fix for memory that could grow until the Mac ran out.
+
+- **Fixed: memory that grew until the Mac ran out.** On some macOS versions, a terminal or local model chat in a folder outside any repository could send Tellurion's search for the repository past the top of the disk and never stop, using a whole processor core and tens of gigabytes of memory, and freezing the window when the code editor opened that folder. The search now always ends at the top of the disk. ([#135](https://github.com/steventsvik/Tellurion/issues/135))
+
+## 1.9.4
+
+Tellurion on Even G2 glasses: your Mac's window through the lens, with voice.
+
+- **Glasses.** Tellurion on Even G2 glasses, through phone access. Browse your projects and their tabs in a sidebar, grouped by project like on the Mac; tap a tab and its terminal takes the whole display, cleaned up for reading. A permission prompt shows in the tab that's asking: tap to allow, double-tap to deny. Each project's orchestrator has its own screen (status, goal, the team, its latest word; Stop, Carry on, Wire all and Clear), and Tools lists the Mac's tools: Review, Checks, Budgets, Localhost, Usage, Activity, session search by voice and more have a page on the glasses, and the rest open on your Mac. Hold to talk from anywhere: speech becomes text on your Mac, and nothing is sent or changed without a confirming tap. Pair in **Phone → Glasses**; a command shown there builds the app for your Mac's address so it can live on the glasses' menu as your own beta build.
 
 ## 1.9.3
 

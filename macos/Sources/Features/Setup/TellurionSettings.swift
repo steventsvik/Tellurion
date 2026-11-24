@@ -39,6 +39,7 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
     case media
     case budgets
     case smallJobs
+    case glasses
 
     var id: String { rawValue }
 
@@ -77,6 +78,7 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
         case .media: return "Media tiles"
         case .budgets: return "Budgets"
         case .smallJobs: return "Small jobs on this Mac"
+        case .glasses: return "Glasses"
         }
     }
 
@@ -115,6 +117,7 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
         case .media: return "Video and music files playing in a tile on a board"
         case .budgets: return "A cap on what one agent session may cost at API prices or use in tokens, which pauses the agent when it's reached"
         case .smallJobs: return "Short texts Tellurion asks a model for, such as a commit message, are written by a model on this Mac when one can; the rest go to Claude Code or Codex as before"
+        case .glasses: return "Even G2 glasses, through phone access: your projects and tabs with each tab's terminal, the orchestrator's screen, the tools, Allow or Deny for a permission prompt, a few keys for an agent's pane, and talking to an agent or the orchestrator"
         }
     }
 
@@ -136,7 +139,7 @@ enum TellurionFeature: String, CaseIterable, Identifiable {
         case .skills: return "U"
         case .environment: return "N"
         case .undo, .checks, .usage, .ports, .git, .sharedMemory, .phone, .localModels, .menuBar,
-             .webTiles, .ink, .documents, .diagrams, .accounts, .missionMap, .conflicts, .media, .budgets, .smallJobs: return nil
+             .webTiles, .ink, .documents, .diagrams, .accounts, .missionMap, .conflicts, .media, .budgets, .smallJobs, .glasses: return nil
         }
     }
 
@@ -168,7 +171,7 @@ enum TellurionPreset: String, CaseIterable, Identifiable {
     var features: Set<TellurionFeature> {
         switch self {
         case .everything: return Set(TellurionFeature.allCases)
-        case .essentials: return [.editor, .missionControl, .localhost, .review, .undo, .usage, .ports, .git, .memory, .sharedMemory, .skills, .environment, .phone, .localModels, .menuBar]
+        case .essentials: return [.editor, .missionControl, .localhost, .review, .undo, .usage, .ports, .git, .memory, .sharedMemory, .skills, .environment, .phone, .localModels, .menuBar, .glasses]
         case .sidebar: return []
         }
     }
@@ -326,6 +329,8 @@ final class TellurionSettings: ObservableObject {
             for board in BoardController.all { board.model.showAccounts = false }
         case .budgets:
             AgentToolWindows.close(id: BudgetsWindow.windowID)
+        case .glasses:
+            GlassesServer.shared.turnedOff()
         case .races, .undo, .usage, .git, .sharedMemory, .menuBar, .diagrams, .conflicts, .media, .smallJobs:
             break
         }

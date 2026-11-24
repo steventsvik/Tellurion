@@ -185,10 +185,21 @@ final class VerticalTabsGit: ObservableObject {
                     return RepoRoot(path: dir.path, gitDir: resolved.path)
                 }
             }
-            let parent = dir.deletingLastPathComponent()
-            if parent.path == dir.path { return nil }
+            guard let parent = parent(of: dir) else { return nil }
             dir = parent
         }
+    }
+
+    /// The folder above `dir`, or nil at the top of the disk.
+    ///
+    /// `URL.deletingLastPathComponent()` can't be trusted to stop a walk: at `/` some macOS
+    /// versions answer `/..`, then `/../..`, and a loop waiting for the path to stop changing
+    /// never ends. A parent is only a parent here if its path is shorter, so every walk ends.
+    static func parent(of dir: URL) -> URL? {
+        let path = dir.path
+        let above = (path as NSString).deletingLastPathComponent
+        guard !above.isEmpty, above.count < path.count else { return nil }
+        return URL(fileURLWithPath: above, isDirectory: true)
     }
 
     private static func readBranch(gitDir: String) -> String? {

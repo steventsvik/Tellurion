@@ -27,7 +27,7 @@ jobs:
     steps:
       # Actions are pinned to a commit, with the version it is beside it: a tag can be moved
       # to other code, a commit can't. Dependabot proposes the updates (.github/dependabot.yml).
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: SwiftLint
         # The runner image doesn't carry SwiftLint; this is the release used locally. The
@@ -48,6 +48,12 @@ jobs:
 
       - name: Editor scripts
         run: node --check macos/EditorWeb/*.js
+
+      - name: Glasses app
+        run: |
+          for f in macos/PhoneWeb/glasses/*.js macos/PhoneWeb/glasses/test/*.js; do node --check "$f"; done
+          sh -n macos/PhoneWeb/glasses/pack/pack.sh
+          node --test macos/PhoneWeb/glasses/test/*.test.js
 
       - name: Shell scripts
         run: |
@@ -83,7 +89,7 @@ jobs:
     steps:
       # Actions are pinned to a commit, with the version it is beside it: a tag can be moved
       # to other code, a commit can't. Dependabot proposes the updates (.github/dependabot.yml).
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Zig 0.17 from Homebrew
         # The same build CLAUDE.md uses; Ghostty 1.4 needs Zig 0.17.
@@ -93,7 +99,7 @@ jobs:
 
       - name: Restore the Zig core
         id: core
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             macos/GhosttyKit.xcframework

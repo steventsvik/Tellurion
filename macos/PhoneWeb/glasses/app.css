@@ -1,0 +1,25 @@
+/* The page the Even app shows on the phone while Tellurion runs on the glasses. */
+:root { color-scheme: dark; }
+body {
+  margin: 0;
+  background: #0b0a09;
+  color: #e9e4d8;
+  font: 15px/1.45 -apple-system, system-ui, sans-serif;
+}
+main { padding: 28px 20px; max-width: 520px; margin: 0 auto; }
+h1 { font-size: 15px; letter-spacing: 0.24em; color: #d8b56a; margin: 0 0 14px; }
+#status { margin: 0 0 22px; }
+.label { margin: 0 0 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #8d877a; }
+#mirror {
+  margin: 0;
+  padding: 12px;
+  min-height: 150px;
+  border: 1px solid #2a2722;
+  border-radius: 10px;
+  background: #050505;
+  color: #57e389;
+  font: 13px/1.4 ui-monospace, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.hint { margin: 14px 0 0; font-size: 12px; color: #8d877a; }

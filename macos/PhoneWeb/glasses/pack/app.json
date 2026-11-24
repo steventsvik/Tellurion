@@ -1,0 +1,20 @@
+{
+  "package_id": "com.tellurion.glasses",
+  "edition": "202601",
+  "name": "Tellurion",
+  "version": "__VERSION__",
+  "min_sdk_version": "0.0.16",
+  "entrypoint": "index.html",
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Connects to Tellurion on your own Mac, over your private Tailscale network, to show your agents and send your answers.",
+      "whitelist": ["__ORIGIN__"]
+    },
+    {
+      "name": "g2-microphone",
+      "desc": "Hold to talk to an agent. The sound goes to your own Mac, which turns it into text there."
+    }
+  ],
+  "supported_languages": ["en"]
+}

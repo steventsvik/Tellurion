@@ -91,6 +91,8 @@ private struct PhoneSetupView: View {
     @State private var showSetup = false
     /// A phone was removed but the list couldn't be saved.
     @State private var removeFailed = false
+    /// The Glasses block is showing its QR; the phone's steps aside.
+    @State private var pairingGlasses = false
 
     /// Tailscale is ready for phone access: the window leads with pairing and phones.
     private func ready(_ s: TailscaleStatus) -> Bool { s.state == .running && s.magicDNS && s.httpsEnabled }
@@ -314,8 +316,9 @@ private struct PhoneSetupView: View {
                 }
                 .padding(12)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Tellurion.panel))
-                pairing
+                if !pairingGlasses { pairing }
                 pairedList
+                if TellurionSettings.isOn(.glasses) { GlassesBlock(pairing: $pairingGlasses) }
             }
             if removeFailed {
                 Text("The phone is disconnected, but the list of phones couldn't be saved: it would be paired again the next time Tellurion opens.")
@@ -369,7 +372,7 @@ private struct PhoneSetupView: View {
                 ForEach(phones.devices) { device in
                     let online = server.connected[device.id] != nil
                     HStack(spacing: 8) {
-                        Image(systemName: "iphone").foregroundColor(online ? Tellurion.live : Tellurion.muted)
+                        Image(systemName: device.isGlasses ? "eyeglasses" : "iphone").foregroundColor(online ? Tellurion.live : Tellurion.muted)
                         Text(device.name).font(Tellurion.font(12, weight: .semibold)).foregroundColor(Tellurion.text)
                         Text(online ? "connected" : device.lastSeen.map { "last used " + RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date()) } ?? "")
                             .font(Tellurion.font(11)).foregroundColor(online ? Tellurion.live : Tellurion.dim)
