@@ -48,6 +48,9 @@ enum TestHooks {
     static var tool: String? { value("TELLURION_TEST_TOOL") }
     /// `TELLURION_TEST_BACKGROUND_SAMPLE=1`: the Background window shows sample items.
     static var showsBackgroundSample: Bool { flag("TELLURION_TEST_BACKGROUND_SAMPLE") }
+    /// `TELLURION_TEST_HEALTH=critical|stall`: the health monitor reads half the Mac's memory
+    /// as used, or the main thread is held for a few seconds once (see `AppHealth`).
+    static var health: String? { value("TELLURION_TEST_HEALTH") }
     /// `TELLURION_TEST_NOANIM=comet,spinner,bar,dot,film,bracket`: turns those motions
     /// off, to measure what each costs the window server.
     static let motionOff = Set((value("TELLURION_TEST_NOANIM") ?? "").split(separator: ",").map(String.init))
@@ -87,6 +90,7 @@ enum TestHooks {
     static var welcome: Bool { false }
     static var tool: String? { nil }
     static var showsBackgroundSample: Bool { false }
+    static var health: String? { nil }
     static let drawsHidden = false
     static let motionOff: Set<String> = []
     static var phoneDev: Bool { false }

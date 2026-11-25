@@ -32,6 +32,7 @@ enum ProcessRunner {
     /// app's own without the event token. `discardingError` sends its standard error nowhere.
     /// Blocks the calling thread: call off the main thread for anything that can be slow.
     static func run(_ process: Process, input: Data? = nil, timeout: TimeInterval, discardingError: Bool = false) -> Output {
+        OffMain.require("running a program")
         if process.environment == nil {
             process.environment = EventToken.scrubbed(ProcessInfo.processInfo.environment)
         }

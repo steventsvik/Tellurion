@@ -15,6 +15,7 @@ struct SetupCheck: Identifiable, Equatable {
         case agentStatus = "Agent status"
         case tools = "Tools"
         case mac = "macOS"
+        case app = "Tellurion"
     }
 
     let id: String
@@ -41,6 +42,10 @@ enum SetupFix: Equatable {
     case repair
     /// Open a tab running `tellurion doctor`, which sends a test event.
     case liveTest
+    /// Pack the health reports into one file to attach to an issue.
+    case saveHealthReport
+    /// Quit and reopen, to give back memory the app shouldn't be holding.
+    case restart
 
     var title: String {
         switch self {
@@ -55,6 +60,8 @@ enum SetupFix: Equatable {
         case .notifications: return "Allow notifications"
         case .repair: return "Repair"
         case .liveTest: return "Run live test"
+        case .saveHealthReport: return "Save a report"
+        case .restart: return "Restart Tellurion"
         }
     }
 }
@@ -154,12 +161,14 @@ final class SetupChecks: ObservableObject {
         guard !running else { pendingRefresh = true; return }
         running = true
         let lastEventAt = lastEventAt, liveCheckAt = liveCheckAt
+        let health = AppHealth.snapshot
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             let notifications = settings.authorizationStatus
             self.queue.async {
                 let tools = Self.findTools()
                 let checks = Self.run(tools: tools, notifications: notifications,
                                       lastEventAt: lastEventAt, liveCheckAt: liveCheckAt)
+                    + [Self.healthCheck(health)]
                 DispatchQueue.main.async {
                     self.tools = tools
                     self.checks = checks
@@ -336,6 +345,35 @@ final class SetupChecks: ObservableObject {
         return checks
     }
 
+    /// How the app itself is doing: its memory, and whether it has frozen.
+    static func healthCheck(_ health: AppHealth.Snapshot) -> SetupCheck {
+        let using = "Using \(HealthJudge.size(health.footprint))"
+        var stalls = "it hasn't frozen this launch"
+        if health.stalls > 0 {
+            let times = health.stalls == 1 ? "once" : "\(health.stalls) times"
+            let during = health.longestStallDuring.map { ", during \($0)" } ?? ""
+            stalls = "it froze \(times) this launch, at longest for \(Int(health.longestStall.rounded())) s\(during)"
+        }
+        let report = "A report says what was growing or stuck, with nothing from your terminals or files in it"
+        switch health.verdict {
+        case .critical(let bytes):
+            return .init(id: "health", section: .app, title: "Tellurion is using \(HealthJudge.size(bytes)) of memory", status: .problem,
+                         detail: "Far more than it should, and macOS may run out. \(report)",
+                         fix: .saveHealthReport, alternative: .restart)
+        case .high(let bytes):
+            return .init(id: "health", section: .app, title: "Tellurion is using \(HealthJudge.size(bytes)) of memory", status: .warning,
+                         detail: "More than it should need. \(report)", fix: .saveHealthReport, alternative: .restart)
+        case .climbing(let growth, let stretch):
+            return .init(id: "health", section: .app, title: "Tellurion's memory keeps growing", status: .warning,
+                         detail: "Up \(HealthJudge.size(growth)) in \(Int(stretch / 60)) minutes, now \(HealthJudge.size(health.footprint)). \(report)",
+                         fix: .saveHealthReport, alternative: .restart)
+        case .fine:
+            return .init(id: "health", section: .app, title: health.stalls > 0 ? "Tellurion froze for a moment" : "Tellurion is healthy",
+                         status: health.longestStall >= 10 ? .warning : health.stalls > 0 ? .info : .ok,
+                         detail: "\(using); \(stalls)", fix: .saveHealthReport)
+        }
+    }
+
     /// Whether events are arriving.
     private static func eventsCheck(lastEventAt: Date?, liveCheckAt: Date?) -> SetupCheck {
         if let liveCheckAt {
@@ -495,6 +533,12 @@ final class SetupChecks: ObservableObject {
             case .liveTest:
                 if HookInstaller.filesState() != .current { try HookInstaller.installFiles() }
                 Self.openTab(running: "~/.ghostty-extreme/bin/tellurion doctor")
+            case .saveHealthReport:
+                AppHealth.shared.exportForIssue { [weak self] file in
+                    if file == nil { self?.fixError = "Couldn't save the report." }
+                }
+            case .restart:
+                AppHealth.restart()
             }
         } catch {
             fixError = error.localizedDescription
