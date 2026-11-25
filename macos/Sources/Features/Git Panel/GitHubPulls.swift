@@ -57,7 +57,7 @@ final class GitHubPulls: ObservableObject {
     /// Nil until checked; false when gh is missing or signed out.
     @Published private(set) var available: Bool?
 
-    private var fetchedAt: [String: Date] = [:]
+    private var fetchedAt = BoundedCache<String, Date>(limit: 512)
     private var inFlight: Set<String> = []
     private var gh: String?
     private var checkedAuthAt: Date?
@@ -91,7 +91,7 @@ final class GitHubPulls: ObservableObject {
         guard TellurionSettings.isOn(.git), available != false || force else { return }
         let key = Self.key(root, branch)
         guard !inFlight.contains(key) else { return }
-        if !force, let at = fetchedAt[key], Date().timeIntervalSince(at) < Self.maxAge { return }
+        if !force, let at = fetchedAt.peek(key), Date().timeIntervalSince(at) < Self.maxAge { return }
         inFlight.insert(key)
         fetchedAt[key] = Date()
         let checkAuth = checkedAuthAt.map { Date().timeIntervalSince($0) > 600 } ?? true
@@ -122,6 +122,10 @@ final class GitHubPulls: ObservableObject {
             DispatchQueue.main.async {
                 self.inFlight.remove(key)
                 if let lookup, self.results[key] != lookup { self.results[key] = lookup }
+                // Branches nobody has asked about for a long while: their answers go too.
+                if self.results.count > self.fetchedAt.limit {
+                    self.results = self.results.filter { self.fetchedAt.peek($0.key) != nil }
+                }
             }
         }
     }

@@ -100,7 +100,7 @@ struct AgentContext {
         } else if AgentTools.repoRoot(of: folder) != nil {
             changeScope = "uncommitted, against the last commit"
             changeSummary = AgentTools.git(["diff"] + AgentTools.diffGuards + ["--stat", "HEAD"], in: folder).output.trimmingCharacters(in: .whitespacesAndNewlines)
-            diff = AgentTools.git(["diff"] + AgentTools.diffGuards + ["HEAD"], in: folder).output
+            diff = AgentTools.git(["diff"] + AgentTools.diffGuards + ["HEAD"], in: folder, maxOutput: 1024 * 1024).output
             // New files aren't in `git diff HEAD` until they're added.
             let untracked = AgentTools.git(["ls-files", "--others", "--exclude-standard"], in: folder).output
                 .split(separator: "\n").prefix(20)

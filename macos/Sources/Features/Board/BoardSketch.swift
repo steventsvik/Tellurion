@@ -520,7 +520,7 @@ enum SketchRenderer {
 
 /// Pictures put on sketches, saved as files beside the board's file and loaded once.
 enum BoardSketchImages {
-    private static var cache: [String: NSImage] = [:]
+    private static var cache = BoundedCache<String, NSImage>(limit: 256)
     /// Pictures whose file is gone, so a redraw doesn't look on disk again.
     private static var missing: Set<String> = []
 
@@ -548,7 +548,7 @@ enum BoardSketchImages {
     }
 
     static func image(_ name: String) -> NSImage? {
-        if let image = cache[name] { return image }
+        if let image = cache.peek(name) { return image }
         guard !missing.contains(name) else { return nil }
         // Names are ours (a UUID and .png); anything else isn't loaded.
         guard name.range(of: #"^[0-9A-F-]{36}\.png$"#, options: .regularExpression) != nil,

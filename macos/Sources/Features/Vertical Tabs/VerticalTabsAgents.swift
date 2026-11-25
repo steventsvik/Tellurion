@@ -187,7 +187,7 @@ final class VerticalTabsAgents {
         if detail.hasPrefix("/") { return detail }
         guard agent == "claude", (8...64).contains(detail.count),
               detail.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }) else { return nil }
-        if let known = sessionPaths[detail] { return known }
+        if let known = sessionPaths.peek(detail) { return known }
         let root = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/projects", isDirectory: true)
         for folder in (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? [] {
             let path = root.appendingPathComponent(folder).appendingPathComponent(detail + ".jsonl").path
@@ -199,7 +199,7 @@ final class VerticalTabsAgents {
         return nil
     }
 
-    private static var sessionPaths: [String: String] = [:]
+    private static var sessionPaths = BoundedCache<String, String>(limit: 1024)
 
     private func apply(_ event: Event, to surface: Ghostty.SurfaceView) {
         if event.agent == "codex", let session = event.session {

@@ -16,6 +16,8 @@ enum ProcessRunner {
         let stderr: Data
         /// It ran out of time and was stopped.
         var timedOut = false
+        /// It wrote more than was kept: the rest was read and dropped.
+        var truncated = false
         /// Why it couldn't be started.
         var launchError: String?
 
@@ -24,14 +26,21 @@ enum ProcessRunner {
         var errorText: String { String(decoding: stderr, as: UTF8.self) }
     }
 
+    /// How much of each output is kept unless the caller says otherwise. A program that
+    /// writes more (a diff of a generated file, a listing of a huge folder) is still read to
+    /// its end, so it never blocks on a full pipe, but the rest isn't held in memory.
+    static let outputLimit = 16 * 1024 * 1024
+
     /// How long a stopped program gets to exit before it's killed.
     static let stopGrace: TimeInterval = 2
 
     /// Runs `process` (configured, not yet started) and waits for it. `input` is fed to its
     /// standard input; without one it reads nothing. With no environment set, it gets the
     /// app's own without the event token. `discardingError` sends its standard error nowhere.
+    /// At most `maxOutput` bytes of each output are kept.
     /// Blocks the calling thread: call off the main thread for anything that can be slow.
-    static func run(_ process: Process, input: Data? = nil, timeout: TimeInterval, discardingError: Bool = false) -> Output {
+    static func run(_ process: Process, input: Data? = nil, timeout: TimeInterval, discardingError: Bool = false,
+                    maxOutput: Int = ProcessRunner.outputLimit) -> Output {
         OffMain.require("running a program")
         if process.environment == nil {
             process.environment = EventToken.scrubbed(ProcessInfo.processInfo.environment)
@@ -77,7 +86,9 @@ enum ProcessRunner {
                     guard let index = streams.firstIndex(where: { $0.fd == item.fd }) else { continue }
                     let count = buffer.withUnsafeMutableBytes { read(item.fd, $0.baseAddress, $0.count) }
                     if count > 0 {
-                        streams[index].data.append(contentsOf: buffer[0..<count])
+                        let room = max(maxOutput - streams[index].data.count, 0)
+                        if room > 0 { streams[index].data.append(contentsOf: buffer[0..<min(count, room)]) }
+                        if count > room { streams[index].truncated = true }
                     } else if count == 0 || (errno != EINTR && errno != EAGAIN) {
                         streams[index].open = false
                     }
@@ -120,7 +131,8 @@ enum ProcessRunner {
             usleep(20_000)
         }
         return Output(status: process.terminationStatus, stdout: streams[0].data,
-                      stderr: streams.count > 1 ? streams[1].data : Data(), timedOut: timedOut)
+                      stderr: streams.count > 1 ? streams[1].data : Data(), timedOut: timedOut,
+                      truncated: streams.contains(where: \.truncated))
     }
 
     private enum Stage { case running, stopping, killed }
@@ -129,6 +141,7 @@ enum ProcessRunner {
         let fd: Int32
         var data = Data()
         var open = true
+        var truncated = false
     }
 }
 #endif

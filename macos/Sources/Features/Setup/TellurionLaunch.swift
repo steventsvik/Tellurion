@@ -17,6 +17,7 @@ enum TellurionLaunch {
         DispatchQueue.global(qos: .utility).async {
             // A rebuilt app brings already-installed hooks up to date.
             HookInstaller.refreshIfInstalled()
+            AgentTools.pruneOldPrompts()
             DispatchQueue.main.async {
                 // First launch: the welcome window, if agent status isn't set up. Otherwise
                 // this is just the first setup check, which feeds the sidebar's warning chip.

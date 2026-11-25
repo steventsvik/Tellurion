@@ -106,8 +106,8 @@ enum AgentTools {
     /// on top of that. Call off the main thread for anything that can be slow.
     @discardableResult
     static func git(_ args: [String], in directory: String, gitPath: String = "/usr/bin/git",
-                    environment extra: [String: String] = [:]) -> Result {
-        run(gitProcess(args, in: directory, gitPath: gitPath, environment: extra))
+                    environment extra: [String: String] = [:], maxOutput: Int = ProcessRunner.outputLimit) -> Result {
+        run(gitProcess(args, in: directory, gitPath: gitPath, environment: extra), maxOutput: maxOutput)
     }
 
     /// A git process set up like `git(_:in:)` runs one, for a caller that has to feed its
@@ -132,8 +132,8 @@ enum AgentTools {
 
     /// Runs a process to the end and collects what it wrote. Git's own commands here are
     /// local, so one that's still going after `timeout` seconds is stuck, and is stopped.
-    private static func run(_ process: Process, timeout: TimeInterval = 300) -> Result {
-        let result = ProcessRunner.run(process, timeout: timeout)
+    private static func run(_ process: Process, timeout: TimeInterval = 300, maxOutput: Int = ProcessRunner.outputLimit) -> Result {
+        let result = ProcessRunner.run(process, timeout: timeout, maxOutput: maxOutput)
         if let failure = result.launchError { return Result(status: -1, output: "", error: failure) }
         return Result(status: result.status, output: result.text,
                       error: result.timedOut && result.stderr.isEmpty ? "Timed out after \(Int(timeout)) seconds" : result.errorText)
@@ -166,6 +166,18 @@ enum AgentTools {
     static func agentCommand(_ agent: VerticalTabAgentKind, promptFile: URL) -> String {
         let binary = agent == .codex ? "codex" : "claude"
         return "\(binary) \"$(cat \(shellQuote(promptFile.path)))\"\n"
+    }
+
+    /// The folders prompts are saved in to be read once, as an agent starts. Nothing reads
+    /// one again, so after a while they're only clutter (and they hold what was asked).
+    static let promptFolders = ["board-prompts", "board", "handoffs", "fixes", "visual-fix"]
+    static let promptsKeptFor: TimeInterval = 14 * 24 * 3600
+
+    /// Removes prompt files older than two weeks. Off the main thread, once at launch.
+    static func pruneOldPrompts(now: Date = Date()) {
+        for folder in promptFolders {
+            StoredFile.removeFiles(in: root.appendingPathComponent(folder, isDirectory: true), olderThan: promptsKeptFor, now: now)
+        }
     }
 
     /// Saves a prompt under ~/.ghostty-extreme/<folder>/ and returns its file.

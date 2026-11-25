@@ -70,7 +70,7 @@ final class ProjectChecks: ObservableObject {
     /// Counts a pane's turn starts and ends, so a late answer about an old turn is dropped.
     private var turnSerial: [ObjectIdentifier: Int] = [:]
     /// Folders whose repository is known.
-    private var roots: [String: String] = [:]
+    private var roots = BoundedCache<String, String>(limit: 1024)
     private let queue = DispatchQueue(label: "com.steventsvik.ghostty-extreme.checks", qos: .utility)
     private var cancellables: Set<AnyCancellable> = []
 
@@ -126,7 +126,7 @@ final class ProjectChecks: ObservableObject {
     }
 
     func root(forFolder folder: String) -> String? {
-        roots[folder] ?? store.root(containing: folder)
+        roots.peek(folder) ?? store.root(containing: folder)
     }
 
     /// Where a project's log is kept: `~/.ghostty-extreme/checks/logs/<name>-<hash>.log`.
@@ -251,7 +251,7 @@ final class ProjectChecks: ObservableObject {
     /// Finds the repository `folder` is in (asking git once per folder) and calls back on the
     /// main thread; right away when it's known.
     private func withRoot(of folder: String, then: @escaping (String?) -> Void) {
-        if let known = roots[folder] {
+        if let known = roots.peek(folder) {
             then(known)
             return
         }

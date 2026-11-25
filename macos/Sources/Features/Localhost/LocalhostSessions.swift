@@ -157,7 +157,7 @@ struct LocalhostFramework: Equatable {
         ("phx.server", .init(name: "Phoenix", symbol: "flame.fill", color: Color(red: 0.99, green: 0.44, blue: 0.2))),
     ]
 
-    private static var scriptCache: [String: String] = [:]
+    private static var scriptCache = BoundedCache<String, String>(limit: 256)
 
     /// Matches the command, looking through `npm run <script>` to the script's own command.
     static func detect(command: String, cwd: String?) -> LocalhostFramework {
@@ -177,7 +177,7 @@ struct LocalhostFramework: Equatable {
 
     private static func scriptBody(_ script: String, cwd: String) -> String {
         let key = cwd + "#" + script
-        if let cached = scriptCache[key] { return cached }
+        if let cached = scriptCache.peek(key) { return cached }
         let file = URL(fileURLWithPath: cwd).appendingPathComponent("package.json")
         var body = ""
         if let data = try? Data(contentsOf: file),

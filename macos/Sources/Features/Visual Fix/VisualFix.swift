@@ -132,7 +132,7 @@ final class VisualFixSession: NSObject, ObservableObject {
 
     private var nextNumber = 1
     private var targets: [Int: WeakSurface] = [:]
-    private var lastActivity: [ObjectIdentifier: VerticalTabAgentActivity] = [:]
+    private var lastActivity = BoundedCache<ObjectIdentifier, VerticalTabAgentActivity>(limit: 1024)
     private var cancellables: Set<AnyCancellable> = []
 
     private final class WeakSurface {
@@ -430,7 +430,7 @@ final class VisualFixSession: NSObject, ObservableObject {
     private func agentChanged(_ surface: Ghostty.SurfaceView) {
         let key = ObjectIdentifier(surface)
         let activity = VerticalTabsAgents.shared.info(for: surface)?.activity
-        let previous = lastActivity[key]
+        let previous = lastActivity.peek(key)
         lastActivity[key] = activity
         guard activity != previous else { return }
         for index in requests.indices where requests[index].state != .done && targets[requests[index].id]?.surface === surface {

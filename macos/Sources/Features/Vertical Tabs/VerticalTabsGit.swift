@@ -26,11 +26,16 @@ final class VerticalTabsGit: ObservableObject {
     /// Keyed by repository root.
     @Published private(set) var info: [String: VerticalTabsGitInfo] = [:]
 
-    /// Main-thread cache of pwd → repo root ("" means not in a repo).
-    private var rootForPwd: [String: String] = [:]
+    /// Main-thread cache of pwd → repo root ("" means not in a repo). It has a ceiling, as
+    /// every folder a terminal was ever in would otherwise stay; one that's dropped while a
+    /// row still shows it is looked up again at the next poll.
+    private var rootForPwd = BoundedCache<String, String>(limit: 1024)
 
     /// Git dir for each known repo root.
-    private var gitDirs: [String: String] = [:]
+    private var gitDirs = BoundedCache<String, String>(limit: 512)
+
+    /// Folders whose repository is being looked up right now.
+    private var resolving: Set<String> = []
 
     /// How many sidebar rows currently display each pwd. Only repos with at least one
     /// displaying row are polled, so closed tabs stop costing anything.
@@ -56,23 +61,25 @@ final class VerticalTabsGit: ObservableObject {
             .sink { [weak self] _ in self?.stopTimer() }
             .store(in: &cancellables)
         if NSApp.isActive { startTimer() }
+        AppHealth.gauge("git folders") { [weak self] in self?.rootForPwd.count ?? 0 }
+        AppHealth.gauge("git repositories") { [weak self] in self?.info.count ?? 0 }
     }
 
     /// Cached info for the repo containing `pwd`. Never touches the filesystem.
     func info(for pwd: String?) -> VerticalTabsGitInfo? {
-        guard let pwd, let root = rootForPwd[pwd], !root.isEmpty else { return nil }
+        guard let pwd, let root = rootForPwd.peek(pwd), !root.isEmpty else { return nil }
         return info[root]
     }
 
     /// The repository root containing `pwd`, once known. Never touches the filesystem.
     func root(for pwd: String?) -> String? {
-        guard let pwd, let root = rootForPwd[pwd], !root.isEmpty else { return nil }
+        guard let pwd, let root = rootForPwd.peek(pwd), !root.isEmpty else { return nil }
         return root
     }
 
     /// Re-reads one repository now (after a branch switch, a commit, an agent's turn).
     func refreshNow(root: String) {
-        guard let gitDir = gitDirs[root] else { return }
+        guard let gitDir = gitDirs.peek(root) else { return }
         refresh(root: root, gitDir: gitDir)
     }
 
@@ -80,15 +87,26 @@ final class VerticalTabsGit: ObservableObject {
     func track(_ pwd: String?) {
         guard let pwd else { return }
         interest[pwd, default: 0] += 1
-        guard rootForPwd[pwd] == nil else { return }
+        resolve(pwd)
+    }
+
+    /// Finds `pwd`'s repository in the background, unless it's known or already being found.
+    private func resolve(_ pwd: String) {
+        guard rootForPwd.peek(pwd) == nil, !resolving.contains(pwd) else { return }
+        resolving.insert(pwd)
         queue.async { [weak self] in
             let root = Self.repoRoot(containing: pwd)
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.resolving.remove(pwd)
                 self.rootForPwd[pwd] = root?.path ?? ""
                 guard let root else { return }
-                let isNew = self.gitDirs[root.path] == nil
+                let isNew = self.gitDirs.peek(root.path) == nil || self.info[root.path] == nil
                 self.gitDirs[root.path] = root.gitDir
+                // Repositories that fell out of the list above take their numbers with them.
+                if self.info.count > self.gitDirs.limit {
+                    self.info = self.info.filter { self.gitDirs.peek($0.key) != nil }
+                }
                 if isNew { self.refresh(root: root.path, gitDir: root.gitDir) }
             }
         }
@@ -116,9 +134,11 @@ final class VerticalTabsGit: ObservableObject {
     }
 
     private func refreshAll() {
-        let roots = Set(interest.keys.compactMap { rootForPwd[$0] }.filter { !$0.isEmpty })
+        // A folder still on show whose answer was dropped to make room: found again.
+        for pwd in interest.keys where rootForPwd.peek(pwd) == nil { resolve(pwd) }
+        let roots = Set(interest.keys.compactMap { rootForPwd.peek($0) }.filter { !$0.isEmpty })
         for root in roots {
-            guard let gitDir = gitDirs[root] else { continue }
+            guard let gitDir = gitDirs.peek(root) else { continue }
             refresh(root: root, gitDir: gitDir)
         }
     }
