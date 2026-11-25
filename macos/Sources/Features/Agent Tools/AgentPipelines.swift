@@ -50,7 +50,7 @@ final class AgentPipelines: ObservableObject {
 
     @Published private(set) var pipelines: [UUID: Pipeline] = [:]
 
-    private var lastActivity: [ObjectIdentifier: VerticalTabAgentActivity] = [:]
+    private var lastActivity = BoundedCache<ObjectIdentifier, VerticalTabAgentActivity>(limit: 1024)
     private var cancellables: Set<AnyCancellable> = []
 
     private init() {
@@ -128,7 +128,7 @@ final class AgentPipelines: ObservableObject {
     private func agentChanged(_ surface: Ghostty.SurfaceView) {
         let key = ObjectIdentifier(surface)
         let activity = VerticalTabsAgents.shared.info(for: surface)?.activity
-        let previous = lastActivity[key]
+        let previous = lastActivity.peek(key)
         lastActivity[key] = activity
         // Closed panes end their pipelines.
         for pipeline in pipelines.values where pipeline.isActive && (pipeline.writer == nil || pipeline.reviewer == nil) {

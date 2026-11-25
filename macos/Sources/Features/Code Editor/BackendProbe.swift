@@ -423,13 +423,13 @@ enum BackendProbe {
         return String(trimmed[start...]).data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) }
     }
 
-    private static var cache: [String: (Date, Any)] = [:]
+    private static var cache = BoundedCache<String, (Date, Any)>(limit: 128)
     private static let cacheLock = NSLock()
 
     /// Recent answers are reused, so several views asking at once only run the CLI once.
     private static func cached(_ key: String, ttl: TimeInterval, _ work: () -> Any) -> Any {
         cacheLock.lock()
-        if let (time, value) = cache[key], Date().timeIntervalSince(time) < ttl {
+        if let (time, value) = cache.peek(key), Date().timeIntervalSince(time) < ttl {
             cacheLock.unlock()
             return value
         }

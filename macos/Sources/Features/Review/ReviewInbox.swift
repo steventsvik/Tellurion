@@ -129,7 +129,7 @@ final class ReviewInbox: ObservableObject {
     private var starting: Set<ObjectIdentifier> = []
     /// Panes whose agent finished before that snapshot was ready.
     private var finishedWhileStarting: [ObjectIdentifier: (VerticalTabAgentKind, String?)] = [:]
-    private var lastActivity: [ObjectIdentifier: VerticalTabAgentActivity] = [:]
+    private var lastActivity = BoundedCache<ObjectIdentifier, VerticalTabAgentActivity>(limit: 1024)
     private var cancellables: Set<AnyCancellable> = []
     private let queue = DispatchQueue(label: "com.steventsvik.ghostty-extreme.review", qos: .userInitiated)
 
@@ -169,7 +169,7 @@ final class ReviewInbox: ObservableObject {
     private func agentChanged(_ surface: Ghostty.SurfaceView) {
         let key = ObjectIdentifier(surface)
         let info = VerticalTabsAgents.shared.info(for: surface)
-        let previous = lastActivity[key]
+        let previous = lastActivity.peek(key)
         lastActivity[key] = info?.activity
         guard let info, info.kind != .hermes, TellurionSettings.isOn(.review) else { return }
 

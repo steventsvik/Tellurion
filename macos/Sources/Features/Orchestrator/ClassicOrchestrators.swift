@@ -366,7 +366,7 @@ final class ClassicOrchestrators: ObservableObject {
     private var returning: [String: [ClassicOrchestratorRecord.Member]] = [:]
     private let relay = OrchestratorRelay()
     private var observers: [NSObjectProtocol] = []
-    private var roots: [String: (root: String, found: Date)] = [:]
+    private var roots = BoundedCache<String, (root: String, found: Date)>(limit: 512)
     private var started = false
     private let live: Bool
 
@@ -399,7 +399,7 @@ final class ClassicOrchestrators: ObservableObject {
 
     /// The project a folder is in: its git root, or the folder itself.
     func root(of folder: String) -> String {
-        if let cached = roots[folder], Date().timeIntervalSince(cached.found) < 15 { return cached.root }
+        if let cached = roots.peek(folder), Date().timeIntervalSince(cached.found) < 15 { return cached.root }
         let root = LocalhostProject(folder: folder).root
         roots[folder] = (root, Date())
         return root

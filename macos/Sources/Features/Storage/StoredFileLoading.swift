@@ -100,6 +100,22 @@ extension StoredFile {
         for old in newestFirst.dropFirst(max(keep, 0)) { try? fm.removeItem(at: folder.appendingPathComponent(old)) }
     }
 
+    /// Removes the plain files directly in `folder` that were last changed more than `age`
+    /// ago. Folders inside it, and files that can't be dated, are left alone. Returns how many went.
+    @discardableResult
+    static func removeFiles(in folder: URL, olderThan age: TimeInterval, now: Date = Date()) -> Int {
+        let fm = FileManager.default
+        let keys: [URLResourceKey] = [.isRegularFileKey, .contentModificationDateKey]
+        guard let files = try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys) else { return 0 }
+        var removed = 0
+        for file in files {
+            guard let values = try? file.resourceValues(forKeys: Set(keys)), values.isRegularFile == true,
+                  let changed = values.contentModificationDate, now.timeIntervalSince(changed) > age else { continue }
+            if (try? fm.removeItem(at: file)) != nil { removed += 1 }
+        }
+        return removed
+    }
+
     /// The time as it goes in a file name: `20250131-235959`.
     static func stamp(_ date: Date = Date()) -> String {
         let formatter = DateFormatter()

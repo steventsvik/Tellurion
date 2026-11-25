@@ -226,8 +226,10 @@ final class AgentMapContent: CardContent {
         var path = path
         while true {
             if let index = cellIndex[path] { return cells[index] }
-            if path.isEmpty { return nil }
-            path = (path as NSString).deletingLastPathComponent
+            // The folder above a relative path ends empty; above "/" it's "/" again, forever.
+            let above = (path as NSString).deletingLastPathComponent
+            if path.isEmpty || above.count >= path.count { return nil }
+            path = above
         }
     }
 
@@ -680,7 +682,8 @@ final class MapNode {
     static func scan(_ root: String, limit: Int) -> MapNode {
         var files: [String] = []
         if FileManager.default.fileExists(atPath: (root as NSString).appendingPathComponent(".git")) {
-            let result = AgentTools.git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"], in: root)
+            let result = AgentTools.git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"], in: root,
+                                        maxOutput: 8 * 1024 * 1024)
             if result.ok { files = result.output.split(separator: "\0").map(String.init) }
         }
         if files.isEmpty { files = walk(root, limit: limit) }

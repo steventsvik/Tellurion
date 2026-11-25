@@ -471,7 +471,9 @@ private final class EditorFileBridge: NSObject, WKScriptMessageHandlerWithReply 
     private func allFiles() -> [String] {
         guard let root else { return [] }
         if VerticalTabsGit.repoRoot(containing: root) != nil {
-            let listing = AgentTools.git(["ls-files", "--cached", "--others", "--exclude-standard"], in: root)
+            // 50,000 paths at most are used; eight megabytes holds far more than that.
+            let listing = AgentTools.git(["ls-files", "--cached", "--others", "--exclude-standard"], in: root,
+                                         maxOutput: 8 * 1024 * 1024)
             if listing.ok { return listing.output.split(separator: "\n").prefix(50_000).map(String.init) }
         }
         // Not a repository: walk the folder, but cheaply. Hidden folders and bundles are

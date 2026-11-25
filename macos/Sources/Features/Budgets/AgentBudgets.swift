@@ -60,7 +60,7 @@ final class AgentBudgets: ObservableObject {
     /// How far each transcript has been read. Only on `queue`.
     private var meters: [String: SessionMeter] = [:]
     /// Each folder's project. Only on `queue`.
-    private var projects: [String: String] = [:]
+    private var projects = BoundedCache<String, String>(limit: 1024)
 
     private init() {
         settings = Self.load(from: Self.file)
@@ -288,7 +288,7 @@ final class AgentBudgets: ObservableObject {
 
     /// On `queue`. Git is asked once per folder.
     private func project(of folder: String) -> String {
-        if let known = projects[folder] { return known }
+        if let known = projects.peek(folder) { return known }
         let project = AgentTools.repoRoot(of: folder) ?? folder
         projects[folder] = project
         return project

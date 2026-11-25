@@ -20,7 +20,7 @@ enum BoardProjects {
 
     static func color(_ index: Int) -> Color { Color(nsColor: nsColor(index)) }
 
-    private static var roots: [String: String] = [:]
+    private static var roots = BoundedCache<String, String>(limit: 1024)
 
     /// The project a folder is in: the top of its git checkout, or the folder itself. None for
     /// the home folder and the top of the disk, which aren't projects.
@@ -29,7 +29,7 @@ enum BoardProjects {
         let path = (pwd as NSString).standardizingPath
         let home = NSHomeDirectory()
         guard path != home, path != "/" else { return nil }
-        if let root = roots[path] { return root }
+        if let root = roots.peek(path) { return root }
         var root = path
         var folder = path
         let files = FileManager.default
