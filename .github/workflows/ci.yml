@@ -158,7 +158,8 @@ jobs:
   # newest. A lookup that never ended on macOS 15 (and grew the app to 77 GB) got through that
   # way, so the same build is started on older systems and watched: it has to stay up, idle,
   # the same size, and report no freeze or memory trouble about itself (launch-test.sh).
-  # There is no hosted runner for macOS 13; 14 is the oldest these can reach.
+  # GitHub no longer hosts runners for macOS 13 or 14 (a macos-14 job is cancelled before it
+  # starts), so 15 is the oldest this can reach: the version that lookup failed on.
   launch-test:
     name: Launch on ${{ matrix.os }}
     needs: build-and-test
@@ -167,7 +168,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15]
+        os: [macos-15]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
