@@ -249,5 +249,113 @@ class ReleaseScript(unittest.TestCase):
             self.assertNotRegex(line, r"(?<!\|)\|\s*grep\s+-[A-Za-z]*q", f"release.sh:{number}")
 
 
+class NotaryKey(Folder):
+    def setUp(self):
+        super().setUp()
+        self.key = self.folder / "AuthKey_TEST.p8"
+        self.key.write_text("not a real key\n")
+
+    def named(self, text):
+        path = self.folder / "release-notary.env"
+        path.write_text(text)
+        return run("notary-key", path)
+
+    def test_a_complete_file_gives_the_three_values(self):
+        result = self.named(f"NOTARY_KEY={self.key}\nNOTARY_KEY_ID=ABC123\nNOTARY_ISSUER=1111-2222\n")
+        self.assertEqual((result.returncode, result.stdout), (0, f"{self.key}\nABC123\n1111-2222\n"), result.stderr)
+
+    def test_quotes_a_missing_last_newline_and_windows_line_ends_are_fine(self):
+        result = self.named(f'NOTARY_KEY="{self.key}"\r\nNOTARY_ISSUER=1111-2222\r\nNOTARY_KEY_ID=ABC123')
+        self.assertEqual((result.returncode, result.stdout), (0, f"{self.key}\nABC123\n1111-2222\n"), result.stderr)
+
+    def test_no_file_means_the_keychain_profile(self):
+        result = run("notary-key", self.folder / "absent.env")
+        self.assertEqual((result.returncode, result.stdout), (1, ""))
+
+    def test_a_file_that_names_none_of_them_means_the_keychain_profile(self):
+        self.assertEqual(self.named("# nothing yet\nOTHER=1\n").returncode, 1)
+
+    def test_a_half_filled_file_stops_the_release(self):
+        result = self.named(f"NOTARY_KEY={self.key}\nNOTARY_KEY_ID=ABC123\n")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("NOTARY_ISSUER", result.stderr)
+
+    def test_a_key_file_that_is_gone_stops_the_release(self):
+        result = self.named(f"NOTARY_KEY={self.folder}/gone.p8\nNOTARY_KEY_ID=ABC123\nNOTARY_ISSUER=1111-2222\n")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("gone.p8", result.stderr)
+
+    def test_the_file_is_read_not_run(self):
+        marker = self.folder / "ran"
+        result = self.named(f"touch {marker}\nNOTARY_KEY=$(touch {marker})\nNOTARY_KEY_ID=A\nNOTARY_ISSUER=B\n")
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse(marker.exists())
+
+
+class NotaryAdvice(Folder):
+    def advice(self, text):
+        path = self.folder / "answer.txt"
+        path.write_text(text)
+        result = run("notary-advice", path, "PROFILE", "TEAM123")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_an_agreement_that_needs_accepting(self):
+        text = "Error: HTTP status code: 403. A required agreement is missing or has expired.\n"
+        self.assertIn("developer.apple.com/account", self.advice(text))
+
+    def test_a_login_gone_from_the_keychain_gives_the_command(self):
+        text = "Error: No Keychain password item found for profile: PROFILE\n\nRun 'notarytool store-credentials'\n"
+        self.assertIn("store-credentials PROFILE --apple-id <Apple ID> --team-id TEAM123", self.advice(text))
+
+    def test_a_refused_password(self):
+        self.assertIn("refused the login", self.advice("Error: HTTP status code: 401. Invalid credentials.\n"))
+
+    def test_anything_else_is_passed_on(self):
+        self.assertEqual(self.advice("first\nThe network is down\n\n"), "notarytool said: The network is down\n")
+
+    def test_no_answer_at_all(self):
+        self.assertEqual(self.advice(""), "notarytool said: nothing\n")
+
+
+class Symbols(Folder):
+    def build(self, name, value):
+        source = self.folder / f"{name}.c"
+        source.write_text(f"int main(void) {{ return {value}; }}\n")
+        binary = self.folder / name
+        subprocess.run(["clang", "-g", "-o", binary, source], check=True, capture_output=True)
+        subprocess.run(["dsymutil", binary], check=True, capture_output=True)
+        return binary, self.folder / f"{name}.dSYM"
+
+    def test_a_build_and_its_own_symbols_match(self):
+        binary, symbols = self.build("one", 1)
+        result = run("symbols", binary, symbols)
+        self.assertEqual((result.returncode, result.stdout), (0, ""), result.stderr)
+
+    def test_stripping_the_binary_doesnt_change_that(self):
+        binary, symbols = self.build("one", 1)
+        subprocess.run(["strip", "-S", "-x", binary], check=True, capture_output=True)
+        self.assertEqual(run("symbols", binary, symbols).returncode, 0)
+
+    def test_another_builds_symbols_are_refused_and_both_are_shown(self):
+        binary, _ = self.build("one", 1)
+        _, other = self.build("two", 2)
+        result = run("symbols", binary, other)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("binary:", result.stdout)
+        self.assertIn("symbols:", result.stdout)
+
+    def test_missing_symbols_are_a_failure_not_a_pass(self):
+        binary, _ = self.build("one", 1)
+        self.assertEqual(run("symbols", binary, self.folder / "absent.dSYM").returncode, 2)
+        empty = self.folder / "empty.dSYM"
+        empty.mkdir()
+        self.assertEqual(run("symbols", binary, empty).returncode, 2)
+
+    def test_a_binary_that_cant_be_read_is_a_failure(self):
+        _, symbols = self.build("one", 1)
+        self.assertEqual(run("symbols", self.folder / "absent", symbols).returncode, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

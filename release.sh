@@ -5,6 +5,9 @@
 #   ./release.sh draft 1.5.0    the same, then a *draft* release (nobody is notified)
 #   ./release.sh keys           one-time: the update-signing key, and a check that the
 #                               Developer ID certificate and notarization login are set up
+#   ./release.sh symbolicate 2.0.0 10140860 …
+#                               names the functions at addresses from a user's crash or hang
+#                               report ("ghostty + 10140860"), from that release's debug symbols
 #
 # Every release publishes appcast.xml, the feed the app's updater reads (signed with the
 # update key, so only your builds are ever offered), and SHA256SUMS, which install.sh checks.
@@ -22,10 +25,16 @@ VERSION=${2:-}
 REPO=steventsvik/Tellurion
 # The update key's name in the keychain, the Developer ID certificate, and the notarytool
 # profile (saved with: xcrun notarytool store-credentials GhosttyEXTREME --apple-id … --team-id …).
+# The profile has vanished from the keychain more than once, so an App Store Connect API key
+# is used in its place when NOTARY_ENV names one (see notary-key in release-checks.sh).
 KEY_ACCOUNT=GhosttyEXTREME
 TEAM_ID=2N6Q8XFTLZ
 SIGN_ID="Developer ID Application: Steven Tsvik ($TEAM_ID)"
 NOTARY_PROFILE=GhosttyEXTREME
+NOTARY_ENV=~/.ghostty-extreme/release-notary.env
+# Each release's debug symbols, by version and build UUID. Kept on this Mac only: they hold
+# the build machine's paths.
+SYMBOLS_ROOT=~/Library/Application\ Support/Tellurion/symbols
 # Ghostty's own update key: an app that still trusts it would accept official Ghostty builds.
 GHOSTTY_ED_KEY="wsNcGf5hirwtdXMVnYoxRIX/SqZQLMOsYlD3q3imeok="
 # Sparkle's tools come with the app's build. Several builds can have them (worktrees, other
@@ -54,6 +63,55 @@ fail() { print -P "  %F{red}✗ $1%f"; exit 1; }
 
 cd $ROOT
 
+# Sets NOTARY_AUTH (notarytool's login arguments) and NOTARY_HOW (what to call it).
+notary_login() {
+  local found result
+  found=$(./release-checks.sh notary-key $NOTARY_ENV 2>&1)
+  result=$?
+  if (( result == 0 )); then
+    local parts=("${(@f)found}")
+    NOTARY_AUTH=(--key $parts[1] --key-id $parts[2] --issuer $parts[3])
+    NOTARY_HOW="API key $parts[2]"
+  elif (( result == 1 )); then
+    NOTARY_AUTH=(--keychain-profile $NOTARY_PROFILE)
+    NOTARY_HOW="keychain profile \"$NOTARY_PROFILE\""
+  else
+    fail "${found//$'\n'/ }"
+  fi
+}
+# 0 when Apple accepts the login. Otherwise says what to do about it and returns 1.
+notary_ready() {
+  local answer
+  answer=$(mktemp) || return 1
+  if xcrun notarytool history $NOTARY_AUTH > $answer 2>&1; then
+    rm -f $answer
+    return 0
+  fi
+  print -r -- "  $(./release-checks.sh notary-advice $answer $NOTARY_PROFILE $TEAM_ID 2>&1)"
+  rm -f $answer
+  return 1
+}
+
+# ── Function names for a user's report ──────────────────────────────────
+if [[ $MODE == symbolicate ]]; then
+  (( $# >= 3 )) || { echo "usage: ./release.sh symbolicate <version> <address>…   e.g. ./release.sh symbolicate 2.0.0 10140860"; exit 2; }
+  KEPT=($SYMBOLS_ROOT/$VERSION-*(N/om))
+  (( $#KEPT )) || fail "no debug symbols kept for $VERSION in $SYMBOLS_ROOT (they're kept from 2.0 on)"
+  (( $#KEPT == 1 )) || print "  $#KEPT builds of $VERSION kept; using the newest (${KEPT[1]:t})"
+  DWARF=$KEPT[1]/Ghostty.app.dSYM/Contents/Resources/DWARF/ghostty
+  [[ -f $DWARF ]] || fail "$KEPT[1] has no symbols for the app"
+  # The app is loaded at 0x100000000 as far as its symbols know; a report gives the distance
+  # from there, in decimal ("ghostty + 10140860") or hex.
+  BASE=$(( 0x100000000 ))
+  for given in ${@:3}; do
+    [[ $given =~ '^(0[xX][0-9a-fA-F]+|[0-9]+)$' ]] || fail "\"$given\" isn't an address"
+    address=$(( given ))
+    (( address < BASE )) && address=$(( address + BASE ))
+    print -r -- "$given  $(atos -o $DWARF -arch arm64 -l 0x100000000 $(printf '0x%x' $address) 2>&1)"
+  done
+  exit 0
+fi
+
 # ── One-time setup ──────────────────────────────────────────────────────
 if [[ $MODE == keys ]]; then
   GENERATE=$(sparkle_tool generate_keys)
@@ -70,15 +128,16 @@ if [[ $MODE == keys ]]; then
   has_certificate \
     || fail "no \"$SIGN_ID\" certificate; create it in Xcode → Settings → Accounts → Manage Certificates…"
   pass "\"$SIGN_ID\" is in your keychain"
-  xcrun notarytool history --keychain-profile $NOTARY_PROFILE >/dev/null 2>&1 \
-    || fail "no working notarytool profile \"$NOTARY_PROFILE\"; run xcrun notarytool store-credentials $NOTARY_PROFILE --apple-id <Apple ID> --team-id $TEAM_ID"
-  pass "notarization login \"$NOTARY_PROFILE\" works"
+  notary_login
+  notary_ready || fail "Apple won't take the notarization login ($NOTARY_HOW)"
+  pass "notarization login works ($NOTARY_HOW)"
   exit 0
 fi
 
 if [[ ( $MODE != check && $MODE != draft ) || ! $VERSION =~ '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$' ]]; then
   echo "usage: ./release.sh check|draft <version>   e.g. ./release.sh check 1.5.0"
   echo "       ./release.sh keys                    (once, before the first release with updates)"
+  echo "       ./release.sh symbolicate <version> <address>…   (function names for a user's report)"
   exit 2
 fi
 
@@ -154,6 +213,15 @@ if [[ -s $BLOCKLIST ]]; then
     fi
   done < $BLOCKLIST
   pass "no blocked words"
+fi
+
+# ── Notarization login ──────────────────────────────────────────────────
+# Asked now, not after the build: a login Apple won't take used to surface ten minutes in.
+if has_certificate; then
+  step "Notarization login"
+  notary_login
+  notary_ready || fail "Apple won't take the notarization login ($NOTARY_HOW); nothing was built"
+  pass "$NOTARY_HOW works"
 fi
 
 # ── Build ───────────────────────────────────────────────────────────────
@@ -258,6 +326,17 @@ pass "Sparkle's tools: ${SIGN_UPDATE:h}"
 pass "updates signed with your key ($KEY_ACCOUNT) will be accepted"
 [[ $(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" $APP/Contents/Info.plist) == $VERSION ]] || fail "version not set"
 pass "version $VERSION"
+# The shipped app is stripped, so a user's crash or hang report holds only addresses. The
+# build's symbols are kept here so `./release.sh symbolicate` can name them.
+DSYM=macos/build/ReleaseLocal/Ghostty.app.dSYM
+SYMBOLS_CHECK=$(./release-checks.sh symbols $BIN $DSYM 2>&1) \
+  || fail "the debug symbols aren't this build's, or are missing: ${SYMBOLS_CHECK//$'\n'/ }"
+BUILD_UUID=$(dwarfdump --uuid $BIN | awk '{print $2}') || fail "couldn't read the app's UUID"
+BUILD_UUID=${BUILD_UUID%%$'\n'*}
+SYMBOLS=$SYMBOLS_ROOT/$VERSION-$BUILD_UUID
+rm -rf $SYMBOLS && mkdir -p $SYMBOLS && ditto $DSYM $SYMBOLS/Ghostty.app.dSYM || fail "couldn't keep the debug symbols in $SYMBOLS"
+[[ -d macos/build/ReleaseLocal/DockTilePlugin.plugin.dSYM ]] && ditto macos/build/ReleaseLocal/DockTilePlugin.plugin.dSYM $SYMBOLS/DockTilePlugin.plugin.dSYM
+pass "debug symbols kept (${SYMBOLS/#$HOME/~})"
 
 HOOKS=$OUT/Tellurion-agent-hooks
 mkdir -p $HOOKS
@@ -322,12 +401,12 @@ pass "launched and stayed up (idle CPU ${CPU}%%), no crash report"
 if [[ $SIGNED == 1 ]]; then
   step "Notarize (Apple scans the app; usually a few minutes)"
   ditto -c -k --keepParent --norsrc --noextattr $APP $OUT/notarize.zip
-  xcrun notarytool submit $OUT/notarize.zip --keychain-profile $NOTARY_PROFILE --wait --timeout 30m > $OUT/notarize.log 2>&1
+  xcrun notarytool submit $OUT/notarize.zip $NOTARY_AUTH --wait --timeout 30m > $OUT/notarize.log 2>&1
   SUBMISSION=$(awk '/^  id:/ {print $2; exit}' $OUT/notarize.log)
   rm -f $OUT/notarize.zip
   if ! grep -q 'status: Accepted' $OUT/notarize.log; then
     tail -5 $OUT/notarize.log
-    [[ -n $SUBMISSION ]] && xcrun notarytool log $SUBMISSION --keychain-profile $NOTARY_PROFILE $OUT/notarize-issues.json >/dev/null 2>&1 \
+    [[ -n $SUBMISSION ]] && xcrun notarytool log $SUBMISSION $NOTARY_AUTH $OUT/notarize-issues.json >/dev/null 2>&1 \
       && print "  Apple's report: $OUT/notarize-issues.json"
     fail "Apple didn't accept the app"
   fi

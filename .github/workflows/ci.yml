@@ -1,4 +1,4 @@
-# Checks every pull request and every push to dev and custom.
+# Checks every pull request and every push to dev, custom and next.
 #
 # The first job runs the quick checks from CLAUDE.md: SwiftLint, the editor scripts, the
 # shell scripts, the Python files and the Codex hook's tests. The second builds the app and
@@ -10,7 +10,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [dev, custom]
+    branches: [dev, custom, next]
 
 permissions:
   contents: read
