@@ -136,6 +136,9 @@ enum HeadlessAgent {
 
     /// How long a streaming run may take.
     static let streamLimit: TimeInterval = 600
+    /// The most of one streamed line, and of the reply's text, that's held.
+    static let lineLimit = 8 * 1024 * 1024
+    static let textLimit = 4 * 1024 * 1024
 
     /// A streaming run; `stop()` works before or after the process starts.
     final class Run {
@@ -254,7 +257,7 @@ enum HeadlessAgent {
                 case .claude:
                     if type == "stream_event", let event = json["event"] as? [String: Any] {
                         if let delta = event["delta"] as? [String: Any], let chunk = delta["text"] as? String {
-                            text += chunk
+                            if text.utf8.count < Self.textLimit { text += chunk }
                             emit(.writing)
                         } else if event["type"] as? String == "content_block_start",
                                   (event["content_block"] as? [String: Any])?["type"] as? String == "tool_use" {
@@ -293,6 +296,9 @@ enum HeadlessAgent {
                     line(buffer[buffer.startIndex..<newline])
                     buffer.removeSubrange(buffer.startIndex...newline)
                 }
+                // One record is one line. A "line" this long isn't a record: let it go, so
+                // a program that never ends its line can't fill memory.
+                if buffer.count > Self.lineLimit { buffer.removeAll() }
             }
             if !buffer.isEmpty { line(buffer) }
             process.waitUntilExit()

@@ -43,10 +43,9 @@ struct SessionSearchRoots {
         for (root, agent) in [(claude, "claude"), (codex, "codex")] {
             guard let root else { continue }
             let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
-            guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys) else { continue }
-            for case let url as URL in walker where url.pathExtension == "jsonl" {
-                guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true,
-                      let modified = values.contentModificationDate else { continue }
+            BoundedWalk.each(under: root, keys: keys, limits: .history, what: "listing sessions to search") { url in
+                guard url.pathExtension == "jsonl", let values = try? url.resourceValues(forKeys: Set(keys)),
+                      values.isRegularFile == true, let modified = values.contentModificationDate else { return true }
                 // Claude Code: <project>/<session>.jsonl, and its sub-agents' anywhere under
                 // <project>/<session>/subagents/.
                 let folders = Array(url.pathComponents.dropLast())
@@ -61,6 +60,7 @@ struct SessionSearchRoots {
                 } else {
                     found.append(SessionFiles(agent: agent, files: [file], modified: modified))
                 }
+                return true
             }
         }
         for files in claudeFiles.values {

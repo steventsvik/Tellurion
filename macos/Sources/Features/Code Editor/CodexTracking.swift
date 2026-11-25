@@ -1,5 +1,6 @@
 #if os(macOS)
 import Foundation
+import os
 
 /// Codex stores children alongside other date-filed rollouts, linked by thread identity.
 /// Folder equality alone is deliberately not used to bind a known Codex session.
@@ -72,14 +73,22 @@ enum CodexTracking {
         }
         // Resumed rollouts may be filed under an older day. Search filenames for this id
         // only; no content from unrelated transcripts is read.
-        guard hookPath(id) != nil,
-              let walker = FileManager.default.enumerator(atPath: root) else { return nil }
-        for case let relative as String in walker where relative.hasSuffix("-\(id).jsonl") {
-            let path = root + "/" + relative
-            if metadata(path)?.id == id { return path }
+        guard hookPath(id) != nil else { return nil }
+        // This is asked every few seconds while a session's transcript isn't found, and the
+        // walk is through everything Codex ever recorded: a miss stands for a minute.
+        let now = Date()
+        if let missed = misses.withLock({ $0.peek(id) }), now.timeIntervalSince(missed) < 60 { return nil }
+        var found: String?
+        BoundedWalk.each(under: URL(fileURLWithPath: root, isDirectory: true), limits: .lookup, what: "looking for a Codex session's transcript") { url in
+            guard url.lastPathComponent.hasSuffix("-\(id).jsonl"), metadata(url.path)?.id == id else { return true }
+            found = url.path
+            return false
         }
-        return nil
+        if found == nil { misses.withLock { $0[id] = now } }
+        return found
     }
+
+    private static let misses = OSAllocatedUnfairLock(initialState: BoundedCache<String, Date>(limit: 256))
 
     static func children(of session: Session, cached: inout [String: Session]) -> [Session] {
         let formatter = DateFormatter()

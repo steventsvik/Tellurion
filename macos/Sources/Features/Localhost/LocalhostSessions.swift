@@ -702,6 +702,7 @@ final class LocalhostSessions: ObservableObject {
                 let ports = Set(family.flatMap { listening[$0] ?? [] }).sorted()
                 let cpu = family.compactMap { table[$0]?.cpu }.reduce(0, +)
                 let mem = family.compactMap { table[$0]?.rssKB }.reduce(0, +) / 1024
+                LocalhostAddress.trimLog(at: session.log)
                 // The address it printed, read here since it's a file (and the server's own text).
                 var probe = session
                 probe.ports = ports

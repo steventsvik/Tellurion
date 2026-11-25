@@ -459,13 +459,14 @@ final class SetupChecks: ObservableObject {
     /// example "Operation not permitted" when the script lives in a protected folder).
     private static func recentHookErrors(since: Date) -> (count: Int, latest: String?) {
         let root = URL(fileURLWithPath: HookInstaller.home + "/.claude/projects", isDirectory: true)
-        guard let enumerator = FileManager.default.enumerator(
-            at: root, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) else { return (0, nil) }
         var recent: [(URL, Date)] = []
-        for case let url as URL in enumerator where url.pathExtension == "jsonl" {
-            if let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate, modified > since {
+        BoundedWalk.each(under: root, keys: [.contentModificationDateKey], options: [.skipsHiddenFiles], limits: .history,
+                         what: "looking for hook errors in Claude Code's sessions") { url in
+            if url.pathExtension == "jsonl",
+               let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate, modified > since {
                 recent.append((url, modified))
             }
+            return true
         }
         var count = 0
         var latest: (Date, String)?
