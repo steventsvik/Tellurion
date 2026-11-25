@@ -73,6 +73,7 @@ final class AppHealth: NSObject, MXMetricManagerSubscriber {
         queue.async {
             guard self.timer == nil else { return }
             MXMetricManager.shared.add(self)
+            Self.markRunning()
             let timer = DispatchSource.makeTimerSource(queue: self.queue)
             timer.schedule(deadline: .now() + 1, repeating: 1, leeway: .milliseconds(200))
             timer.setEventHandler { [weak self] in self?.tick() }
@@ -194,6 +195,19 @@ final class AppHealth: NSObject, MXMetricManagerSubscriber {
         let snapshot = Snapshot(verdict: judge.verdict(samples), footprint: samples.last?.footprint ?? 0, stalls: stalls.count,
                                 longestStall: longest?.seconds ?? 0, longestStallDuring: longest?.during)
         Self.sharedState.withLock { $0 = snapshot }
+    }
+
+    /// A note that the app is up with a window, and which copy it is: `launch-test.sh` waits
+    /// for it, and it's taken away again when the app quits the usual way.
+    static let runningFile = folder.appendingPathComponent("running.json")
+
+    private static func markRunning() {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        let note = ["pid": String(ProcessInfo.processInfo.processIdentifier), "version": version, "started": StoredFile.stamp()]
+        StoredFile.write(json: note, to: runningFile, what: "the note that the app is running", log: log)
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: nil) { _ in
+            StoredFile.remove(runningFile, what: "the note that the app is running", log: log)
+        }
     }
 
     // MARK: Reports
