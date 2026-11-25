@@ -77,6 +77,15 @@ final class VerticalTabsGit: ObservableObject {
         return root
     }
 
+    /// The repository root containing `pwd`, for callers on the main thread that can wait a
+    /// moment: nil while it isn't known yet (it's being found, ask again), `.some(nil)` when
+    /// the folder isn't in a repository. Never touches the filesystem.
+    func rootIfKnown(for pwd: String) -> String?? {
+        if let root = rootForPwd.peek(pwd) { return .some(root.isEmpty ? nil : root) }
+        resolve(pwd)
+        return nil
+    }
+
     /// Re-reads one repository now (after a branch switch, a commit, an agent's turn).
     func refreshNow(root: String) {
         guard let gitDir = gitDirs.peek(root) else { return }

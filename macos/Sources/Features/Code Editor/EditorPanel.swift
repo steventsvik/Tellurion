@@ -169,7 +169,7 @@ final class EditorSession {
     /// Following an agent in the background, while the editor is closed.
     private(set) var isTracking = false
     /// Finds the agent's transcript on disk when its hooks didn't say (see `AgentTranscripts`).
-    private let transcripts = AgentTranscriptLookup()
+    private let transcripts = AgentTranscriptFollower()
     /// The transcript the editor last caught up with, so it only happens once per session.
     private var caughtUp: String?
     /// When the agent was last seen working; changes shortly after still animate.
@@ -320,19 +320,22 @@ final class EditorSession {
         if let pwd = surface.pwd, pwd != webView.currentFolder { webView.openFolder(pwd) }
 
         let info = VerticalTabsAgents.shared.info(for: surface)
-        let transcriptPath = info.flatMap { transcripts.transcript(for: $0, in: surface.pwd) }
+        // Asked every tick, answered from the last look on disk; a new answer follows again.
+        let transcriptPath = info.flatMap { transcripts.transcript(for: $0, in: surface.pwd) { [weak self] in self?.follow() } }
         if let info, let path = transcriptPath { feed.follow(path: path, kind: info.kind) }
         if let info, info.kind != .hermes, let pwd = surface.pwd {
             if info.activity == .working || info.activity == .needsPermission { lastWorking = Date() }
-            let repo = VerticalTabsGit.repoRoot(containing: pwd)?.path
-            watcher.watch(folder: pwd, repoRoot: repo, baseline: ReviewInbox.shared.baseline(for: surface))
-            // Opened mid-session: show what the agent has changed so far.
-            let session = transcriptPath ?? pwd
-            if isVisible, caughtUp != session {
-                caughtUp = session
-                watcher.catchUp { [weak self] changes in
-                    guard !changes.isEmpty else { return }
-                    self?.webView.sendAgentCatchUp(changes)
+            // Not known yet: it's being found, and the next tick (a second on) has it.
+            if let repo = VerticalTabsGit.shared.rootIfKnown(for: pwd) {
+                watcher.watch(folder: pwd, repoRoot: repo, baseline: ReviewInbox.shared.baseline(for: surface))
+                // Opened mid-session: show what the agent has changed so far.
+                let session = transcriptPath ?? pwd
+                if isVisible, caughtUp != session {
+                    caughtUp = session
+                    watcher.catchUp { [weak self] changes in
+                        guard !changes.isEmpty else { return }
+                        self?.webView.sendAgentCatchUp(changes)
+                    }
                 }
             }
         }
