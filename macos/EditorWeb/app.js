@@ -1714,6 +1714,11 @@ window.app = {
     renderTree();
     renderStatus();
   },
+  /// The open folder's branch, when the app only learns it after opening the folder.
+  setBranch(gitBranch) {
+    branch = gitBranch || '';
+    renderStatus();
+  },
   openFile(path, line) { openFile(path, { line }); },
   setTheme(theme) { applyTheme(theme); },
   agentItems(items, reset) { agentItems(items, reset); },

@@ -78,9 +78,56 @@ enum AgentTranscripts {
         return date?.timeIntervalSince1970 ?? 0
     }
 }
+/// `AgentTranscriptLookup` for the main thread. Looking a transcript up reads folders and
+/// files, so it's done on a queue: asking returns the last answer at once and starts a new
+/// look in the background, and `changed` is called (on the main thread) when that finds
+/// something different. One per agent being followed.
+final class AgentTranscriptFollower {
+    private static let queue = DispatchQueue(label: "com.steventsvik.ghostty-extreme.transcripts", qos: .utility)
+    /// Only touched on `queue`.
+    private let lookup = AgentTranscriptLookup()
+    private var path: String?
+    /// What `path` is the answer for: another agent, session or folder starts over.
+    private var key: String?
+    private var looking = false
+
+    func reset() {
+        path = nil
+        key = nil
+        let lookup = lookup
+        Self.queue.async { lookup.reset() }
+    }
+
+    func transcript(for info: VerticalTabAgentInfo, in folder: String?, changed: @escaping () -> Void) -> String? {
+        let key = [info.kind.rawValue, info.codexSessionID ?? "", info.transcriptPath ?? "", folder ?? ""].joined(separator: "\u{0}")
+        if key != self.key {
+            self.key = key
+            // What the hooks reported stands until the look says otherwise. A Codex session
+            // known by its id waits for the look: its report may be another session's.
+            path = info.kind == .codex && info.codexSessionID != nil ? nil : info.transcriptPath
+        }
+        if !looking {
+            looking = true
+            let lookup = lookup
+            Self.queue.async { [weak self] in
+                let found = lookup.transcript(for: info, in: folder)
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.looking = false
+                    guard self.key == key, self.path != found else { return }
+                    self.path = found
+                    changed()
+                }
+            }
+        }
+        return path
+    }
+}
+
 /// An agent's transcript: the one its hooks reported, or else found on disk. Also moves to a
 /// newer one when the reported transcript goes quiet while the agent works. One per agent
-/// being followed, since it remembers what it found.
+/// being followed, since it remembers what it found. Reads the disk: off the main thread
+/// (`AgentTranscriptFollower` is the way in from it).
 final class AgentTranscriptLookup {
     private var lastLookup = Date.distantPast
     private var found: String?
@@ -91,6 +138,7 @@ final class AgentTranscriptLookup {
     func reset() { found = nil }
 
     func transcript(for info: VerticalTabAgentInfo, in folder: String?) -> String? {
+        OffMain.require("finding an agent's transcript")
         if info.kind == .codex, let id = info.codexSessionID {
             if let reported = info.transcriptPath, CodexTracking.metadata(reported)?.id == id { return reported }
             if let found, CodexTracking.metadata(found)?.id == id { return found }

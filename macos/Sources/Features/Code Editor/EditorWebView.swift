@@ -64,8 +64,18 @@ final class EditorWebView: WKWebView {
         guard root != files.root else { return }
         files.root = root
         files.allowedRoots.insert(root)
-        let branch = Self.branch(of: root) ?? ""
-        run("app.openFolder(\(Self.js(root)), \(Self.js((root as NSString).lastPathComponent)), \(Self.js(branch)))")
+        // The sidebar usually knows the branch already. Reading it from the repository is
+        // file work, so when it doesn't, the folder opens now and the branch follows.
+        let known = VerticalTabsGit.shared.info(for: path)?.branch ?? VerticalTabsGit.shared.info(for: root)?.branch
+        run("app.openFolder(\(Self.js(root)), \(Self.js((root as NSString).lastPathComponent)), \(Self.js(known ?? "")))")
+        guard known == nil else { return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let branch = Self.branch(of: root) else { return }
+            DispatchQueue.main.async {
+                guard let self, self.files.root == root else { return }
+                self.run("app.setBranch(\(Self.js(branch)))")
+            }
+        }
     }
 
     func openFile(_ path: String, line: Int? = nil) {
@@ -207,7 +217,9 @@ final class EditorWebView: WKWebView {
 
     // MARK: Helpers
 
+    /// Reads the repository's files: off the main thread.
     static func branch(of root: String) -> String? {
+        OffMain.require("reading a folder's branch")
         guard let repo = VerticalTabsGit.repoRoot(containing: root),
               let head = try? String(contentsOfFile: repo.gitDir + "/HEAD", encoding: .utf8) else { return nil }
         let trimmed = head.trimmingCharacters(in: .whitespacesAndNewlines)

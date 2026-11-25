@@ -104,12 +104,18 @@ final class GitPanelModel: ObservableObject {
     func createBranch(_ name: String) {
         let name = name.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
-        let check = AgentTools.git(["check-ref-format", "--branch", name], in: root)
-        guard check.ok else {
-            error = "“\(name)” isn't a valid branch name."
-            return
+        let root = root
+        queue.async { [weak self] in
+            let check = AgentTools.git(["check-ref-format", "--branch", name], in: root)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard check.ok else {
+                    self.error = "“\(name)” isn't a valid branch name."
+                    return
+                }
+                self.run(["switch", "-c", name], done: "Created \(name)")
+            }
         }
-        run(["switch", "-c", name], done: "Created \(name)")
     }
 
     /// Stashes uncommitted changes, including new files.
