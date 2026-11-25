@@ -13,6 +13,9 @@ People watch this repo. Keep `custom` (the default branch) release-quality.
   request (`gh pr create --base custom --head dev`, then `gh pr merge --merge`); GitHub
   rejects direct pushes, force-pushes and deletion there, and force-pushes or deletion of
   `dev` and of release tags.
+- 2.0 is built on `next`, a long-lived branch off `dev`: its work goes in feature branches
+  with pull requests into `next`, and `dev` is merged into `next` regularly. `dev` and
+  `custom` stay free for 1.9.x fixes; `next` reaches `custom` only when 2.0 is ready.
 - Never rewrite pushed history (there are forks).
 - Add every user-visible change to the **Unreleased** section of `CHANGELOG.md` in the
   same commit, written for users.

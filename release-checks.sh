@@ -5,7 +5,11 @@
 #   release-checks.sh test-switches <binary> <source folder> prints test switches in the binary
 #   release-checks.sh secrets <diff file>                    prints where the diff adds a key or token
 #   release-checks.sh mentions <diff file> <text>            prints where the diff adds that text
-# Exit: 0 clean, 1 found (test switches, keys, the text), 2 the check itself couldn't run.
+#   release-checks.sh notary-key <env file>                  prints the notarization API key it names
+#   release-checks.sh notary-advice <notarytool output> <profile> <team>  prints what to do about a refused login
+#   release-checks.sh symbols <binary> <dSYM>                do the debug symbols belong to the binary?
+# Exit: 0 clean, 1 found (test switches, keys, the text; no API key named; symbols of another
+# build), 2 the check itself couldn't run.
 # Anything but 0 has to stop a release: a check that can't run must not look like one that passed.
 #
 # Nothing here reads a pipe with `grep -q` or `head`: a reader that stops at the first match
@@ -99,10 +103,73 @@ added_mentions() {
   return 1
 }
 
+# The notarization login as an App Store Connect API key, named in a file outside the repo:
+#   NOTARY_KEY=<path to AuthKey_….p8>   NOTARY_KEY_ID=…   NOTARY_ISSUER=…
+# Read as plain name=value lines, never run. Prints the three values, one per line.
+# 1: no such file, or it names none of them, so the keychain profile is the login.
+# 2: half filled in, or the key file is gone. A release must stop there, not quietly fall
+# back to a login the maintainer thought they had replaced.
+notary_key() {
+  local file=$1 key="" id="" issuer="" name value
+  [[ -e $file ]] || return 1
+  [[ -r $file && -f $file ]] || problem "can't read $file"
+  while IFS='=' read -r name value || [[ -n $name ]]; do
+    value=${value%$'\r'}
+    value=${value#\"}
+    value=${value%\"}
+    case $name in
+      NOTARY_KEY) key=${value/#\~/$HOME} ;;
+      NOTARY_KEY_ID) id=$value ;;
+      NOTARY_ISSUER) issuer=$value ;;
+    esac
+  done < "$file"
+  [[ -z $key$id$issuer ]] && return 1
+  [[ -n $key && -n $id && -n $issuer ]] || problem "$file needs all of NOTARY_KEY, NOTARY_KEY_ID and NOTARY_ISSUER"
+  [[ -r $key && -f $key ]] || problem "the notarization key $key (named in $file) can't be read"
+  printf '%s\n%s\n%s\n' "$key" "$id" "$issuer"
+}
+
+# notarytool's own words for a refused login, turned into what to do next.
+notary_advice() {
+  local file=$1 profile=$2 team=$3 text
+  [[ -r $file && -f $file ]] || problem "can't read $file"
+  text=$(<"$file")
+  case $text in
+    *agreement*)
+      echo "Apple wants an agreement accepted first. Sign in at developer.apple.com/account (and appstoreconnect.apple.com, under Business), accept it, and try again in a few minutes." ;;
+    *"No Keychain password item"*)
+      echo "The notarization login \"$profile\" is gone from the keychain. Save it again in a terminal: xcrun notarytool store-credentials $profile --apple-id <Apple ID> --team-id $team" ;;
+    *"HTTP status code: 401"*|*"nvalid credentials"*)
+      echo "Apple refused the login itself. An app-specific password may have been revoked, or the API key removed: create a new one and save it again." ;;
+    *)
+      text=$(awk 'NF {line = $0} END {print line}' "$file")
+      echo "notarytool said: ${text:-nothing}" ;;
+  esac
+}
+
+# The app is stripped before it ships, so the debug symbols are kept apart, and they only
+# read a user's crash or hang report if they come from the very same build: same UUIDs.
+symbols_match() {
+  local binary=$1 dsym=$2 of_binary of_symbols
+  [[ -r $binary && -f $binary ]] || problem "can't read the binary $binary"
+  [[ -d $dsym ]] || problem "no debug symbols at $dsym"
+  of_binary=$(dwarfdump --uuid "$binary" 2>/dev/null | awk '{print $2, $3}' | sort) || problem "couldn't read the binary's UUID"
+  of_symbols=$(dwarfdump --uuid "$dsym" 2>/dev/null | awk '{print $2, $3}' | sort) || problem "couldn't read the symbols' UUID"
+  [[ -n $of_binary ]] || problem "$binary has no UUID"
+  [[ -n $of_symbols ]] || problem "$dsym holds no debug symbols"
+  [[ $of_binary == "$of_symbols" ]] && return 0
+  echo "binary:  ${of_binary//$'\n'/, }"
+  echo "symbols: ${of_symbols//$'\n'/, }"
+  return 1
+}
+
 case "${1:-}:$#" in
   ghostty-version:2) ghostty_version "$2" ;;
   test-switches:3) test_switches "$2" "$3" ;;
   secrets:2) added_secrets "$2" ;;
   mentions:3) added_mentions "$2" "$3" ;;
-  *) problem "usage: release-checks.sh ghostty-version <file> | test-switches <binary> <source folder> | secrets <diff file> | mentions <diff file> <text>" ;;
+  notary-key:2) notary_key "$2" ;;
+  notary-advice:4) notary_advice "$2" "$3" "$4" ;;
+  symbols:3) symbols_match "$2" "$3" ;;
+  *) problem "usage: release-checks.sh ghostty-version <file> | test-switches <binary> <source folder> | secrets <diff file> | mentions <diff file> <text> | notary-key <env file> | notary-advice <output> <profile> <team> | symbols <binary> <dSYM>" ;;
 esac
