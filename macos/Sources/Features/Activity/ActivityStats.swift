@@ -81,23 +81,25 @@ final class ActivityStats {
         let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
 
         // Claude Code: <project>/<session>.jsonl, plus sub-agents in <project>/<session>/subagents/*.jsonl.
-        if let walker = fm.enumerator(at: home.appendingPathComponent(".claude/projects"), includingPropertiesForKeys: keys) {
-            for case let url as URL in walker where url.pathExtension == "jsonl" {
-                guard let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
-                      modified >= since else { continue }
-                let parent = url.deletingLastPathComponent()
-                let session = parent.lastPathComponent == "subagents"
-                    ? parent.deletingLastPathComponent().lastPathComponent
-                    : url.deletingPathExtension().lastPathComponent
-                claude[session, default: []].append(url)
-            }
+        BoundedWalk.each(under: home.appendingPathComponent(".claude/projects"), keys: keys, limits: .history,
+                         what: "reading Claude Code's sessions for Activity") { url in
+            guard url.pathExtension == "jsonl",
+                  let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+                  modified >= since else { return true }
+            let parent = url.deletingLastPathComponent()
+            let session = parent.lastPathComponent == "subagents"
+                ? parent.deletingLastPathComponent().lastPathComponent
+                : url.deletingPathExtension().lastPathComponent
+            claude[session, default: []].append(url)
+            return true
         }
-        if let walker = fm.enumerator(at: home.appendingPathComponent(".codex/sessions"), includingPropertiesForKeys: keys) {
-            for case let url as URL in walker where url.pathExtension == "jsonl" {
-                guard let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
-                      modified >= since else { continue }
-                codex.append(url)
-            }
+        BoundedWalk.each(under: home.appendingPathComponent(".codex/sessions"), keys: keys, limits: .history,
+                         what: "reading Codex's sessions for Activity") { url in
+            guard url.pathExtension == "jsonl",
+                  let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+                  modified >= since else { return true }
+            codex.append(url)
+            return true
         }
 
         var result: [ActivitySession] = []

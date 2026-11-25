@@ -93,6 +93,29 @@ enum LocalhostAddress {
         return (url.host ?? "localhost") + (url.port.map { ":\($0)" } ?? "") + (path == "/" ? "" : path)
     }
 
+    /// A server can print for days. A log past `over` bytes is cut down to its last
+    /// `keeping`, under a line saying so. The runner appends, so it carries on at the new
+    /// end. Reads and writes the file, so not for the main thread. Returns whether it cut.
+    @discardableResult
+    static func trimLog(at path: String, over: UInt64 = 64 * 1024 * 1024, keeping: UInt64 = 4 * 1024 * 1024) -> Bool {
+        guard let file = FileHandle(forUpdatingAtPath: path) else { return false }
+        defer { try? file.close() }
+        guard let size = try? file.seekToEnd(), size > over, keeping < size,
+              (try? file.seek(toOffset: size - keeping)) != nil,
+              var tail = try? file.read(upToCount: Int(keeping)) else { return false }
+        // From the first whole line of what's kept.
+        if let newline = tail.firstIndex(of: 0x0A) { tail.removeSubrange(tail.startIndex...newline) }
+        let note = Data("[Tellurion dropped earlier output to keep this log small]\n".utf8)
+        do {
+            try file.truncate(atOffset: 0)
+            try file.seek(toOffset: 0)
+            try file.write(contentsOf: note + tail)
+            return true
+        } catch {
+            return false
+        }
+    }
+
     /// The start and the end of the log's current run, at most `readLimit` bytes of each.
     /// Reads the file, so not for the main thread.
     static func read(logAt path: String) -> String {
