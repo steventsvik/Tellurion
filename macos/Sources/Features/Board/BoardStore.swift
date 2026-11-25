@@ -168,12 +168,41 @@ enum BoardStore {
 
     /// Every saved board, most recently changed first. A file that can't be decoded is
     /// logged and left where it is.
+    ///
+    /// The list is asked for often (the board list, the menu bar, the home page), and a board
+    /// with sketches is a large file, so a file is only read again when its size or date changed.
     static func all() -> [BoardWorkspace] {
-        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
-        return files.filter { $0.pathExtension == "json" }
-            .compactMap(load)
-            .sorted { $0.updated > $1.updated }
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
+        let files = ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys)) ?? [])
+            .filter { $0.pathExtension == "json" }
+        var boards: [BoardWorkspace] = []
+        var kept: [String: Loaded] = [:]
+        for file in files {
+            let values = try? file.resourceValues(forKeys: Set(keys))
+            let stamp = "\(values?.contentModificationDate?.timeIntervalSince1970 ?? 0):\(values?.fileSize ?? -1)"
+            lock.lock()
+            let before = loaded[file.lastPathComponent]
+            lock.unlock()
+            if let before, before.stamp == stamp, values != nil {
+                kept[file.lastPathComponent] = before
+                boards.append(before.board)
+            } else if let board = load(file) {
+                kept[file.lastPathComponent] = Loaded(stamp: stamp, board: board)
+                boards.append(board)
+            }
+        }
+        lock.lock()
+        // Only what's on disk now is remembered, so deleted boards don't stay in memory.
+        loaded = kept
+        lock.unlock()
+        return boards.sorted { $0.updated > $1.updated }
     }
+
+    private struct Loaded {
+        let stamp: String
+        let board: BoardWorkspace
+    }
+    private static var loaded: [String: Loaded] = [:]
 
     private static func load(_ file: URL) -> BoardWorkspace? {
         do {

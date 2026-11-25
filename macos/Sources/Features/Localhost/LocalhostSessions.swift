@@ -86,7 +86,28 @@ struct LocalhostOtherServer: Identifiable, Equatable {
 struct LocalhostProject: Hashable {
     let root: String
 
-    init(folder: String) {
+    /// Recent answers by folder. This is asked from view bodies and from timers, many times
+    /// a second for the same few folders, and each answer is up to a dozen looks at the disk.
+    private static let known = OSAllocatedUnfairLock(uncheckedState: BoundedCache<String, (root: String, found: Date)>(limit: 512))
+    /// How long an answer stands: a folder can become a repository (`git init`) at any time.
+    static let knownFor: TimeInterval = 15
+
+    init(folder: String, now: Date = Date()) {
+        if let known = Self.known.withLockUnchecked({ $0.peek(folder) }), now.timeIntervalSince(known.found) < Self.knownFor {
+            root = known.root
+            return
+        }
+        root = Self.find(folder)
+        let root = root
+        Self.known.withLockUnchecked { $0[folder] = (root, now) }
+    }
+
+    /// Forgets the recent answers (tests).
+    static func forgetKnown() {
+        known.withLockUnchecked { $0.removeAll() }
+    }
+
+    private static func find(_ folder: String) -> String {
         var dir = URL(fileURLWithPath: folder)
         var found: String?
         // Walk up to the repository root without running git (this is called from views).
@@ -99,7 +120,7 @@ struct LocalhostProject: Hashable {
             if parent.path == dir.path || parent.path == NSHomeDirectory() { break }
             dir = parent
         }
-        root = found ?? folder
+        return found ?? folder
     }
 
     var name: String { (root as NSString).lastPathComponent }
