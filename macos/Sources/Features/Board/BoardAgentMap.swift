@@ -434,7 +434,9 @@ final class AgentMapContent: CardContent {
                 BoardTileTitle.title(surface, info, name: board.model.titles[surface.id])
             } ?? info.name
             if track.update(info: info, name: name) { changed = true }
-            if let transcript = track.lookup.transcript(for: info, in: pwd), transcript != track.feed.path {
+            // The look reads folders, so it happens on a queue and comes back here.
+            let found = track.lookup.transcript(for: info, in: pwd) { [weak self] in self?.refreshTracks() }
+            if let transcript = found, transcript != track.feed.path {
                 track.feed.follow(path: transcript, kind: info.kind)
             }
         }
@@ -818,7 +820,7 @@ private final class AgentTrack {
     weak var surface: Ghostty.SurfaceView?
     let color: NSColor
     let feed = AgentFeed()
-    let lookup = AgentTranscriptLookup()
+    let lookup = AgentTranscriptFollower()
     let dot = CALayer()
     let trail = CAShapeLayer()
     private let letter = CATextLayer()

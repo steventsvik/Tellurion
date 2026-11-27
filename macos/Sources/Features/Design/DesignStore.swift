@@ -47,7 +47,18 @@ final class DesignStore: ObservableObject {
     private init() {
         // A design file that can't be read is moved aside, not replaced by the next save.
         design = StoredFile.load(TellurionDesign.self, from: Self.file, what: "the design", log: Self.log).value ?? .standard
-        mine = Self.loadMine()
+        // My designs and the theme list are folders to read: off the main thread, as the
+        // app starts.
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            _ = GhosttyThemes.names
+            let saved = Self.loadMine()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                // One saved before the read finished is already in the list.
+                let known = Set(self.mine.map(\.id))
+                self.mine += saved.filter { !known.contains($0.id) }
+            }
+        }
         resolve(reload: false, notify: false)
         // Not from init: the views and `Tellurion` read `shared`, which is still being made.
         DispatchQueue.main.async { [weak self] in self?.applyDockIcon() }
@@ -134,16 +145,18 @@ final class DesignStore: ObservableObject {
         if saved.id.isEmpty || DesignTemplates.all.contains(where: { $0.id == saved.id }) { saved.id = "mine-" + UUID().uuidString.lowercased() }
         StoredFile.write(json: saved, to: Self.mineFolder.appendingPathComponent(saved.id + ".json"),
                          what: "a design in My designs", log: Self.log)
-        mine = Self.loadMine()
+        // Newest first, as the folder reads.
+        mine = [saved] + mine.filter { $0.id != saved.id }
         apply(saved)
     }
 
     func deleteFromMine(_ id: String) {
         StoredFile.remove(Self.mineFolder.appendingPathComponent(id + ".json"), what: "a design in My designs", log: Self.log)
-        mine = Self.loadMine()
+        mine.removeAll { $0.id == id }
     }
 
     private static func loadMine() -> [TellurionDesign] {
+        OffMain.require("reading My designs")
         let decoder = JSONDecoder()
         let urls = (try? FileManager.default.contentsOfDirectory(at: mineFolder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
         return urls.filter { $0.pathExtension == "json" }

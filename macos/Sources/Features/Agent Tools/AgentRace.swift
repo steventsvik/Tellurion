@@ -68,14 +68,27 @@ final class AgentRaces: ObservableObject {
     }
 
     /// Races survive restarts (their worktrees are on disk), so they can still be compared and cleaned up.
+    /// Read on the race queue: a folder per race, and this runs as the app starts.
     private func load() {
-        let fm = FileManager.default
-        let dirs = (try? fm.contentsOfDirectory(at: Self.directory, includingPropertiesForKeys: nil)) ?? []
+        queue.async {
+            let saved = Self.saved()
+            DispatchQueue.main.async {
+                // A race started before the read finished is already in the list.
+                let known = Set(self.races.map(\.id))
+                self.races = (self.races + saved.filter { !known.contains($0.id) }).sorted { $0.created > $1.created }
+            }
+        }
+    }
+
+    /// The races on disk.
+    private static func saved() -> [AgentRace] {
+        OffMain.require("reading the saved races")
+        let dirs = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         let decoder = JSONDecoder()
-        races = dirs.compactMap { dir in
+        return dirs.compactMap { dir in
             guard let data = try? Data(contentsOf: dir.appendingPathComponent("race.json")) else { return nil }
             return try? decoder.decode(AgentRace.self, from: data)
-        }.sorted { $0.created > $1.created }
+        }
     }
 
     /// The contestant's terminal, while it's open.
