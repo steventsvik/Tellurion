@@ -28,4 +28,12 @@ import Testing
         OffMain.reset()
         #expect(OffMain.counts.isEmpty)
     }
+
+    /// The tests run inside the app, so by now it has started and other tests have driven
+    /// it: none of that may have run a program or read folders on the main thread. The
+    /// places this file reaches on purpose don't count.
+    @Test func theAppItselfKeptTheRule() {
+        let broke = OffMain.everSeen.filter { !$0.contains("OffMainTests.swift") }.sorted()
+        #expect(broke.isEmpty, "On the main thread: \(broke.joined(separator: "; "))")
+    }
 }

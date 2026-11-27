@@ -19,6 +19,8 @@ enum OffMain {
 
     private struct State {
         var counts: [String: Int] = [:]
+        /// Every place reached from the main thread since launch; `reset` keeps it.
+        var everSeen = Set<String>()
         var budget = LogBudget(limit: 5, window: 300)
     }
 
@@ -29,6 +31,7 @@ enum OffMain {
         if traps { preconditionFailure("On the main thread: \(site)") }
         let skipped = state.withLock { state -> Int? in
             state.counts[site, default: 0] += 1
+            state.everSeen.insert(site)
             return state.budget.take()
         }
         AppHealth.breadcrumb(what)
@@ -40,9 +43,17 @@ enum OffMain {
     /// How often each place was reached from the main thread, this launch.
     static var counts: [String: Int] { state.withLock(\.counts) }
 
+    /// Every place reached from the main thread since the app started, whatever `reset`
+    /// forgot since. A test reads it to fail when the app itself broke the rule.
+    static var everSeen: Set<String> { state.withLock(\.everSeen) }
+
     /// Forgets the counts (tests).
     static func reset() {
-        state.withLock { $0 = State() }
+        state.withLock { state in
+            let everSeen = state.everSeen
+            state = State()
+            state.everSeen = everSeen
+        }
     }
 }
 #endif
